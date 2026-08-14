@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  role         Role
+  employeeId   String?
+  department   String?
+  school       String?
+  designation  String?
+  courseFiles  CourseFile[]
+  createdAt    DateTime     @default(now())
+}
+
+enum Role {
+  FACULTY
+  COORDINATOR
+  ADMIN
+}
+
+model CourseFile {
+  id                 String           @id @default(uuid())
+  facultyId          String
+  faculty            User             @relation(fields: [facultyId], references: [id])
+  department         String
+  school             String
+  semester           String
+  courseCode         String
+  courseTitle        String
+  status             Status           @default(DRAFT)
+  uploadedFileUrl    String?
+  uploadedFileName   String?
+  generatedReportUrl String?
+  checklist          ChecklistScore[]
+  verification       Verification?
+  createdAt          DateTime         @default(now())
+  submittedAt        DateTime?
+  updatedAt          DateTime         @updatedAt
+}
+
+enum Status {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_REVISION
+  APPROVED
+}
+
+model ChecklistScore {
+  id           String     @id @default(uuid())
+  courseFileId String
+  courseFile   CourseFile @relation(fields: [courseFileId], references: [id])
+  itemNo       Int
+  particulars  String
+  marksAwarded Int?
+  maxMarks     Int
+  remarks      String?
+}
+
+model Verification {
+  id               String     @id @default(uuid())
+  courseFileId     String     @unique
+  courseFile       CourseFile @relation(fields: [courseFileId], references: [id])
+  facultySignedAt  DateTime?
+  reviewerId       String?
+  reviewerSignedAt DateTime?
+  totalMarks       Int?
+  qualityRating    String?
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  recipientRole Role
+  message       String
+  courseFileId  String?
+  read          Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}

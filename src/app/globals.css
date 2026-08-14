@@ -1,0 +1,590 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Bootstrap 5 Core */
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+:root {
+  /* Colors derived from PPSU Logo */
+  --ppsu-primary: #1E3A8A;       /* Deep Blue from ring */
+  --ppsu-primary-hover: #162a63;
+  --ppsu-accent: #E8541E;        /* Warm Orange-Red from flame */
+  --ppsu-accent-hover: #c44012;
+  --ppsu-secondary: #C41E2A;     /* Crimson Red from NAAC A+ badge */
+  --ppsu-secondary-hover: #9c151e;
+  
+  --ppsu-navy-900: var(--ppsu-primary);
+  --ppsu-navy-800: var(--ppsu-primary-hover);
+  --ppsu-navy-700: #2b4ba3;
+  --ppsu-navy-600: #3b5cb8;
+  
+  --ppsu-gold-500: var(--ppsu-accent);
+  --ppsu-gold-600: var(--ppsu-accent-hover);
+  --ppsu-gold-100: #FDECE3;      /* Light orange bg */
+  
+  --ppsu-bg: #F4F5F8;
+  --ppsu-card: #ffffff;
+  --ppsu-border: #d2d6e1;
+  
+  --ppsu-text-primary: #1A1A1A;
+  --ppsu-text-secondary: #5C6478;
+  --ppsu-text-muted: #8a90a0;
+  --ppsu-text-title: #1A1A1A;
+  --ppsu-crimson: #C41E2A;
+  
+  /* Statuses */
+  --ppsu-success-text: #2e7d55;
+  --ppsu-success-bg: #e6f3ec;
+  
+  --ppsu-warning-text: var(--ppsu-accent);
+  --ppsu-warning-bg: #FDECE3;
+  
+  --ppsu-danger-text: var(--ppsu-secondary);
+  --ppsu-danger-bg: #FBE5E7;
+  
+  --ppsu-draft-text: #5C6478;
+  --ppsu-draft-bg: #e4e6ee;
+
+  /* Font Families */
+  --ppsu-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ppsu-font-mono: 'IBM Plex Mono', SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.text-navy-900 { color: var(--ppsu-text-primary) !important; }
+.text-primary { color: var(--ppsu-primary) !important; }
+.btn-primary { background-color: var(--ppsu-primary) !important; border-color: var(--ppsu-primary) !important; }
+.btn-danger, .btn-outline-danger { border-radius: 8px; }
+.btn-danger { background-color: var(--ppsu-secondary) !important; border-color: var(--ppsu-secondary) !important; }
+.btn-outline-danger { color: var(--ppsu-secondary) !important; border-color: var(--ppsu-secondary) !important; }
+
+/* Global Styles */
+body {
+  font-family: var(--ppsu-font-sans);
+  background-color: var(--ppsu-bg);
+  color: var(--ppsu-text-primary);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--ppsu-navy-900);
+}
+
+.font-mono-ppsu {
+  font-family: var(--ppsu-font-mono) !important;
+}
+
+/* Layout Classes */
+.layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 280px;
+  background-color: var(--ppsu-navy-900);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-brand {
+  padding: 1.5rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-brand .univ-title {
+  font-family: var(--ppsu-font-sans);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #ffffff;
+  margin-bottom: 0.1rem;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-brand .univ-subtitle {
+  font-size: 0.75rem;
+  color: var(--ppsu-gold-500);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sidebar-menu {
+  flex-grow: 1;
+  padding: 1.5rem 0;
+  overflow-y: auto;
+}
+
+.sidebar-nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.85rem 1.5rem;
+  color: rgba(255, 255, 255, 0.7) !important;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.925rem;
+  transition: all 0.2s ease-in-out;
+  border-left: 4px solid transparent;
+}
+
+.sidebar-nav-link:hover {
+  background-color: var(--ppsu-navy-800);
+  color: #ffffff !important;
+}
+
+.sidebar-nav-link.active {
+  background-color: var(--ppsu-navy-800);
+  color: #ffffff !important;
+  font-weight: 600;
+  border-left-color: var(--ppsu-gold-500);
+}
+
+.sidebar-nav-icon {
+  margin-right: 0.85rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-footer {
+  padding: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Header Styling */
+.top-header {
+  height: 70px;
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--ppsu-border);
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 280px;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.header-title-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ppsu-navy-900);
+}
+
+.header-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.notification-bell-btn {
+  background: none;
+  border: none;
+  position: relative;
+  padding: 0.35rem;
+  color: var(--ppsu-text-secondary);
+  border-radius: 50%;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-bell-btn:hover {
+  background-color: var(--ppsu-bg);
+  color: var(--ppsu-navy-900);
+}
+
+.notification-badge-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--ppsu-danger-text);
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+}
+
+.user-avatar-circle {
+  width: 38px;
+  height: 38px;
+  background-color: var(--ppsu-gold-100);
+  color: var(--ppsu-gold-600);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: 1px solid var(--ppsu-gold-500);
+}
+
+.user-info-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.user-info-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--ppsu-navy-900);
+}
+
+.user-info-role {
+  font-size: 0.725rem;
+  color: var(--ppsu-text-secondary);
+}
+
+/* Main Content Styling */
+.main-content-wrapper {
+  margin-left: 280px;
+  padding-top: 70px; /* offset header */
+  min-height: 100vh;
+  width: calc(100% - 280px);
+  display: flex;
+  flex-direction: column;
+}
+
+.page-container {
+  padding: 2rem;
+  flex-grow: 1;
+}
+
+/* Custom Cards */
+.card-custom {
+  background-color: var(--ppsu-card);
+  border: 1px solid var(--ppsu-border);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card-custom-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card-custom-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ppsu-navy-900);
+  margin-bottom: 1rem;
+}
+
+/* Stat Cards */
+.stat-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stat-val {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--ppsu-navy-900);
+  margin-bottom: 0.2rem;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ppsu-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status Badges */
+.badge-custom {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35em 0.85em;
+  font-size: 0.725rem;
+  font-weight: 700;
+  border-radius: 999px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.badge-custom-approved {
+  background-color: var(--ppsu-success-bg);
+  color: var(--ppsu-success-text);
+}
+
+.badge-custom-review {
+  background-color: var(--ppsu-warning-bg);
+  color: var(--ppsu-warning-text);
+}
+
+.badge-custom-revision {
+  background-color: var(--ppsu-danger-bg);
+  color: var(--ppsu-danger-text);
+}
+
+.badge-custom-draft {
+  background-color: var(--ppsu-draft-bg);
+  color: var(--ppsu-draft-text);
+}
+
+/* Custom Table */
+.table-custom {
+  margin-bottom: 0;
+  vertical-align: middle;
+}
+
+.table-custom th {
+  background-color: var(--ppsu-primary);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1rem 1.25rem;
+  border: none;
+}
+
+.table-custom th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.table-custom th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.table-custom td {
+  padding: 1.1rem 1.25rem;
+  color: var(--ppsu-text-primary);
+  border-bottom: 1px solid var(--ppsu-border);
+  font-size: 0.9rem;
+}
+
+.table-custom tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table-custom tbody tr {
+  transition: background-color 0.15s;
+}
+
+.table-custom tbody tr:hover {
+  background-color: rgba(243, 244, 248, 0.5);
+}
+
+/* Progress bar overrides */
+.progress-custom {
+  height: 8px;
+  border-radius: 10px;
+  background-color: var(--ppsu-border);
+  overflow: hidden;
+}
+
+.progress-custom-bar {
+  background-color: var(--ppsu-accent) !important;
+}
+
+/* Form controls overrides */
+.form-control, .form-select {
+  border: 1px solid #d2d6e1;
+  border-radius: 8px;
+  transition: all 0.2s ease-in-out;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--ppsu-accent);
+  box-shadow: 0 0 0 2px rgba(232, 84, 30, 0.18);
+  outline: none;
+}
+
+/* Custom buttons */
+.btn-ppsu-navy, .btn-ppsu-primary {
+  background-color: var(--ppsu-primary);
+  color: #ffffff;
+  border: 1px solid var(--ppsu-primary);
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-ppsu-navy:hover, .btn-ppsu-navy:focus, .btn-ppsu-primary:hover, .btn-ppsu-primary:focus {
+  background-color: var(--ppsu-primary-hover);
+  color: #ffffff;
+  border-color: var(--ppsu-primary-hover);
+}
+
+.btn-ppsu-gold, .btn-ppsu-accent {
+  background-color: var(--ppsu-accent);
+  color: #ffffff;
+  border: 1px solid var(--ppsu-accent);
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-ppsu-gold:hover, .btn-ppsu-gold:focus, .btn-ppsu-accent:hover, .btn-ppsu-accent:focus {
+  background-color: var(--ppsu-accent-hover);
+  color: #ffffff;
+  border-color: var(--ppsu-accent-hover);
+}
+
+.btn-ppsu-outline-gold, .btn-ppsu-outline-accent {
+  background-color: transparent;
+  color: var(--ppsu-accent);
+  border: 1px solid var(--ppsu-accent);
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-ppsu-outline-gold:hover, .btn-ppsu-outline-gold:focus, .btn-ppsu-outline-accent:hover, .btn-ppsu-outline-accent:focus {
+  background-color: var(--ppsu-gold-100);
+  color: var(--ppsu-accent-hover);
+  border-color: var(--ppsu-accent-hover);
+}
+
+/* Login Page Styling */
+.login-bg {
+  min-height: 100vh;
+  background-color: var(--ppsu-primary);
+  background-image: linear-gradient(135deg, var(--ppsu-primary) 0%, var(--ppsu-primary-hover) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.login-card {
+  background-color: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 480px;
+  padding: 2.5rem;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.login-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ppsu-text-title);
+  margin-bottom: 0.25rem;
+}
+
+.login-subtitle {
+  font-size: 0.825rem;
+  color: var(--ppsu-text-secondary);
+}
+
+.demo-chip {
+  background-color: var(--ppsu-bg);
+  border: 1px solid var(--ppsu-border);
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: var(--ppsu-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.demo-chip:hover {
+  background-color: var(--ppsu-gold-100);
+  color: var(--ppsu-accent);
+  border-color: var(--ppsu-accent);
+}
+
+/* Checklist specific styles */
+.checklist-item-row {
+  border-bottom: 1px solid var(--ppsu-border);
+  padding: 1.25rem 0;
+  transition: background-color 0.15s;
+}
+
+.checklist-item-row:last-child {
+  border-bottom: none;
+}
+
+.checklist-item-row:hover {
+  background-color: rgba(243, 244, 248, 0.3);
+}
+
+.checklist-index {
+  font-family: var(--ppsu-font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ppsu-accent);
+  min-width: 35px;
+}
+
+.checklist-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ppsu-text-title);
+}
+
+.checklist-sub-items {
+  margin-top: 0.5rem;
+  background-color: var(--ppsu-bg);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ppsu-border);
+}
+
+/* Scrollbar tweaks */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ppsu-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ppsu-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ppsu-text-muted);
+}
