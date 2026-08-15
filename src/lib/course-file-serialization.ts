@@ -49,7 +49,7 @@ export function serializeChecklistItem(item: any, uploadedFileName?: string | nu
 
 export function serializeCourseFile(courseFile: any) {
   const progress = courseFile.uploadedFileUrl
-    ? courseFile.status === Status.DRAFT ? 0 : 19
+    ? 19
     : 0;
   return {
     id: courseFile.id,
@@ -67,6 +67,9 @@ export function serializeCourseFile(courseFile: any) {
     lastUpdated: courseFile.updatedAt?.toISOString?.() ?? courseFile.updatedAt,
     totalScore: courseFile.verification?.totalMarks ?? undefined,
     rating: courseFile.verification?.qualityRating ?? undefined,
+    reviewerId: courseFile.verification?.reviewerId ?? undefined,
+    facultySignedAt: courseFile.verification?.facultySignedAt?.toISOString?.() ?? courseFile.verification?.facultySignedAt,
+    reviewerSignedAt: courseFile.verification?.reviewerSignedAt?.toISOString?.() ?? courseFile.verification?.reviewerSignedAt,
     coordinatorRemarks: undefined,
     generatedReportPath: courseFile.generatedReportUrl ?? undefined,
     faculty: courseFile.faculty
@@ -77,7 +80,8 @@ export function serializeCourseFile(courseFile: any) {
           department: courseFile.faculty.department,
           school: courseFile.faculty.school,
           designation: courseFile.faculty.designation,
-          email: courseFile.faculty.email
+          email: courseFile.faculty.email,
+          assignedCoordinatorId: courseFile.faculty.assignedCoordinatorId
         }
       : undefined
   };

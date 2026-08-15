@@ -11,12 +11,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const fillCredentials = (role: 'FACULTY' | 'COORDINATOR') => {
+  const fillCredentials = (role: 'FACULTY' | 'COORDINATOR' | 'ADMIN') => {
     if (role === 'FACULTY') {
       setEmail('aakash@ppsu.ac.in');
       setPassword('123');
-    } else {
+    } else if (role === 'COORDINATOR') {
       setEmail('cc@ppsu.ac.in');
+      setPassword('123');
+    } else {
+      setEmail('admin@ppsu.ac.in');
       setPassword('123');
     }
     setError('');
@@ -49,6 +52,8 @@ export default function LoginPage() {
         router.push('/faculty/dashboard');
       } else if (data.role === 'COORDINATOR') {
         router.push('/coordinator/dashboard');
+      } else if (data.role === 'ADMIN') {
+        router.push('/admin/dashboard');
       } else {
         router.push('/');
       }
@@ -115,7 +120,7 @@ export default function LoginPage() {
 
           <div className="border-top pt-3 text-center">
             <p className="small text-secondary mb-2 fw-semibold">Quick Demo Logins:</p>
-            <div className="d-flex justify-content-center gap-2">
+            <div className="d-flex justify-content-center gap-2 flex-wrap">
               <span
                 className="demo-chip"
                 onClick={() => fillCredentials('FACULTY')}
@@ -127,6 +132,12 @@ export default function LoginPage() {
                 onClick={() => fillCredentials('COORDINATOR')}
               >
                 Coordinator Demo
+              </span>
+              <span
+                className="demo-chip"
+                onClick={() => fillCredentials('ADMIN')}
+              >
+                Admin Demo
               </span>
             </div>
           </div>

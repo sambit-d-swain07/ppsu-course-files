@@ -12,7 +12,11 @@ export async function GET(req: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const courseFiles = await prisma.courseFile.findMany({
-      where: payload.role === Role.COORDINATOR || payload.role === Role.ADMIN ? undefined : { facultyId: payload.userId },
+      where: payload.role === Role.ADMIN
+        ? undefined
+        : payload.role === Role.COORDINATOR
+          ? { faculty: { assignedCoordinatorId: payload.userId } }
+          : { facultyId: payload.userId },
       include: { faculty: true, verification: true },
       orderBy: { updatedAt: 'desc' }
     });

@@ -64,9 +64,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     const { id } = await props.params;
     const token = req.cookies.get('ppsu_auth_token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!await verifyToken(token)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const payload = await verifyToken(token);
+    if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const courseFile = await getCourseFile(id);
     if (!courseFile) return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
+    if (payload.role === Role.FACULTY && courseFile.facultyId !== payload.userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (payload.role === Role.COORDINATOR && courseFile.faculty.assignedCoordinatorId !== payload.userId) return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
     return NextResponse.json({
       courseFile: serializeCourseFile(courseFile),
       checklistItems: courseFile.checklist.map((item) => serializeChecklistItem(item, courseFile.uploadedFileName, courseFile.uploadedFileUrl))
@@ -85,6 +88,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const courseFile = await getCourseFile(id);
     if (!courseFile) return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
+    if (payload.role === Role.FACULTY && courseFile.facultyId !== payload.userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (payload.role === Role.COORDINATOR && courseFile.faculty.assignedCoordinatorId !== payload.userId) return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
     const body = await req.json();
     const { status, totalScore, rating, department, school, uploadedFileUrl, uploadedFileName } = body;
     const isCoordinator = payload.role === Role.COORDINATOR || payload.role === Role.ADMIN;
@@ -92,12 +97,17 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     if (!isCoordinator && status !== 'SUBMITTED' && status !== undefined) return NextResponse.json({ error: 'Faculty may only submit a completed course file.' }, { status: 403 });
     if (isCoordinator && status === 'SUBMITTED') return NextResponse.json({ error: 'Coordinators cannot submit faculty files.' }, { status: 403 });
 
-    const nextStatus = status as Status | undefined;
+    let nextStatus = status as Status | undefined;
+    if (isCoordinator && totalScore !== undefined) {
+      if (totalScore < 126) nextStatus = Status.NEEDS_REVISION;
+      else if (totalScore <= 150) nextStatus = Status.UNDER_REVIEW;
+      else nextStatus = Status.APPROVED;
+    }
     const updated = await prisma.courseFile.update({
       where: { id },
       data: {
         ...(nextStatus ? { status: nextStatus } : {}),
-        ...(nextStatus === Status.SUBMITTED ? { submittedAt: new Date() } : {}),
+        ...(nextStatus === Status.SUBMITTED ? { submittedAt: new Date(), status: Status.SUBMITTED } : {}),
         ...(department !== undefined ? { department } : {}),
         ...(school !== undefined ? { school } : {}),
         ...(uploadedFileUrl !== undefined ? { uploadedFileUrl } : {}),
@@ -108,8 +118,16 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     if (isCoordinator && (totalScore !== undefined || rating !== undefined || nextStatus === Status.APPROVED)) {
       await prisma.verification.upsert({
         where: { courseFileId: id },
-        create: { courseFileId: id, totalMarks: totalScore ?? null, qualityRating: rating ?? null, reviewerId: payload.userId, reviewerSignedAt: nextStatus === Status.APPROVED ? new Date() : null },
-        update: { ...(totalScore !== undefined ? { totalMarks: totalScore } : {}), ...(rating !== undefined ? { qualityRating: rating } : {}), reviewerId: payload.userId, ...(nextStatus === Status.APPROVED ? { reviewerSignedAt: new Date() } : {}) }
+        create: { courseFileId: id, totalMarks: totalScore ?? null, qualityRating: rating ?? null, reviewerId: payload.userId, reviewerSignedAt: new Date() },
+        update: { ...(totalScore !== undefined ? { totalMarks: totalScore } : {}), ...(rating !== undefined ? { qualityRating: rating } : {}), reviewerId: payload.userId, reviewerSignedAt: new Date() }
+      });
+    }
+
+    if (nextStatus === Status.SUBMITTED) {
+      await prisma.verification.upsert({
+        where: { courseFileId: id },
+        create: { courseFileId: id, facultySignedAt: new Date() },
+        update: { facultySignedAt: new Date() }
       });
     }
 

@@ -9,8 +9,8 @@ interface SearchPanelProps {
 }
 
 export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" }: SearchPanelProps) {
-  const [schools, setSchools] = useState<string[]>(['School of Engineering', 'School of Liberal Arts', 'School of Science']);
-  const [selectedSchool, setSelectedSchool] = useState('');
+  const [schools, setSchools] = useState<string[]>(['School of Engineering']);
+  const [selectedSchool, setSelectedSchool] = useState('School of Engineering');
   const [employeeId, setEmployeeId] = useState('');
   const [faculties, setFaculties] = useState<any[]>([]);
   const [filteredFaculties, setFilteredFaculties] = useState<any[]>([]);
@@ -25,7 +25,7 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
     fetch('/api/course-files')
       .then(res => res.json())
       .then(data => {
-        if (data.courseFiles) {
+          if (data.courseFiles && data.courseFiles.length > 0) {
           setCourses(data.courseFiles);
           
           // Extrapolate unique faculties
@@ -35,32 +35,33 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
               facultyMap.set(cf.faculty.id, cf.faculty);
             }
           });
-          setFaculties(Array.from(facultyMap.values()));
+          const facultyList = Array.from(facultyMap.values());
+          const schoolList = Array.from(new Set(facultyList.map((faculty: any) => faculty.school || 'School of Engineering')));
+          setSchools(schoolList);
+          setFaculties(facultyList);
+          setFilteredFaculties(facultyList);
         }
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error('SearchPanel fetch error:', err));
   }, []);
 
   // Filter faculties when School changes
   useEffect(() => {
     if (selectedSchool) {
-      const filtered = faculties.filter(f => f.school === selectedSchool);
-      setFilteredFaculties(filtered);
+      const filtered = faculties.filter(f => !f.school || f.school === selectedSchool);
+      setFilteredFaculties(filtered.length > 0 ? filtered : faculties);
     } else {
       setFilteredFaculties(faculties);
     }
     
-    // Reset dependant dropdowns
-    setSelectedFacultyId('');
-    setSelectedCourseFileId('');
   }, [selectedSchool, faculties]);
 
   // Filter faculty by Employee ID input
   useEffect(() => {
-    if (employeeId) {
+    if (employeeId.trim()) {
       const match = faculties.find(f => f.employeeId?.toLowerCase() === employeeId.trim().toLowerCase());
       if (match) {
-        setSelectedSchool(match.school || '');
+        setSelectedSchool(match.school || 'School of Engineering');
         setSelectedFacultyId(match.id);
       }
     }
@@ -72,20 +73,21 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
       const filtered = courses.filter(c => c.facultyId === selectedFacultyId);
       setFilteredCourses(filtered);
     } else {
-      setFilteredCourses([]);
+      setFilteredCourses(courses);
     }
-    setSelectedCourseFileId('');
   }, [selectedFacultyId, courses]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCourseFileId) {
       onSearch(selectedCourseFileId);
+    } else if (filteredCourses.length > 0) {
+      onSearch(filteredCourses[0].id);
     }
   };
 
   return (
-    <div className="card-custom bg-white mb-4">
+    <div className="card-custom bg-white mb-4 border shadow-sm">
       <h6 className="fw-bold text-navy-900 mb-3">Find a Faculty Course File</h6>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3 align-items-end">
@@ -97,7 +99,7 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
                 onChange={(e) => setSelectedSchool(e.target.value)}
                 className="py-2"
               >
-                <option value="">-- Select School --</option>
+                <option value="">-- All Schools --</option>
                 {schools.map(s => <option key={s} value={s}>{s}</option>)}
               </Form.Select>
             </Form.Group>
@@ -122,11 +124,10 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
               <Form.Select 
                 value={selectedFacultyId} 
                 onChange={(e) => setSelectedFacultyId(e.target.value)}
-                disabled={!selectedSchool && !employeeId}
                 className="py-2"
               >
                 <option value="">-- Select Faculty --</option>
-                {filteredFaculties.map(f => <option key={f.id} value={f.id}>{f.name} ({f.employeeId})</option>)}
+                {filteredFaculties.map(f => <option key={f.id} value={f.id}>{f.name} ({f.employeeId || f.department})</option>)}
               </Form.Select>
             </Form.Group>
           </Col>
@@ -137,7 +138,6 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
               <Form.Select 
                 value={selectedCourseFileId} 
                 onChange={(e) => setSelectedCourseFileId(e.target.value)}
-                disabled={!selectedFacultyId}
                 className="py-2"
               >
                 <option value="">-- Select Course --</option>
@@ -150,7 +150,7 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
             <Button 
               type="submit" 
               className="btn-ppsu-navy w-100 py-2 border-0" 
-              disabled={!selectedCourseFileId}
+              disabled={!selectedCourseFileId && filteredCourses.length === 0}
             >
               Search
             </Button>

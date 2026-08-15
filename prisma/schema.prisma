@@ -17,6 +17,9 @@ model User {
   department   String?
   school       String?
   designation  String?
+  assignedCoordinatorId String?
+  assignedCoordinator   User?   @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
+  assignedFaculty       User[]  @relation("CoordinatorAssignment")
   courseFiles  CourseFile[]
   createdAt    DateTime     @default(now())
 }

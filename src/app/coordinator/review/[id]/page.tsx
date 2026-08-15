@@ -74,7 +74,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
 
   const [scores, setScores] = useState<Record<number, number>>({});
   const [itemRemarks, setItemRemarks] = useState<Record<number, string>>({});
-  const [overallRemarks, setOverallRemarks] = useState('');
+  const [reviewerConfirmed, setReviewerConfirmed] = useState(false);
 
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
@@ -86,7 +86,6 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
       const data = await res.json();
       setCourseFile(data.courseFile);
       setChecklist(data.checklistItems);
-      setOverallRemarks(data.courseFile.coordinatorRemarks || '');
 
       const initScores: Record<number, number> = {};
       const initRemarks: Record<number, string> = {};
@@ -126,7 +125,8 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
       setScores((prev) => ({ ...prev, [idx]: Math.max(0, Math.min(max, isNaN(val) ? 0 : val)) }));
   };
 
-  const submitEvaluation = async (status: 'APPROVED' | 'NEEDS_REVISION') => {
+  const submitEvaluation = async () => {
+    if (!reviewerConfirmed) { setActionError('Confirm the reviewer evaluation before submitting.'); return; }
     setSaveLoading(true); setActionError(''); setActionSuccess('');
     try {
       // Save individual item grades
@@ -148,12 +148,13 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/course-files/${courseFileId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, totalScore, rating, coordinatorRemarks: overallRemarks })
+        body: JSON.stringify({ totalScore, rating })
       });
       if (!res.ok) throw new Error('Failed to update status');
 
       const updatedData = await res.json();
-      setActionSuccess(`Evaluation ${status === 'APPROVED' ? 'approved' : 'returned for revision'} successfully.`);
+      const outcome = totalScore < 126 ? 'returned for revision' : totalScore <= 150 ? 'sent for secondary Admin review' : 'approved';
+      setActionSuccess(`Evaluation ${outcome} successfully.`);
       fetchData();
     } catch (err: any) {
       setActionError(err.message || 'Failed');
@@ -351,18 +352,14 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
         <h5 className="fw-bold mb-3 pb-2 text-navy-900" style={{ borderBottom: '1px solid #e8edf6' }}>
           Final Evaluation
         </h5>
-        <Form.Group className="mb-4">
-          <Form.Label className="small fw-semibold text-secondary">Overall Remarks for Faculty</Form.Label>
-          <Form.Control
-            id="overall-remarks"
-            as="textarea"
-            rows={3}
-            placeholder="Provide comprehensive feedback to the faculty member…"
-            value={overallRemarks}
-            onChange={(e) => setOverallRemarks(e.target.value)}
-            className="ppsu-input"
-          />
-        </Form.Group>
+        <Form.Check
+          className="mb-4"
+          type="checkbox"
+          id="reviewer-confirmed"
+          label="I confirm that I have reviewed the 19 checklist items and the scores entered above."
+          checked={reviewerConfirmed}
+          onChange={(e) => setReviewerConfirmed(e.target.checked)}
+        />
 
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
           <div className="small text-secondary">
@@ -374,7 +371,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
               id="btn-request-revision"
               className="btn btn-outline-danger px-4 py-2 fw-semibold"
               disabled={saveLoading}
-              onClick={() => submitEvaluation('NEEDS_REVISION')}
+              onClick={submitEvaluation}
             >
               {saveLoading ? <Spinner animation="border" size="sm" /> : 'Request Revision'}
             </button>
@@ -383,9 +380,9 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
               className="btn px-4 py-2 fw-semibold"
               disabled={saveLoading}
               style={{ background: 'var(--ppsu-accent)', color: '#fff', border: 'none' }}
-              onClick={() => submitEvaluation('APPROVED')}
+              onClick={submitEvaluation}
             >
-              {saveLoading ? <Spinner animation="border" size="sm" /> : 'Approve & Generate Report'}
+              {saveLoading ? <Spinner animation="border" size="sm" /> : 'Submit Evaluation & Route Automatically'}
             </button>
           </div>
         </div>

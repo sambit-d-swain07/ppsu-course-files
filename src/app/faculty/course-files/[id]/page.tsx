@@ -55,6 +55,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
 
@@ -125,6 +126,10 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   // ── Submit for review ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
+    if (!facultyConfirmed) {
+      setActionError('Confirm that the 19 checklist items are complete before submitting.');
+      return;
+    }
     if (courseFile.progress < 19) {
       setActionError('All 19 checklist items must be uploaded before submission.');
       return;
@@ -218,6 +223,12 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
             <p className="small text-secondary mb-0">
               <strong>Remarks:</strong> {courseFile.coordinatorRemarks || 'No remarks.'}
             </p>
+          </div>
+          <div className="w-100">
+            <div className="form-check small text-secondary mb-2">
+              <input className="form-check-input" type="checkbox" id="faculty-confirmed" checked={facultyConfirmed} onChange={(e) => setFacultyConfirmed(e.target.checked)} />
+              <label className="form-check-label" htmlFor="faculty-confirmed">I confirm that I have reviewed the 19 uploaded checklist items.</label>
+            </div>
           </div>
           <div className="text-end">
             <div className="fw-bold font-mono-ppsu" style={{ fontSize: 24 }}>
