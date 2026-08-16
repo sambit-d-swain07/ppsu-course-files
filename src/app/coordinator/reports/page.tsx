@@ -112,7 +112,7 @@ export default function CoordinatorReports() {
       <div className="card-custom bg-white">
         <h5 className="fw-bold mb-3 border-bottom pb-2 text-navy-900">Summary Report Note</h5>
         <p className="text-secondary small leading-relaxed">
-          The Faculty Course File Portal tracks and grades 19 key academic checklist requirements. The overall rating is evaluated out of a maximum of 200 marks (item 19 Lecture Notes constitutes 20 marks; other items are 10 marks each). 
+          The Faculty Course File Portal tracks and grades 20 key academic checklist requirements. The overall rating is evaluated out of a maximum of 200 marks (item 19 Lecture Notes constitutes 20 marks; other items are 10 marks each). 
         </p>
         <p className="text-secondary small leading-relaxed">
           Currently, <strong>{evaluatedFiles.length} out of {totalFiles}</strong> course files have undergone full coordinator evaluation. The calculated average score is <strong>{avgScore}</strong>, indicating a <strong>{getRating(avgScore)}</strong> compliance status across evaluated files in this cycle.

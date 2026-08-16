@@ -1,3 +1,5 @@
 import AdminDashboard from '../dashboard/page';
 
-export default function AdminAssignmentsPage() { return <AdminDashboard focusAssignments />; }
+export default function AdminAssignmentsPage() {
+  return <AdminDashboard />;
+}

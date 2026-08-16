@@ -48,7 +48,7 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
   };
 
   // Resolve page title
-  let pageTitle = 'Coordinator Dashboard';
+  let pageTitle = 'Evaluator Dashboard';
   if (pathname.includes('/faculty-review')) {
     pageTitle = 'Faculty Review Search';
   } else if (/\/coordinator\/review\/[a-zA-Z0-9-]+/.test(pathname)) {
@@ -223,7 +223,7 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
                 </div>
                 <div className="user-info-text d-none d-md-flex">
                   <span className="user-info-name">{user.name}</span>
-                  <span className="user-info-role">{user.designation || 'Coordinator'}</span>
+                  <span className="user-info-role">{user.designation || 'Faculty Evaluator'}</span>
                 </div>
               </div>
             )}

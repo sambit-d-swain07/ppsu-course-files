@@ -65,7 +65,8 @@ export default function FacultyMyCourses() {
       ) : (
         <Row className="g-4">
           {courses.map((course) => {
-            const percent = Math.round((course.progress / 19) * 100);
+            const completed = Math.min(20, course.progress || 0);
+            const percent = Math.min(100, Math.round((completed / 20) * 100));
             return (
               <Col xs={12} md={6} lg={4} key={course.id}>
                 <div className="card-custom card-custom-hover h-100 d-flex flex-column m-0 justify-content-between">
@@ -86,7 +87,7 @@ export default function FacultyMyCourses() {
                   <div className="mt-3">
                     <div className="d-flex align-items-center justify-content-between mb-1 small text-secondary">
                       <span>Checklist Completion</span>
-                      <span className="fw-bold font-mono-ppsu">{course.progress}/19 ({percent}%)</span>
+                      <span className="fw-bold font-mono-ppsu">{completed}/20 ({percent}%)</span>
                     </div>
                     <ProgressBar 
                       now={percent} 

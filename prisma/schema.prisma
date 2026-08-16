@@ -9,82 +9,83 @@ generator client {
 
 model User {
   id           String       @id @default(uuid())
-  name         String
   email        String       @unique
   passwordHash String
-  role         Role
-  employeeId   String?
+  name         String
+  employeeId   String?      @unique
+  role         String       // "FACULTY", "COORDINATOR", "ADMIN"
   department   String?
   school       String?
   designation  String?
+  courseFiles  CourseFile[]
   assignedCoordinatorId String?
   assignedCoordinator   User?   @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
   assignedFaculty       User[]  @relation("CoordinatorAssignment")
-  courseFiles  CourseFile[]
-  createdAt    DateTime     @default(now())
-}
-
-enum Role {
-  FACULTY
-  COORDINATOR
-  ADMIN
+  notifications         Notification[]
 }
 
 model CourseFile {
-  id                 String           @id @default(uuid())
-  facultyId          String
-  faculty            User             @relation(fields: [facultyId], references: [id])
-  department         String
-  school             String
-  semester           String
+  id                 String          @id @default(uuid())
   courseCode         String
   courseTitle        String
-  status             Status           @default(DRAFT)
-  uploadedFileUrl    String?
-  uploadedFileName   String?
-  generatedReportUrl String?
-  checklist          ChecklistScore[]
-  verification       Verification?
-  createdAt          DateTime         @default(now())
-  submittedAt        DateTime?
-  updatedAt          DateTime         @updatedAt
+  semester           String
+  academicYear       String
+  progress           Int             @default(0) // Completed checklist items (0-19)
+  status             String          // "DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_REVISION", "APPROVED"
+  facultyId          String
+  facultyName        String?
+  department         String?
+  school             String?
+  faculty            User            @relation(fields: [facultyId], references: [id])
+  createdAt          DateTime        @default(now())
+  lastUpdated        DateTime        @updatedAt
+
+  facultySignatureName String?
+  facultySignatureUrl  String?
+  facultySignedAt      DateTime?
+  facultyConfirmed     Boolean         @default(false)
+  reviewerSignatureName String?
+  reviewerSignatureUrl  String?
+  reviewerSignedAt      DateTime?
+  reviewerConfirmed     Boolean         @default(false)
+
+  // Scoring / Evaluation fields (filled by Coordinator)
+  totalScore         Int?            // Sum of marks (0-200)
+  rating             String?         // "Excellent", "Good", "Moderate & Update", "Fair & Revise", "Poor & Revise"
+  coordinatorRemarks String?         // Overall evaluation remarks
+
+  // Generated report path after approval
+  generatedReportPath String?
+
+  checklistItems     ChecklistItem[]
 }
 
-enum Status {
-  DRAFT
-  SUBMITTED
-  UNDER_REVIEW
-  NEEDS_REVISION
-  APPROVED
-}
-
-model ChecklistScore {
+model ChecklistItem {
   id           String     @id @default(uuid())
   courseFileId String
-  courseFile   CourseFile @relation(fields: [courseFileId], references: [id])
-  itemNo       Int
-  particulars  String
-  marksAwarded Int?
-  maxMarks     Int
-  remarks      String?
-}
+  courseFile   CourseFile @relation(fields: [courseFileId], references: [id], onDelete: Cascade)
+  itemIndex    Int        // 1 to 20
+  status       String     // "EMPTY", "UPLOADED"
+  
+  // Uploaded file info
+  fileName     String?
+  fileUrl      String?
 
-model Verification {
-  id               String     @id @default(uuid())
-  courseFileId     String     @unique
-  courseFile       CourseFile @relation(fields: [courseFileId], references: [id])
-  facultySignedAt  DateTime?
-  reviewerId       String?
-  reviewerSignedAt DateTime?
-  totalMarks       Int?
-  qualityRating    String?
+  // Sub-items checklist for items 11, 12, 15 (represented as JSON string, e.g. '{"a":true, "b":false}')
+  subItemsJson String?
+
+  // Scoring per item (filled by Coordinator)
+  score        Int?       // 0-10 (except 19 which is 0-20)
+  remarks      String?
+
+  @@unique([courseFileId, itemIndex])
 }
 
 model Notification {
-  id            String   @id @default(uuid())
-  recipientRole Role
-  message       String
-  courseFileId  String?
-  read          Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

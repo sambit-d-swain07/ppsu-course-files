@@ -8,6 +8,7 @@ export interface User {
   department?: string;
   school?: string;
   designation?: string;
+  assignedCoordinatorId?: string; // For FACULTY users
 }
 
 export interface CourseFile {
@@ -16,7 +17,7 @@ export interface CourseFile {
   courseTitle: string;
   semester: string;
   academicYear: string;
-  progress: number; // completed checklist items (0-19)
+  progress: number; // completed checklist items (0-20)
   status: 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'NEEDS_REVISION' | 'APPROVED';
   facultyId: string;
   facultyName?: string;
@@ -24,6 +25,16 @@ export interface CourseFile {
   school?: string;
   lastUpdated: string; // ISO String
   createdAt?: string;  // ISO String
+
+  // Verification & Signatures
+  facultySignatureName?: string;
+  facultySignatureUrl?: string;
+  facultySignedAt?: string;
+  facultyConfirmed?: boolean;
+  reviewerSignatureName?: string;
+  reviewerSignatureUrl?: string;
+  reviewerSignedAt?: string;
+  reviewerConfirmed?: boolean;
 
   // Evaluation fields
   totalScore?: number;
@@ -37,11 +48,11 @@ export interface CourseFile {
 export interface ChecklistItem {
   id: string;
   courseFileId: string;
-  itemIndex: number; // 1 to 19
+  itemIndex: number; // 1 to 20
   status: 'EMPTY' | 'UPLOADED';
   fileName?: string;
   fileUrl?: string;
-  subItemsJson?: string; // JSON string representing checked sub-items (e.g. '{"a":true, "b":false}')
+  subItemsJson?: string; // JSON string representing checked/uploaded sub-items or manual mark tables
   score?: number; // 0-10 or 0-20 for item 19
   remarks?: string;
 }
@@ -53,3 +64,4 @@ export interface Notification {
   timestamp: string; // ISO String
   read: boolean;
 }
+

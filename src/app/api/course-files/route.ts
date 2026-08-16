@@ -1,26 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Role, Status } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
-import { serializeCourseFile } from '@/lib/course-file-serialization';
+import {
+  getCourseFiles,
+  getCourseFilesByFacultyId,
+  getCourseFilesForCoordinator,
+  getUserById,
+  createCourseFile
+} from '@/lib/mock-data';
+import { CourseFile } from '@/lib/db-types';
 import { verifyToken } from '@/lib/jwt';
 
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const payload = await verifyToken(token);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const courseFiles = await prisma.courseFile.findMany({
-      where: payload.role === Role.ADMIN
-        ? undefined
-        : payload.role === Role.COORDINATOR
-          ? { faculty: { assignedCoordinatorId: payload.userId } }
-          : { facultyId: payload.userId },
-      include: { faculty: true, verification: true },
-      orderBy: { updatedAt: 'desc' }
-    });
-    return NextResponse.json({ courseFiles: courseFiles.map(serializeCourseFile) });
+    let rawFiles: CourseFile[];
+    if (payload.role === 'ADMIN') {
+      rawFiles = await getCourseFiles();
+    } else if (payload.role === 'COORDINATOR') {
+      rawFiles = await getCourseFilesForCoordinator(payload.userId);
+    } else {
+      rawFiles = await getCourseFilesByFacultyId(payload.userId);
+    }
+
+    const files = await Promise.all(rawFiles.map(async (cf: CourseFile) => {
+      const faculty = await getUserById(cf.facultyId);
+      return {
+        ...cf,
+        faculty: faculty
+          ? {
+              id: faculty.id,
+              name: faculty.name,
+              employeeId: faculty.employeeId,
+              department: faculty.department,
+              school: faculty.school,
+              assignedCoordinatorId: faculty.assignedCoordinatorId
+            }
+          : null
+      };
+    }));
+
+    return NextResponse.json({ courseFiles: files });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
@@ -30,30 +53,37 @@ export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const payload = await verifyToken(token);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (payload.role !== Role.FACULTY) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    // Only faculty can create
+    if (payload.role !== 'FACULTY') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await req.json();
-    const { courseCode, courseTitle, semester, department, school } = body;
-    if (!courseCode || !courseTitle || !semester) {
-      return NextResponse.json({ error: 'courseCode, courseTitle and semester are required' }, { status: 400 });
-    }
-    const faculty = await prisma.user.findUnique({ where: { id: payload.userId } });
-    if (!faculty) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const { courseCode, courseTitle, semester, academicYear, facultyName, department, school } = body;
 
-    const courseFile = await prisma.courseFile.create({
-      data: {
-        courseCode: String(courseCode).trim().toUpperCase(),
-        courseTitle: String(courseTitle).trim(),
-        semester,
-        facultyId: payload.userId,
-        department: department?.trim() || faculty.department || '',
-        school: school?.trim() || faculty.school || ''
-      },
-      include: { faculty: true, verification: true }
+    if (!courseCode || !courseTitle || !semester || !academicYear) {
+      return NextResponse.json(
+        { error: 'courseCode, courseTitle, semester and academicYear are required' },
+        { status: 400 }
+      );
+    }
+
+    const newFile = await createCourseFile({
+      courseCode: courseCode.trim().toUpperCase(),
+      courseTitle: courseTitle.trim(),
+      semester,
+      academicYear,
+      facultyId: payload.userId,
+      facultyName: facultyName?.trim(),
+      department: department?.trim(),
+      school: school?.trim()
     });
-    return NextResponse.json({ courseFile: serializeCourseFile(courseFile) }, { status: 201 });
+
+    return NextResponse.json({ courseFile: newFile }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }

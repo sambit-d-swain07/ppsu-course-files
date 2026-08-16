@@ -78,7 +78,7 @@ export default function CoordinatorDashboard() {
     <div>
       {/* Header */}
       <div className="mb-4">
-        <h4 className="fw-bold text-navy-900 mb-0">Coordinator Dashboard</h4>
+        <h4 className="fw-bold text-navy-900 mb-0">Evaluator Dashboard</h4>
         <p className="text-secondary small mb-0">Manage faculty course file submissions and evaluations.</p>
       </div>
 
@@ -195,7 +195,7 @@ export default function CoordinatorDashboard() {
                 </div>
                 <div>
                   <span className="small text-secondary d-block">Progress</span>
-                  <span className="fw-semibold small">{selectedCourse.progress}/19</span>
+                  <span className="fw-semibold small">{Math.min(20, selectedCourse.progress || 0)}/20</span>
                 </div>
               </div>
             </Col>

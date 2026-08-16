@@ -19,27 +19,41 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
   const [filteredCourses, setFilteredCourses] = useState<any[]>([]);
   const [selectedCourseFileId, setSelectedCourseFileId] = useState('');
 
-  // Fetch all course files & faculties at startup
+  // Fetch course files & extrapolate faculty and schools
   useEffect(() => {
-    // 1. Fetch course files which includes faculty info
     fetch('/api/course-files')
       .then(res => res.json())
       .then(data => {
-          if (data.courseFiles && data.courseFiles.length > 0) {
+        if (data.courseFiles && data.courseFiles.length > 0) {
           setCourses(data.courseFiles);
           
-          // Extrapolate unique faculties
+          // Extrapolate unique schools and faculty
+          const schoolSet = new Set<string>();
           const facultyMap = new Map();
+
           data.courseFiles.forEach((cf: any) => {
+            const sch = cf.school || cf.faculty?.school || 'School of Engineering';
+            schoolSet.add(sch);
             if (cf.faculty) {
-              facultyMap.set(cf.faculty.id, cf.faculty);
+              facultyMap.set(cf.faculty.id, {
+                ...cf.faculty,
+                school: sch
+              });
             }
           });
+
+          const schoolList = Array.from(schoolSet);
           const facultyList = Array.from(facultyMap.values());
-          const schoolList = Array.from(new Set(facultyList.map((faculty: any) => faculty.school || 'School of Engineering')));
+
           setSchools(schoolList);
           setFaculties(facultyList);
-          setFilteredFaculties(facultyList);
+
+          if (!selectedSchool && schoolList.length > 0) {
+            setSelectedSchool(schoolList[0]);
+          }
+          if (facultyList.length > 0) {
+            setFilteredFaculties(facultyList);
+          }
         }
       })
       .catch(err => console.error('SearchPanel fetch error:', err));
@@ -53,7 +67,6 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
     } else {
       setFilteredFaculties(faculties);
     }
-    
   }, [selectedSchool, faculties]);
 
   // Filter faculty by Employee ID input

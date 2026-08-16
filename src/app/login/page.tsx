@@ -70,8 +70,8 @@ export default function LoginPage() {
         <div className="login-header">
           <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '80px', objectFit: 'contain' }} className="mb-3" />
           <h1 className="login-title">PPSU Course Files</h1>
-          <p className="login-subtitle mb-1">Faculty & Course File Management & Evaluation Portal</p>
-          <small className="text-muted d-block font-mono-ppsu">P P Savani University · School of Engineering</small>
+          <p className="login-subtitle mb-1">Course Management & Evaluation Portal</p>
+          <small className="text-muted d-block font-mono-ppsu text-center">P P Savani University</small>
         </div>
 
         {error && <Alert variant="danger" className="py-2 px-3 mb-3" style={{ fontSize: '0.85rem' }}>{error}</Alert>}
@@ -131,7 +131,7 @@ export default function LoginPage() {
                 className="demo-chip"
                 onClick={() => fillCredentials('COORDINATOR')}
               >
-                Coordinator Demo
+                Evaluator Demo
               </span>
               <span
                 className="demo-chip"

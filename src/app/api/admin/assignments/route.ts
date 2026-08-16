@@ -1,37 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Role } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
+import { getUsers, assignFacultyCoordinator, getUserById } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
-
-async function requireAdmin(req: NextRequest) {
-  const token = req.cookies.get('ppsu_auth_token')?.value;
-  const payload = token ? await verifyToken(token) : null;
-  return payload?.role === Role.ADMIN ? payload : null;
-}
 
 export async function GET(req: NextRequest) {
   try {
-    if (!await requireAdmin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const [faculty, coordinators] = await Promise.all([
-      prisma.user.findMany({
-        where: { role: Role.FACULTY },
-        include: { assignedCoordinator: { select: { id: true, name: true, email: true } } },
-        orderBy: { name: 'asc' }
-      }),
-      prisma.user.findMany({ where: { role: Role.COORDINATOR }, orderBy: { name: 'asc' } })
-    ]);
-    return NextResponse.json({
-      faculty: faculty.map((user) => ({
-        id: user.id, name: user.name, email: user.email, employeeId: user.employeeId,
-        department: user.department, school: user.school,
-        assignedCoordinatorId: user.assignedCoordinatorId,
-        assignedCoordinatorName: user.assignedCoordinator?.name ?? 'Unassigned'
-      })),
-      coordinators: coordinators.map((user) => ({
-        id: user.id, name: user.name, email: user.email,
-        department: user.department, designation: user.designation
-      }))
-    });
+    const token = req.cookies.get('ppsu_auth_token')?.value;
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const payload = await verifyToken(token);
+    if (!payload || payload.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const allUsers = await getUsers();
+    const faculty = allUsers.filter(u => u.role === 'FACULTY').map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      employeeId: u.employeeId,
+      department: u.department,
+      school: u.school,
+      assignedCoordinatorId: u.assignedCoordinatorId,
+      assignedCoordinatorName: u.assignedCoordinatorId ? allUsers.find(v => v.id === u.assignedCoordinatorId)?.name : 'Unassigned'
+    }));
+
+    const coordinators = allUsers.filter(u => u.role === 'COORDINATOR').map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      department: u.department,
+      designation: u.designation
+    }));
+
+    return NextResponse.json({ faculty, coordinators });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
@@ -39,14 +40,24 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    if (!await requireAdmin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const token = req.cookies.get('ppsu_auth_token')?.value;
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const payload = await verifyToken(token);
+    if (!payload || payload.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { facultyId, coordinatorId } = await req.json();
-    if (!facultyId || !coordinatorId) return NextResponse.json({ error: 'facultyId and coordinatorId are required' }, { status: 400 });
-    const coordinator = await prisma.user.findFirst({ where: { id: coordinatorId, role: Role.COORDINATOR } });
-    if (!coordinator) return NextResponse.json({ error: 'Coordinator not found' }, { status: 404 });
-    const faculty = await prisma.user.findFirst({ where: { id: facultyId, role: Role.FACULTY } });
-    if (!faculty) return NextResponse.json({ error: 'Faculty member not found' }, { status: 404 });
-    await prisma.user.update({ where: { id: facultyId }, data: { assignedCoordinatorId: coordinatorId } });
+    if (!facultyId || coordinatorId === undefined) {
+      return NextResponse.json({ error: 'facultyId and coordinatorId are required' }, { status: 400 });
+    }
+
+    const success = await assignFacultyCoordinator(facultyId, coordinatorId);
+    if (!success) {
+      return NextResponse.json({ error: 'Faculty member not found' }, { status: 404 });
+    }
+
     return NextResponse.json({ success: true, message: 'Coordinator assigned successfully' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
