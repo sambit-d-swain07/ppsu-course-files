@@ -504,7 +504,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                   ) : (
                     <>
                       {/* Score Column */}
-                      <Col xs={5} md={2}>
+                      <Col xs={12} md={2}>
                         <Form.Label className="small text-secondary mb-1 d-block fw-semibold">Score (max {item.maxScore})</Form.Label>
                         <Form.Control
                           id={`score-item-${item.index}`}

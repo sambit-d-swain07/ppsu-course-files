@@ -8,6 +8,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     // Get user details
@@ -111,8 +112,9 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="layout-wrapper">
+      {sidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-brand text-center py-3 bg-white" style={{ borderBottom: '1px solid var(--ppsu-border)' }}>
           <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '55px', objectFit: 'contain' }} />
           <div className="mt-1 fw-bold text-dark font-mono-ppsu" style={{ fontSize: '0.8rem' }}>Course Files Portal</div>
@@ -126,6 +128,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
                 key={link.href}
                 href={link.href}
                 className={`sidebar-nav-link ${isActive ? 'active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
               >
                 <span className="sidebar-nav-icon">{link.icon}</span>
                 <span className="flex-grow-1">{link.label}</span>
@@ -156,8 +159,13 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       {/* Main Container */}
       <div className="main-content-wrapper">
         <header className="top-header">
-          <div className="header-title-section">
+          <div className="d-flex align-items-center gap-2">
+            <button className="mobile-menu-toggle" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}>
+              <span /><span /><span />
+            </button>
+            <div className="header-title-section">
             <h2 className="header-page-title">{pageTitle}</h2>
+            </div>
           </div>
 
           <div className="header-user-profile">

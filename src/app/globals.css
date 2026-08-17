@@ -406,6 +406,10 @@ h1, h2, h3, h4, h5, h6 {
   background-color: rgba(243, 244, 248, 0.5);
 }
 
+.table-responsive {
+  position: relative;
+}
+
 /* Progress bar overrides */
 .progress-custom {
   height: 8px;
@@ -587,4 +591,194 @@ h1, h2, h3, h4, h5, h6 {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ppsu-text-muted);
+}
+
+/* Mobile layout: desktop dimensions above remain unchanged. */
+.mobile-menu-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .sidebar {
+    width: min(280px, 86vw);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease-in-out;
+    z-index: 1050;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    border: 0;
+    background: rgba(15, 23, 42, 0.48);
+    padding: 0;
+  }
+
+  .main-content-wrapper {
+    margin-left: 0;
+    padding-top: 60px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .top-header {
+    left: 0;
+    height: 60px;
+    padding: 0 0.75rem;
+    z-index: 1030;
+  }
+
+  .mobile-menu-toggle {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--ppsu-border);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--ppsu-primary);
+    flex: 0 0 auto;
+  }
+
+  .mobile-menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  .header-page-title {
+    max-width: 52vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+  }
+
+  .header-user-profile {
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .notification-bell-btn,
+  .btn,
+  .sidebar-nav-link {
+    min-height: 44px;
+  }
+
+  .notification-bell-btn {
+    min-width: 44px;
+  }
+
+  .page-container {
+    padding: 1rem 0.75rem;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .page-container .d-flex.justify-content-between {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .page-container .d-flex.justify-content-between > .btn,
+  .page-container .d-flex.justify-content-between > a.btn {
+    width: 100%;
+  }
+
+  .card-custom {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+  }
+
+  .table-responsive::after {
+    content: 'Swipe to view more';
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.35rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(30, 58, 138, 0.9);
+    color: #ffffff;
+    font-size: 0.65rem;
+    pointer-events: none;
+  }
+
+  .table-responsive > table {
+    min-width: 640px;
+  }
+
+  .table-custom th,
+  .table-custom td {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+
+  .login-bg {
+    min-height: 100dvh;
+    align-items: center;
+    padding: 1rem 0.75rem;
+    overflow-y: auto;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: none;
+    padding: 1.5rem 1rem;
+    margin: 0;
+  }
+
+  .login-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .login-header img {
+    max-width: 100%;
+    height: 64px !important;
+  }
+
+  .demo-chip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.7rem;
+  }
+
+  .checklist-item-row {
+    padding: 1rem 0;
+  }
+
+  .checklist-title {
+    overflow-wrap: anywhere;
+  }
 }
