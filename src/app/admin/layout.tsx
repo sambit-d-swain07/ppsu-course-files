@@ -130,8 +130,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Sign Out
             </button>
           </div>
-          <div>Admin Portal · v0.1</div>
-          <div style={{ opacity: 0.6 }}>Mock data only — no backend</div>
         </div>
       </aside>
 
