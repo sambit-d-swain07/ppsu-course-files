@@ -13,7 +13,9 @@ export default function CoordinatorCompletedReviews() {
       .then((res) => res.json())
       .then((data) => {
         if (data.courseFiles) {
-          const filtered = data.courseFiles.filter((cf: any) => cf.status === 'APPROVED');
+          const filtered = data.courseFiles.filter((cf: any) =>
+            ['APPROVED', 'NEEDS_REVISION'].includes(cf.status)
+          );
           setCourses(filtered);
         }
         setLoading(false);

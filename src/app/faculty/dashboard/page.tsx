@@ -206,6 +206,11 @@ export default function FacultyDashboard() {
                     {course.lastUpdated && (
                       <p className="text-muted" style={{ fontSize: 11 }}>Updated {timeAgo(course.lastUpdated)}</p>
                     )}
+                    {course.totalScore !== undefined && course.totalScore !== null && (
+                      <p className="small fw-semibold mb-0" style={{ color: 'var(--ppsu-primary)' }}>
+                        Score: {course.totalScore}/200{course.rating ? ` · ${course.rating}` : ''}
+                      </p>
+                    )}
                   </div>
 
                   <div className="mt-3">

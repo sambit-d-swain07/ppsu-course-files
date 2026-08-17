@@ -210,6 +210,14 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     const faculty = await getUserById(courseFile.facultyId);
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
 
+    if (!isCoordinator && courseFile.status === 'APPROVED') {
+      return NextResponse.json({ error: 'This approved course file is permanently locked.' }, { status: 409 });
+    }
+
+    if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
+      return NextResponse.json({ error: 'This review is already closed. The course file must be resubmitted before it can be reviewed again.' }, { status: 409 });
+    }
+
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {

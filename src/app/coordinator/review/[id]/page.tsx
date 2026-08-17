@@ -30,6 +30,17 @@ const CHECKLIST_ITEMS = [
 ];
 
 const MAX_TOTAL = 200;
+const REVIEW_REQUEST_TIMEOUT_MS = 30000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REVIEW_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 function getRating(total: number): string {
   if (total > 175) return 'Excellent';
@@ -140,6 +151,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
     .reduce((sum, [, s]) => sum + s, 0);
   const rating = getRating(totalScore);
   const scorePercent = Math.round((totalScore / MAX_TOTAL) * 100);
+  const reviewLocked = ['APPROVED', 'NEEDS_REVISION', 'UNDER_REVIEW'].includes(courseFile.status);
 
   const readFileAsDataUrl = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -151,7 +163,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
   };
 
   const handleScore = (idx: number, val: number) => {
-    if (idx === 20) return;
+    if (idx === 20 || reviewLocked) return;
     const max = idx === 19 ? 20 : 10;
     setScores((prev) => ({ ...prev, [idx]: Math.max(0, Math.min(max, isNaN(val) ? 0 : val)) }));
   };
@@ -162,6 +174,10 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
   };
 
   const submitEvaluation = async () => {
+    if (reviewLocked) {
+      setActionError('This review has already been submitted and is read-only.');
+      return;
+    }
     if (!reviewerConfirmed) {
       setActionError('Please tick the compulsory review declaration checkbox.');
       return;
@@ -173,25 +189,27 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
 
     setSaveLoading(true); setActionError(''); setActionSuccess('');
     try {
-      await Promise.all(
-        CHECKLIST_ITEMS.map((item) =>
-          fetch(`/api/checklist/${courseFileId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              itemIndex: item.index,
-              score: scores[item.index] ?? (item.index === 20 ? 10 : 0),
-              remarks: itemRemarks[item.index] ?? ''
-            })
+      for (const item of CHECKLIST_ITEMS) {
+        const checklistResponse = await fetchWithTimeout(`/api/checklist/${courseFileId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemIndex: item.index,
+            score: scores[item.index] ?? (item.index === 20 ? 10 : 0),
+            remarks: itemRemarks[item.index] ?? ''
           })
-        )
-      );
+        });
+        if (!checklistResponse.ok) {
+          const errorBody = await checklistResponse.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Failed to save score for item ${item.index}`);
+        }
+      }
 
       const sigUrl = reviewerSignatureFile
         ? `/uploads/reviewer_${courseFileId}_sig.${reviewerSignatureFile.name.split('.').pop() || 'png'}`
         : reviewerSignatureUrl || '/uploads/reviewer_sig.png';
 
-      const res = await fetch(`/api/course-files/${courseFileId}`, {
+      const res = await fetchWithTimeout(`/api/course-files/${courseFileId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -204,7 +222,10 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
           reviewerConfirmed
         })
       });
-      if (!res.ok) throw new Error('Failed to update evaluation status');
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to update evaluation status');
+      }
 
       const data = await res.json();
       const updatedStatus = data.courseFile?.status;
@@ -491,6 +512,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                           min={0}
                           max={item.maxScore}
                           value={score}
+                          disabled={reviewLocked}
                           onChange={(e) => handleScore(item.index, parseInt(e.target.value))}
                           className="ppsu-input text-center font-mono-ppsu py-1"
                           style={{ maxWidth: 80 }}
@@ -505,6 +527,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                           type="text"
                           placeholder="Optional feedback…"
                           value={itemRemarks[item.index] ?? ''}
+                          disabled={reviewLocked}
                           onChange={(e) => setItemRemarks((prev) => ({ ...prev, [item.index]: e.target.value }))}
                           className="ppsu-input py-1"
                           style={{ fontSize: 13 }}
@@ -533,6 +556,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
               rows={3}
               placeholder="Provide comprehensive evaluation feedback to the faculty member…"
               value={overallRemarks}
+              disabled={reviewLocked}
               onChange={(e) => setOverallRemarks(e.target.value)}
               className="ppsu-input"
             />
@@ -559,6 +583,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                   key={reviewerSignatureUrl || 'empty-sig'}
                   type="file"
                   size="sm"
+                  disabled={reviewLocked}
                   onChange={async (e: any) => {
                     const f = e.target.files?.[0];
                     if (f) {
@@ -573,7 +598,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                     <Button size="sm" variant="outline-info" style={{ fontSize: 11 }} onClick={() => setViewingDoc({ title: 'Reviewer Signature', fileName: reviewerSignatureFile?.name || 'reviewer_sig.png', fileUrl: reviewerSignatureUrl })}>
                       👁️ View
                     </Button>
-                    <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => { setReviewerSignatureFile(null); setReviewerSignatureUrl(''); }}>
+                    <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} disabled={reviewLocked} onClick={() => { setReviewerSignatureFile(null); setReviewerSignatureUrl(''); }}>
                       🗑️ Remove
                     </Button>
                   </>
@@ -592,6 +617,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                     </span>
                   }
                   checked={reviewerConfirmed}
+                  disabled={reviewLocked}
                   onChange={(e) => setReviewerConfirmed(e.target.checked)}
                   style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
                 />
@@ -641,7 +667,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
               <button
                 id="btn-submit-evaluation"
                 className="btn px-4 py-2 fw-semibold"
-                disabled={saveLoading || !reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)}
+                disabled={reviewLocked || saveLoading || !reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)}
                 style={{
                   background: (!reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)) ? '#cbd5e1' : 'var(--ppsu-accent)',
                   color: '#fff', border: 'none',
@@ -649,7 +675,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                 }}
                 onClick={() => submitEvaluation()}
               >
-                {saveLoading ? <Spinner animation="border" size="sm" /> : 'Submit Evaluation & Auto-Route'}
+                {saveLoading ? <Spinner animation="border" size="sm" /> : reviewLocked ? 'Review Submitted' : 'Submit Evaluation & Auto-Route'}
               </button>
             </div>
           </div>

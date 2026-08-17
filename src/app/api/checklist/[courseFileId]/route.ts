@@ -15,6 +15,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const courseFile = await getCourseFileById(courseFileId);
     if (!courseFile) return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
 
+    if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
+      return NextResponse.json({ error: 'This review is already closed.' }, { status: 409 });
+    }
+
     const body = await req.json();
     const { itemIndex, status, fileName, fileUrl, subItemsJson, score, remarks } = body;
 
