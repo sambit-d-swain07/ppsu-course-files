@@ -80,6 +80,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
       </div>
 
       {/* Print Document Container */}
+      <div className="report-preview-viewport">
       <div className="print-container p-4 mx-auto" style={{ maxWidth: '900px' }}>
         {/* Form Header */}
         <div className="border border-dark mb-3 p-3">
@@ -103,7 +104,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
           {/* Section 0: Faculty & Course Details */}
           <h6 className="fw-bold text-uppercase mb-2" style={{ fontSize: '13px' }}>Faculty & Course Details</h6>
-          <table className="table table-bordered border-dark text-center align-middle mb-0" style={{ fontSize: '12px' }}>
+          <div className="report-table-scroll"><table className="table table-bordered border-dark text-center align-middle mb-0" style={{ fontSize: '12px' }}>
             <tbody>
               <tr>
                 <td className="bg-light fw-bold text-start" style={{ width: '20%' }}>Faculty Name:</td>
@@ -124,12 +125,12 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
                 <td className="text-start fw-bold">{courseFile.courseTitle}</td>
               </tr>
             </tbody>
-          </table>
+          </table></div>
         </div>
 
         {/* Section 1-3: 20 Particulars Checklist Table */}
         <h6 className="fw-bold text-uppercase mb-2" style={{ fontSize: '13px' }}>Course File Details & Evaluation Checklist</h6>
-        <table className="table table-bordered border-dark align-middle mb-2" style={{ fontSize: '12px' }}>
+        <div className="report-table-scroll"><table className="table table-bordered border-dark align-middle mb-2" style={{ fontSize: '12px' }}>
           <thead className="bg-light text-center">
             <tr>
               <th style={{ width: '6%' }}>Sr. No.</th>
@@ -156,7 +157,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
               );
             })}
           </tbody>
-        </table>
+        </table></div>
 
         {/* Section 5: ERP Note */}
         <p className="fw-bold small text-center mb-3">
@@ -165,7 +166,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
         {/* Section 4 & 11 & 12: Verification Details */}
         <h6 className="fw-bold text-uppercase mb-2" style={{ fontSize: '13px' }}>Verification Details</h6>
-        <table className="table table-bordered border-dark align-middle mb-4" style={{ fontSize: '12px' }}>
+        <div className="report-table-scroll"><table className="table table-bordered border-dark align-middle mb-4" style={{ fontSize: '12px' }}>
           <tbody>
             <tr>
               <td className="bg-light fw-bold" style={{ width: '30%' }}>Course Faculty Signature:</td>
@@ -214,11 +215,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
               </td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
 
         {/* Section 4: Guidelines Table */}
         <h6 className="fw-bold text-uppercase mb-2" style={{ fontSize: '13px' }}>Guidelines for Quality of Course File</h6>
-        <table className="table table-bordered border-dark text-center align-middle mb-4" style={{ fontSize: '11px' }}>
+        <div className="report-table-scroll"><table className="table table-bordered border-dark text-center align-middle mb-4" style={{ fontSize: '11px' }}>
           <thead className="bg-light fw-bold">
             <tr>
               <th>Marks Range</th>
@@ -245,7 +246,8 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
               <td colSpan={2} className="fw-bold text-success">Excellent</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
+      </div>
       </div>
 
       {/* CSS Styles for Print */}

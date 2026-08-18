@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Table, Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
+import { Row, Col, Card, Table, Form, Button, Spinner, Alert } from 'react-bootstrap';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
@@ -87,9 +87,9 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-4 admin-dashboard-heading">
         <div>
-          <h2 className="fw-bold text-navy-900 mb-1">Admin Dashboard & Evaluator Assignment</h2>
+          <h4 className="fw-bold text-navy-900 mb-1">Admin Dashboard & Evaluator Assignment</h4>
           <p className="text-secondary small mb-0">Manage faculty-to-evaluator mappings and monitor system-wide course file submissions.</p>
         </div>
         <Link href="/admin/assignments" className="btn btn-ppsu-navy btn-sm px-3">
@@ -101,41 +101,42 @@ export default function AdminDashboard() {
       {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
 
       {/* KPI Cards */}
-      <Row className="g-3 mb-4">
+      <Row className="g-3 mb-4 admin-kpi-row">
         <Col xs={12} sm={6} md={3}>
-          <Card className="card-custom border-0 shadow-sm text-center py-3">
+          <Card className="card-custom border-0 shadow-sm text-center p-3 m-0 h-100">
             <h6 className="text-secondary small text-uppercase mb-1">Total Faculty</h6>
             <h3 className="fw-bold text-navy-900 mb-0 font-mono-ppsu">{totalFaculty}</h3>
           </Card>
         </Col>
         <Col xs={12} sm={6} md={3}>
-          <Card className="card-custom border-0 shadow-sm text-center py-3">
+          <Card className="card-custom border-0 shadow-sm text-center p-3 m-0 h-100">
             <h6 className="text-secondary small text-uppercase mb-1">Total Evaluators</h6>
             <h3 className="fw-bold text-navy-900 mb-0 font-mono-ppsu">{totalCoordinators}</h3>
           </Card>
         </Col>
         <Col xs={12} sm={6} md={3}>
-          <Card className="card-custom border-0 shadow-sm text-center py-3">
+          <Card className="card-custom border-0 shadow-sm text-center p-3 m-0 h-100">
             <h6 className="text-secondary small text-uppercase mb-1">Pending Reviews</h6>
-            <h3 className="fw-bold text-warning mb-0 font-mono-ppsu">{pendingReviews}</h3>
+            <h3 className="fw-bold mb-0 font-mono-ppsu" style={{ color: 'var(--ppsu-accent)' }}>{pendingReviews}</h3>
           </Card>
         </Col>
         <Col xs={12} sm={6} md={3}>
-          <Card className="card-custom border-0 shadow-sm text-center py-3">
+          <Card className="card-custom border-0 shadow-sm text-center p-3 m-0 h-100">
             <h6 className="text-secondary small text-uppercase mb-1">Approved Files</h6>
-            <h3 className="fw-bold text-success mb-0 font-mono-ppsu">{approvedSubmissions}</h3>
+            <h3 className="fw-bold mb-0 font-mono-ppsu" style={{ color: 'var(--ppsu-success-text)' }}>{approvedSubmissions}</h3>
           </Card>
         </Col>
       </Row>
 
       {/* Faculty to Evaluator Assignment Table */}
-      <Card className="card-custom border-0 shadow-sm mb-4">
-        <Card.Header className="bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+      <Card className="card-custom border-0 shadow-sm mb-4 p-0 admin-section-card">
+        <Card.Header className="bg-white p-4 border-0 d-flex justify-content-between align-items-center">
           <h5 className="fw-bold text-navy-900 mb-0">Faculty Evaluator Assignments</h5>
-          <span className="badge bg-secondary">Section 9 — Role Hierarchy</span>
+          <span className="badge-custom badge-custom-draft">Section 9 — Role Hierarchy</span>
         </Card.Header>
         <Card.Body className="p-0">
-          <Table responsive hover className="align-middle mb-0">
+          <div className="table-responsive admin-table-scroll">
+          <Table hover className="align-middle mb-0">
             <thead className="bg-light small text-secondary">
               <tr>
                 <th className="px-4">Faculty Member</th>
@@ -151,6 +152,11 @@ export default function AdminDashboard() {
                   <td className="px-4">
                     <div className="fw-bold text-navy-900">{fac.name}</div>
                     <div className="small text-muted">{fac.email}</div>
+                    <div className="assignment-status-chips mt-2" aria-label="Course file status counts">
+                      <span className="assignment-status-chip assignment-status-completed">{fac.statusCounts?.completed ?? 0} Completed</span>
+                      <span className="assignment-status-chip assignment-status-pending">{fac.statusCounts?.pending ?? 0} Pending</span>
+                      <span className="assignment-status-chip assignment-status-revision">{fac.statusCounts?.revision ?? 0} Revision</span>
+                    </div>
                   </td>
                   <td className="font-mono-ppsu small">{fac.employeeId || 'N/A'}</td>
                   <td className="small">{fac.department || 'N/A'}</td>
@@ -183,16 +189,18 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </Table>
+          </div>
         </Card.Body>
       </Card>
 
       {/* Course File Submissions Overview */}
-      <Card className="card-custom border-0 shadow-sm">
-        <Card.Header className="bg-white py-3 border-0">
+      <Card className="card-custom border-0 shadow-sm p-0 admin-section-card">
+        <Card.Header className="bg-white p-4 border-0">
           <h5 className="fw-bold text-navy-900 mb-0">All System Submissions</h5>
         </Card.Header>
         <Card.Body className="p-0">
-          <Table responsive hover className="align-middle mb-0">
+          <div className="table-responsive admin-table-scroll">
+          <Table hover className="align-middle mb-0">
             <thead className="bg-light small text-secondary">
               <tr>
                 <th className="px-4">Course File</th>
@@ -214,9 +222,9 @@ export default function AdminDashboard() {
                     <td>{cf.faculty?.name || 'N/A'}</td>
                     <td>
                       {assignedCoord ? (
-                        <Badge bg="info" className="text-dark">{assignedCoord.name}</Badge>
+                        <span className="assignment-evaluator-badge">{assignedCoord.name}</span>
                       ) : (
-                        <Badge bg="secondary">Unassigned</Badge>
+                        <span className="badge-custom badge-custom-draft">Unassigned</span>
                       )}
                     </td>
                     <td>
@@ -234,6 +242,7 @@ export default function AdminDashboard() {
               })}
             </tbody>
           </Table>
+          </div>
         </Card.Body>
       </Card>
     </div>

@@ -59,6 +59,7 @@ export default function CoordinatorProfile() {
               </div>
             </div>
 
+            <div className="table-responsive">
             <Table borderless className="align-middle">
               <tbody>
                 <tr className="border-bottom" style={{ borderColor: 'var(--ppsu-border)' }}>
@@ -89,6 +90,7 @@ export default function CoordinatorProfile() {
                 </tr>
               </tbody>
             </Table>
+            </div>
 
             <Alert variant="info" className="mb-0 mt-3 p-3 border-0" style={{ backgroundColor: 'var(--ppsu-bg)', color: 'var(--ppsu-text-secondary)' }}>
               <div className="d-flex gap-2">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUsers, assignFacultyCoordinator, getUserById } from '@/lib/mock-data';
+import { getUsers, assignFacultyCoordinator, getCourseFileStatusCountsByFaculty } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 
 export async function GET(req: NextRequest) {
@@ -12,7 +12,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const allUsers = await getUsers();
+    const [allUsers, statusCounts] = await Promise.all([
+      getUsers(),
+      getCourseFileStatusCountsByFaculty()
+    ]);
     const faculty = allUsers.filter(u => u.role === 'FACULTY').map(u => ({
       id: u.id,
       name: u.name,
@@ -21,7 +24,8 @@ export async function GET(req: NextRequest) {
       department: u.department,
       school: u.school,
       assignedCoordinatorId: u.assignedCoordinatorId,
-      assignedCoordinatorName: u.assignedCoordinatorId ? allUsers.find(v => v.id === u.assignedCoordinatorId)?.name : 'Unassigned'
+      assignedCoordinatorName: u.assignedCoordinatorId ? allUsers.find(v => v.id === u.assignedCoordinatorId)?.name : 'Unassigned',
+      statusCounts: statusCounts[u.id] ?? { completed: 0, pending: 0, revision: 0 }
     }));
 
     const coordinators = allUsers.filter(u => u.role === 'COORDINATOR').map(u => ({

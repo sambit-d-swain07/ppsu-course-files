@@ -628,6 +628,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
           {/* Guidelines Table */}
           <div className="mb-4">
             <h6 className="fw-bold text-secondary mb-2" style={{ fontSize: 13 }}>Guidelines for Quality of Course File (Reference Table)</h6>
+            <div className="table-responsive">
             <Table bordered size="sm" className="text-center small mb-0">
               <thead className="bg-light">
                 <tr>
@@ -656,6 +657,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                 </tr>
               </tbody>
             </Table>
+            </div>
           </div>
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 pt-3 border-top">

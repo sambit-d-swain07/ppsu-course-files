@@ -36,6 +36,20 @@ export async function getCourseFileById(id: string) {
 export async function getCourseFilesByFacultyId(facultyId: string) {
   return (await prisma.courseFile.findMany({ where: { facultyId } })).map(toCourseFile);
 }
+export async function getCourseFileStatusCountsByFaculty() {
+  const grouped = await prisma.courseFile.groupBy({
+    by: ['facultyId', 'status'],
+    _count: { _all: true }
+  });
+  return grouped.reduce<Record<string, { completed: number; pending: number; revision: number }>>((counts, row) => {
+    const current = counts[row.facultyId] ?? { completed: 0, pending: 0, revision: 0 };
+    if (row.status === 'APPROVED') current.completed = row._count._all;
+    if (row.status === 'SUBMITTED' || row.status === 'UNDER_REVIEW') current.pending = row._count._all;
+    if (row.status === 'NEEDS_REVISION') current.revision = row._count._all;
+    counts[row.facultyId] = current;
+    return counts;
+  }, {});
+}
 export async function getCourseFilesForCoordinator(coordinatorId: string) {
   const faculty = await prisma.user.findMany({ where: { role: 'FACULTY', assignedCoordinatorId: coordinatorId }, select: { id: true } });
   if (faculty.length === 0) return getCourseFiles();

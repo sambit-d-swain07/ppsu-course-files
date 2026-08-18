@@ -410,6 +410,58 @@ h1, h2, h3, h4, h5, h6 {
   position: relative;
 }
 
+.assignment-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.assignment-status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.assignment-status-completed {
+  background: var(--ppsu-success-bg);
+  color: var(--ppsu-success-text);
+}
+
+.assignment-status-pending {
+  background: var(--ppsu-warning-bg);
+  color: var(--ppsu-accent-hover);
+}
+
+.assignment-status-revision {
+  background: var(--ppsu-danger-bg);
+  color: var(--ppsu-secondary);
+}
+
+.assignment-evaluator-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(30, 58, 138, 0.09);
+  color: var(--ppsu-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.report-preview-viewport {
+  position: relative;
+}
+
+.report-table-scroll {
+  width: 100%;
+}
+
 /* Progress bar overrides */
 .progress-custom {
   height: 8px;
@@ -713,7 +765,7 @@ h1, h2, h3, h4, h5, h6 {
   .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.25rem;
+    padding-bottom: 2rem;
   }
 
   .table-responsive::after {
@@ -731,6 +783,35 @@ h1, h2, h3, h4, h5, h6 {
 
   .table-responsive > table {
     min-width: 640px;
+  }
+
+  .admin-table-scroll > table {
+    min-width: 760px;
+  }
+
+  .report-preview-viewport {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 1.75rem;
+  }
+
+  .report-preview-viewport::after {
+    content: 'Swipe to view the full form';
+    position: sticky;
+    display: block;
+    width: max-content;
+    margin: 0.5rem auto 0;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(30, 58, 138, 0.9);
+    color: #ffffff;
+    font-size: 0.68rem;
+    pointer-events: none;
+  }
+
+  .report-preview-viewport .print-container {
+    min-width: 760px;
   }
 
   .table-custom th,
