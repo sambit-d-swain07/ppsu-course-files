@@ -34,7 +34,12 @@ export async function getCourseFileById(id: string) {
   return file ? toCourseFile(file) : undefined;
 }
 export async function getCourseFilesByFacultyId(facultyId: string) {
-  return (await prisma.courseFile.findMany({ where: { facultyId } })).map(toCourseFile);
+  return (await prisma.courseFile.findMany({ where: {
+    OR: [
+      { facultyId },
+      { subject: { OR: [{ labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
+    ]
+  } })).map(toCourseFile);
 }
 export async function getCourseFileStatusCountsByFaculty() {
   const grouped = await prisma.courseFile.groupBy({
@@ -122,6 +127,62 @@ export async function getSubjects() {
 
 export async function getSubjectById(id: string) {
   return prisma.subject.findUnique({ where: { id }, include: subjectInclude });
+}
+
+export async function getSubjectForCourseFile(courseFileId: string) {
+  const file = await prisma.courseFile.findUnique({ where: { id: courseFileId }, select: { subjectId: true } });
+  return file?.subjectId ? getSubjectById(file.subjectId) : null;
+}
+
+export function getLabBatchForUser(subject: any, userId: string) {
+  if (!subject || subject.courseTeacherId === userId) return null;
+  if (subject.labTeacherAId === userId) return 'A';
+  if (subject.labTeacherBId === userId) return 'B';
+  if (subject.labTeacherCId === userId) return 'C';
+  return undefined;
+}
+
+export async function getLabSubmission(courseFileId: string, batch: string, itemIndex: number) {
+  return prisma.labChecklistSubmission.findUnique({ where: { courseFileId_batch_itemIndex: { courseFileId, batch, itemIndex } } });
+}
+
+export async function upsertLabSubmission(courseFileId: string, facultyId: string, batch: string, itemIndex: number, updates: Record<string, unknown>) {
+  return prisma.labChecklistSubmission.upsert({
+    where: { courseFileId_batch_itemIndex: { courseFileId, batch, itemIndex } },
+    create: { courseFileId, facultyId, batch, itemIndex, ...updates },
+    update: { facultyId, ...updates }
+  });
+}
+
+export async function getLabSubmissions(courseFileId: string) {
+  return prisma.labChecklistSubmission.findMany({ where: { courseFileId }, orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }] });
+}
+
+function withBatchJson(item: any, batch: string, facultyName?: string) {
+  let parsed: any = {};
+  try { parsed = item?.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
+  return { ...item, batch, facultyName, subItemsJson: JSON.stringify({ ...parsed, batch }) };
+}
+
+export async function getMergedChecklistItems(courseFileId: string) {
+  const [items, submissions] = await Promise.all([getChecklistItemsByCourseFileId(courseFileId), getLabSubmissions(courseFileId)]);
+  const subject = await getSubjectForCourseFile(courseFileId);
+  const facultyNames = new Map<string, string>();
+  if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
+  if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
+  if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
+  return items.map((item: any) => {
+    if (![2, 4, 8].includes(item.itemIndex)) return item;
+    const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
+    const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
+    const existingBatches = new Set(related.map((submission: any) => submission.batch));
+    const pending = assignedBatches.filter((batch) => !existingBatches.has(batch)).map((batch) => ({ batch, status: 'PENDING', subItemsJson: JSON.stringify({ batch, pending: true }), facultyName: facultyNames.get(batch) }));
+    return {
+      ...item,
+      batchSubmissions: [withBatchJson(item, 'A', facultyNames.get('A')), ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))), ...pending],
+      merged: true
+    };
+  });
 }
 
 export async function createSubject(data: {

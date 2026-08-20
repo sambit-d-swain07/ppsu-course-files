@@ -4,6 +4,8 @@ import {
   getCourseFilesByFacultyId,
   getCourseFilesForCoordinator,
   getUserById,
+  getSubjectForCourseFile,
+  getLabBatchForUser,
 } from '@/lib/mock-data';
 import { CourseFile } from '@/lib/db-types';
 import { verifyToken } from '@/lib/jwt';
@@ -27,8 +29,11 @@ export async function GET(req: NextRequest) {
 
     const files = await Promise.all(rawFiles.map(async (cf: CourseFile) => {
       const faculty = await getUserById(cf.facultyId);
+      const subject = await getSubjectForCourseFile(cf.id);
+      const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
       return {
         ...cf,
+        access: labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8] } : { mode: 'OWNER' },
         faculty: faculty
           ? {
               id: faculty.id,

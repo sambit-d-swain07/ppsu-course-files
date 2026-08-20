@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateChecklistItem, getCourseFileById } from '@/lib/mock-data';
+import { updateChecklistItem, getCourseFileById, getSubjectForCourseFile, getLabBatchForUser, getLabSubmission, upsertLabSubmission } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ courseFileId: string }> }) {
@@ -15,6 +15,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const courseFile = await getCourseFileById(courseFileId);
     if (!courseFile) return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
 
+    const subject = await getSubjectForCourseFile(courseFileId);
+    const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
+
     if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
       return NextResponse.json({ error: 'This review is already closed.' }, { status: 409 });
     }
@@ -27,11 +30,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     }
 
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
-    if (!isCoordinator && courseFile.facultyId !== payload.userId) {
+    if (!isCoordinator && courseFile.facultyId !== payload.userId && !labBatch) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     if (!isCoordinator && !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status)) {
       return NextResponse.json({ error: 'This course file is locked after submission.' }, { status: 409 });
+    }
+    if (labBatch && ![2, 4, 8].includes(Number(itemIndex))) {
+      return NextResponse.json({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, and 8.` }, { status: 403 });
     }
     if (!isCoordinator && (score !== undefined || remarks !== undefined)) {
       return NextResponse.json({ error: 'Only coordinators can score checklist items.' }, { status: 403 });
@@ -44,6 +50,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     if (subItemsJson !== undefined) updates.subItemsJson = subItemsJson;
     if (score !== undefined) updates.score = score;
     if (remarks !== undefined) updates.remarks = remarks;
+
+    if (labBatch) {
+      let taggedSubItems = subItemsJson;
+      if (typeof taggedSubItems === 'string') {
+        try { taggedSubItems = JSON.stringify({ ...JSON.parse(taggedSubItems), batch: labBatch }); } catch (e) { taggedSubItems = JSON.stringify({ batch: labBatch }); }
+      } else if (taggedSubItems === undefined) {
+        const existing = await getLabSubmission(courseFileId, labBatch, Number(itemIndex));
+        if (existing?.subItemsJson) {
+          try { taggedSubItems = JSON.stringify({ ...JSON.parse(existing.subItemsJson), batch: labBatch }); } catch (e) {}
+        }
+      }
+      if (taggedSubItems !== undefined) updates.subItemsJson = taggedSubItems;
+      const submission = await upsertLabSubmission(courseFileId, payload.userId, labBatch, Number(itemIndex), updates);
+      return NextResponse.json({ success: true, batch: labBatch, checklistItem: submission });
+    }
 
     const item = await updateChecklistItem(courseFileId, itemIndex, updates);
 

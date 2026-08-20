@@ -15,7 +15,7 @@ const CHECKLIST_ITEMS = [
   { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
   { index: 7,  name: 'List of Laboratory (or Experiments)', maxScore: 10 },
   { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
-  { index: 9,  name: 'Continuous Evaluation sheet based on rubrics', maxScore: 10 },
+  { index: 9,  name: 'Continuous Evaluation Rubrics', maxScore: 10 },
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
@@ -266,6 +266,9 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
           <Link href={`/report/${courseFileId}`} className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
             🖨️ View / Print Form
           </Link>
+          <a href={`/api/course-files/${courseFileId}/merged-report`} className="btn btn-outline-success btn-sm d-flex align-items-center gap-1">
+            Download Merged Report
+          </a>
           {courseFile.generatedReportPath && (
             <a href={courseFile.generatedReportPath} download className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
               Download Report
@@ -392,16 +395,20 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                               );
                             })}
                           </div>
+                        ) : item.index === 2 || item.index === 4 ? (
+                          <div className="mt-2 small text-secondary">{(dbItem.batchSubmissions || []).map((batch: any, bIdx: number) => <div key={batch.batch || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border"><span className="fw-semibold">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : ''}</span>{batch.status === 'PENDING' ? <span className="text-warning fw-bold">Pending</span> : <span className="text-success fw-bold">✓ Submitted</span>}</div>)}</div>
                         ) : item.index === 8 ? (
                           /* SECTION 33: Item 8 Laboratory Rubrics Batches display */
                           <div className="mt-2 small text-secondary">
-                            {(subItems?.batches || [
+                            {(dbItem.batchSubmissions || subItems?.batches || [
                               { id: 'batch-a', name: 'Batch A' },
                               { id: 'batch-b', name: 'Batch B' }
                             ]).map((batch: any, bIdx: number) => (
                               <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
-                                <span className="fw-semibold text-truncate">({String.fromCharCode(97 + bIdx)}) {batch.name}</span>
-                                {batch?.fileName ? (
+                                <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
+                                {batch?.status === 'PENDING' ? (
+                                  <span className="text-warning fw-bold" style={{ fontSize: 11 }}>Pending</span>
+                                ) : batch?.fileName || batch?.subItemsJson ? (
                                   <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                     <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
                                     <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>

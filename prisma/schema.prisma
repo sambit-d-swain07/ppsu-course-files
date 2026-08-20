@@ -8,26 +8,27 @@ generator client {
 }
 
 model User {
-  id                        String         @id @default(uuid())
-  email                     String         @unique
+  id                        String                   @id @default(uuid())
+  email                     String                   @unique
   passwordHash              String
   name                      String
-  employeeId                String?        @unique
+  employeeId                String?                  @unique
   role                      String // "FACULTY", "COORDINATOR", "ADMIN"
   department                String?
   school                    String?
   designation               String?
   courseFiles               CourseFile[]
   assignedCoordinatorId     String?
-  assignedCoordinator       User?          @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
-  assignedFaculty           User[]         @relation("CoordinatorAssignment")
-  subjectCourseCoordinators Subject[]      @relation("SubjectCourseCoordinator")
-  subjectCourseTeachers     Subject[]      @relation("SubjectCourseTeacher")
-  subjectLabTeachersA       Subject[]      @relation("SubjectLabTeacherA")
-  subjectLabTeachersB       Subject[]      @relation("SubjectLabTeacherB")
-  subjectLabTeachersC       Subject[]      @relation("SubjectLabTeacherC")
-  subjectEvaluators         Subject[]      @relation("SubjectEvaluator")
+  assignedCoordinator       User?                    @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
+  assignedFaculty           User[]                   @relation("CoordinatorAssignment")
+  subjectCourseCoordinators Subject[]                @relation("SubjectCourseCoordinator")
+  subjectCourseTeachers     Subject[]                @relation("SubjectCourseTeacher")
+  subjectLabTeachersA       Subject[]                @relation("SubjectLabTeacherA")
+  subjectLabTeachersB       Subject[]                @relation("SubjectLabTeacherB")
+  subjectLabTeachersC       Subject[]                @relation("SubjectLabTeacherC")
+  subjectEvaluators         Subject[]                @relation("SubjectEvaluator")
   notifications             Notification[]
+  labChecklistSubmissions   LabChecklistSubmission[]
 }
 
 model Subject {
@@ -97,6 +98,7 @@ model CourseFile {
   generatedReportPath String?
 
   checklistItems ChecklistItem[]
+  labSubmissions LabChecklistSubmission[]
 }
 
 model ChecklistItem {
@@ -118,6 +120,27 @@ model ChecklistItem {
   remarks String?
 
   @@unique([courseFileId, itemIndex])
+}
+
+model LabChecklistSubmission {
+  id           String   @id @default(uuid())
+  courseFileId String
+  facultyId    String
+  batch        String
+  itemIndex    Int
+  status       String   @default("EMPTY")
+  fileName     String?
+  fileUrl      String?
+  subItemsJson String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  courseFile CourseFile @relation(fields: [courseFileId], references: [id], onDelete: Cascade)
+  faculty    User       @relation(fields: [facultyId], references: [id])
+
+  @@unique([courseFileId, batch, itemIndex])
+  @@index([courseFileId, itemIndex])
+  @@index([facultyId])
 }
 
 model Notification {

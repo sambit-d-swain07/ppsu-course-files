@@ -6,6 +6,10 @@ import {
   getChecklistItemsByCourseFileId,
   getUserById,
   getSubjectById,
+  getSubjectForCourseFile,
+  getLabBatchForUser,
+  getLabSubmission,
+  getMergedChecklistItems,
   updateCourseFile,
   addNotification
 } from '@/lib/mock-data';
@@ -45,7 +49,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
       'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)',
       'List of Laboratory (or Experiments)',
       'Laboratory Rubrics',
-      'Continuous Evaluation sheet based on rubrics',
+      'Continuous Evaluation Rubrics',
       'Lab Manuals/Tutorials',
       'Internal Assessment 1',
       'Internal Assessment 2',
@@ -165,17 +169,29 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     const faculty = await getUserById(courseFile.facultyId);
     const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
+    const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
-    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId) {
+    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId && !labBatch) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const checklist = await getChecklistItemsByCourseFileId(id);
+    let checklist: any[];
+    if (labBatch) {
+      const restrictedItems = await Promise.all([2, 4, 8].map(async (itemIndex) => {
+        const submission = await getLabSubmission(id, labBatch, itemIndex);
+        return submission
+          ? { ...submission, itemIndex, batch: labBatch }
+          : { itemIndex, status: 'EMPTY', batch: labBatch, subItemsJson: JSON.stringify({ batch: labBatch }) };
+      }));
+      checklist = restrictedItems;
+    } else {
+      checklist = await getMergedChecklistItems(id);
+    }
 
     return NextResponse.json({
       courseFile: {
@@ -197,7 +213,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherA: subject.labTeacherA ? { name: subject.labTeacherA.name, department: subject.labTeacherA.department } : null,
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
-        } : null
+        } : null,
+        access: labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });

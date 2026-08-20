@@ -12,7 +12,7 @@ const CHECKLIST_ITEMS = [
   { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
   { index: 7,  name: 'List of Laboratory (or Experiments)', maxScore: 10 },
   { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
-  { index: 9,  name: 'Continuous Evaluation sheet based on rubrics', maxScore: 10 },
+  { index: 9,  name: 'Continuous Evaluation Rubrics', maxScore: 10 },
   { index: 10, name: 'Lab Manuals/Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
