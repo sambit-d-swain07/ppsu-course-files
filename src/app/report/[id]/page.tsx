@@ -119,6 +119,14 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
                 <td className="text-start">{courseFile.semester || 'N/A'}</td>
               </tr>
               <tr>
+                <td className="bg-light fw-bold text-start">Division:</td>
+                <td className="text-start">{courseFile.division || courseFile.subject?.division || 'N/A'}</td>
+                <td className="bg-light fw-bold text-start">Lab Teachers:</td>
+                <td className="text-start">{[
+                  ['A', courseFile.subject?.labTeacherA], ['B', courseFile.subject?.labTeacherB], ['C', courseFile.subject?.labTeacherC]
+                ].filter(([, teacher]) => teacher).map(([batch, teacher]) => `Batch ${batch}: ${teacher.name}`).join(' · ') || 'None assigned'}</td>
+              </tr>
+              <tr>
                 <td className="bg-light fw-bold text-start">Course Code:</td>
                 <td className="text-start font-mono-ppsu fw-bold">{courseFile.courseCode}</td>
                 <td className="bg-light fw-bold text-start">Course Title:</td>

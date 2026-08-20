@@ -7,6 +7,7 @@ export interface User {
   role: 'FACULTY' | 'COORDINATOR' | 'ADMIN';
   department?: string;
   school?: string;
+  division?: string;
   designation?: string;
   assignedCoordinatorId?: string; // For FACULTY users
 }
@@ -23,6 +24,7 @@ export interface CourseFile {
   facultyName?: string;
   department?: string;
   school?: string;
+  division?: string;
   subjectId?: string;
   lastUpdated: string; // ISO String
   createdAt?: string;  // ISO String
@@ -52,16 +54,21 @@ export interface Subject {
   subjectName: string;
   department: string;
   school: string;
+  division: string;
   semester: string;
   academicYear: string;
   courseCoordinatorId: string;
   courseTeacherId: string;
-  labTeacherId?: string;
+  labTeacherAId?: string;
+  labTeacherBId?: string;
+  labTeacherCId?: string;
   evaluatorId: string;
   createdAt?: string;
   courseCoordinator?: User;
   courseTeacher?: User;
-  labTeacher?: User;
+  labTeacherA?: User;
+  labTeacherB?: User;
+  labTeacherC?: User;
   evaluator?: User;
   courseFile?: CourseFile;
 }

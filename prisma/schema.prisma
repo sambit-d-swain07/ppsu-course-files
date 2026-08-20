@@ -8,44 +8,51 @@ generator client {
 }
 
 model User {
-  id           String       @id @default(uuid())
-  email        String       @unique
-  passwordHash String
-  name         String
-  employeeId   String?      @unique
-  role         String       // "FACULTY", "COORDINATOR", "ADMIN"
-  department   String?
-  school       String?
-  designation  String?
-  courseFiles  CourseFile[]
-  assignedCoordinatorId String?
-  assignedCoordinator   User?   @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
-  assignedFaculty       User[]  @relation("CoordinatorAssignment")
-  subjectCourseCoordinators Subject[] @relation("SubjectCourseCoordinator")
-  subjectCourseTeachers     Subject[] @relation("SubjectCourseTeacher")
-  subjectLabTeachers        Subject[] @relation("SubjectLabTeacher")
-  subjectEvaluators         Subject[] @relation("SubjectEvaluator")
-  notifications         Notification[]
+  id                        String         @id @default(uuid())
+  email                     String         @unique
+  passwordHash              String
+  name                      String
+  employeeId                String?        @unique
+  role                      String // "FACULTY", "COORDINATOR", "ADMIN"
+  department                String?
+  school                    String?
+  designation               String?
+  courseFiles               CourseFile[]
+  assignedCoordinatorId     String?
+  assignedCoordinator       User?          @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
+  assignedFaculty           User[]         @relation("CoordinatorAssignment")
+  subjectCourseCoordinators Subject[]      @relation("SubjectCourseCoordinator")
+  subjectCourseTeachers     Subject[]      @relation("SubjectCourseTeacher")
+  subjectLabTeachersA       Subject[]      @relation("SubjectLabTeacherA")
+  subjectLabTeachersB       Subject[]      @relation("SubjectLabTeacherB")
+  subjectLabTeachersC       Subject[]      @relation("SubjectLabTeacherC")
+  subjectEvaluators         Subject[]      @relation("SubjectEvaluator")
+  notifications             Notification[]
 }
 
 model Subject {
-  id                String   @id @default(uuid())
-  subjectCode       String
-  subjectName       String
-  department        String
-  school            String
-  semester          String
-  academicYear      String
+  id                  String   @id @default(uuid())
+  subjectCode         String
+  subjectName         String
+  department          String
+  school              String
+  division            String   @default("")
+  semester            String
+  academicYear        String
   courseCoordinatorId String
   courseTeacherId     String
-  labTeacherId        String?
+  labTeacherAId       String?  @map("labTeacherId")
+  labTeacherBId       String?
+  labTeacherCId       String?
   evaluatorId         String
   createdAt           DateTime @default(now())
 
-  courseCoordinator User @relation("SubjectCourseCoordinator", fields: [courseCoordinatorId], references: [id])
-  courseTeacher     User @relation("SubjectCourseTeacher", fields: [courseTeacherId], references: [id])
-  labTeacher        User? @relation("SubjectLabTeacher", fields: [labTeacherId], references: [id])
-  evaluator         User @relation("SubjectEvaluator", fields: [evaluatorId], references: [id])
+  courseCoordinator User        @relation("SubjectCourseCoordinator", fields: [courseCoordinatorId], references: [id])
+  courseTeacher     User        @relation("SubjectCourseTeacher", fields: [courseTeacherId], references: [id])
+  labTeacherA       User?       @relation("SubjectLabTeacherA", fields: [labTeacherAId], references: [id])
+  labTeacherB       User?       @relation("SubjectLabTeacherB", fields: [labTeacherBId], references: [id])
+  labTeacherC       User?       @relation("SubjectLabTeacherC", fields: [labTeacherCId], references: [id])
+  evaluator         User        @relation("SubjectEvaluator", fields: [evaluatorId], references: [id])
   courseFile        CourseFile?
 
   @@index([subjectCode])
@@ -54,60 +61,61 @@ model Subject {
 }
 
 model CourseFile {
-  id                 String          @id @default(uuid())
-  courseCode         String
-  courseTitle        String
-  semester           String
-  academicYear       String
-  progress           Int             @default(0) // Completed checklist items (0-19)
-  status             String          // "DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_REVISION", "APPROVED"
-  facultyId          String
-  facultyName        String?
-  department         String?
-  school             String?
-  subjectId          String?          @unique
-  faculty            User            @relation(fields: [facultyId], references: [id])
-  subject            Subject?        @relation(fields: [subjectId], references: [id])
-  createdAt          DateTime        @default(now())
-  lastUpdated        DateTime        @updatedAt
+  id           String   @id @default(uuid())
+  courseCode   String
+  courseTitle  String
+  semester     String
+  academicYear String
+  progress     Int      @default(0) // Completed checklist items (0-19)
+  status       String // "DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_REVISION", "APPROVED"
+  facultyId    String
+  facultyName  String?
+  department   String?
+  school       String?
+  division     String?
+  subjectId    String?  @unique
+  faculty      User     @relation(fields: [facultyId], references: [id])
+  subject      Subject? @relation(fields: [subjectId], references: [id])
+  createdAt    DateTime @default(now())
+  lastUpdated  DateTime @updatedAt
 
-  facultySignatureName String?
-  facultySignatureUrl  String?
-  facultySignedAt      DateTime?
-  facultyConfirmed     Boolean         @default(false)
+  facultySignatureName  String?
+  facultySignatureUrl   String?
+  facultySignedAt       DateTime?
+  facultyConfirmed      Boolean   @default(false)
   reviewerSignatureName String?
   reviewerSignatureUrl  String?
   reviewerSignedAt      DateTime?
-  reviewerConfirmed     Boolean         @default(false)
+  reviewerConfirmed     Boolean   @default(false)
 
   // Scoring / Evaluation fields (filled by Coordinator)
-  totalScore         Int?            // Sum of marks (0-200)
-  rating             String?         // "Excellent", "Good", "Moderate & Update", "Fair & Revise", "Poor & Revise"
-  coordinatorRemarks String?         // Overall evaluation remarks
+  totalScore         Int? // Sum of marks (0-200)
+  rating             String? // "Excellent", "Good", "Moderate & Update", "Fair & Revise", "Poor & Revise"
+  coordinatorRemarks String? // Overall evaluation remarks
 
   // Generated report path after approval
   generatedReportPath String?
 
-  checklistItems     ChecklistItem[]
+  checklistItems ChecklistItem[]
 }
 
 model ChecklistItem {
   id           String     @id @default(uuid())
   courseFileId String
   courseFile   CourseFile @relation(fields: [courseFileId], references: [id], onDelete: Cascade)
-  itemIndex    Int        // 1 to 20
-  status       String     // "EMPTY", "UPLOADED"
-  
+  itemIndex    Int // 1 to 20
+  status       String // "EMPTY", "UPLOADED"
+
   // Uploaded file info
-  fileName     String?
-  fileUrl      String?
+  fileName String?
+  fileUrl  String?
 
   // Sub-items checklist for items 11, 12, 15 (represented as JSON string, e.g. '{"a":true, "b":false}')
   subItemsJson String?
 
   // Scoring per item (filled by Coordinator)
-  score        Int?       // 0-10 (except 19 which is 0-20)
-  remarks      String?
+  score   Int? // 0-10 (except 19 which is 0-20)
+  remarks String?
 
   @@unique([courseFileId, itemIndex])
 }

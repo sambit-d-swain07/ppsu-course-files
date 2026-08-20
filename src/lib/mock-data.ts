@@ -70,6 +70,7 @@ export async function assignFacultyCoordinator(facultyId: string, coordinatorId:
 export async function createCourseFile(data: {
   courseCode: string; courseTitle: string; semester: string; academicYear: string; facultyId: string;
   facultyName?: string; department?: string; school?: string;
+  division?: string;
 }) {
   const faculty = await getUserById(data.facultyId);
   const subItems = (i: number) => i === 1
@@ -80,7 +81,7 @@ export async function createCourseFile(data: {
   const file = await prisma.$transaction(async tx => {
     const created = await tx.courseFile.create({ data: {
       ...data, facultyName: data.facultyName || faculty?.name, department: data.department || faculty?.department,
-      school: data.school || faculty?.school, progress: 0, status: 'DRAFT'
+    school: data.school || faculty?.school, progress: 0, status: 'DRAFT'
     } });
     await tx.checklistItem.createMany({ data: Array.from({ length: 20 }, (_, index) => ({
       courseFileId: created.id, itemIndex: index + 1, status: 'EMPTY', subItemsJson: subItems(index + 1)
@@ -101,7 +102,7 @@ async function createSubjectCourseFile(tx: any, subject: any, teacher: any) {
     courseCode: subject.subjectCode, courseTitle: subject.subjectName,
     semester: subject.semester, academicYear: subject.academicYear,
     facultyId: subject.courseTeacherId, facultyName: teacher.name,
-    department: subject.department, school: subject.school,
+    department: subject.department, school: subject.school, division: subject.division,
     subjectId: subject.id, progress: 0, status: 'DRAFT'
   } });
   await tx.checklistItem.createMany({ data: Array.from({ length: 20 }, (_, index) => ({
@@ -111,7 +112,7 @@ async function createSubjectCourseFile(tx: any, subject: any, teacher: any) {
 }
 
 const subjectInclude = {
-  courseCoordinator: true, courseTeacher: true, labTeacher: true, evaluator: true,
+  courseCoordinator: true, courseTeacher: true, labTeacherA: true, labTeacherB: true, labTeacherC: true, evaluator: true,
   courseFile: { select: { id: true, status: true } }
 };
 
@@ -125,11 +126,12 @@ export async function getSubjectById(id: string) {
 
 export async function createSubject(data: {
   subjectCode: string; subjectName: string; department: string; school: string;
+  division: string;
   semester: string; academicYear: string; courseCoordinatorId: string;
-  courseTeacherId: string; labTeacherId?: string | null; evaluatorId: string;
+  courseTeacherId: string; labTeacherAId?: string | null; labTeacherBId?: string | null; labTeacherCId?: string | null; evaluatorId: string;
 }) {
   return prisma.$transaction(async tx => {
-    const subject = await tx.subject.create({ data: { ...data, labTeacherId: data.labTeacherId || null } });
+    const subject = await tx.subject.create({ data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
     const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
     if (!teacher) throw new Error('Course Teacher not found');
     await createSubjectCourseFile(tx, subject, teacher);
@@ -139,18 +141,19 @@ export async function createSubject(data: {
 
 export async function updateSubject(id: string, data: {
   subjectCode: string; subjectName: string; department: string; school: string;
+  division: string;
   semester: string; academicYear: string; courseCoordinatorId: string;
-  courseTeacherId: string; labTeacherId?: string | null; evaluatorId: string;
+  courseTeacherId: string; labTeacherAId?: string | null; labTeacherBId?: string | null; labTeacherCId?: string | null; evaluatorId: string;
 }) {
   return prisma.$transaction(async tx => {
-    const subject = await tx.subject.update({ where: { id }, data: { ...data, labTeacherId: data.labTeacherId || null } });
+    const subject = await tx.subject.update({ where: { id }, data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
     const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
     if (!teacher) throw new Error('Course Teacher not found');
     const existing = await tx.courseFile.findUnique({ where: { subjectId: id } });
     if (!existing) await createSubjectCourseFile(tx, subject, teacher);
     else if (existing.status === 'DRAFT') await tx.courseFile.update({ where: { id: existing.id }, data: {
       courseCode: subject.subjectCode, courseTitle: subject.subjectName,
-      department: subject.department, school: subject.school, semester: subject.semester,
+      department: subject.department, school: subject.school, division: subject.division, semester: subject.semester,
       academicYear: subject.academicYear, facultyId: subject.courseTeacherId, facultyName: teacher.name
     } });
     return tx.subject.findUnique({ where: { id }, include: subjectInclude });

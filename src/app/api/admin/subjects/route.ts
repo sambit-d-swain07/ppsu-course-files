@@ -10,16 +10,18 @@ async function requireAdmin(req: NextRequest) {
 }
 
 function validateAssignments(body: any, users: any[]) {
-  const required = ['subjectCode', 'subjectName', 'department', 'school', 'semester', 'academicYear', 'courseCoordinatorId', 'courseTeacherId', 'evaluatorId'];
+  const required = ['subjectCode', 'subjectName', 'department', 'school', 'division', 'semester', 'academicYear', 'courseCoordinatorId', 'courseTeacherId', 'labTeacherAId', 'labTeacherBId', 'evaluatorId'];
   if (required.some(key => !String(body[key] ?? '').trim())) return 'All subject and required role fields are required';
   const byId = new Map(users.map(user => [user.id, user]));
   const coordinator = byId.get(body.courseCoordinatorId);
   const teacher = byId.get(body.courseTeacherId);
   const evaluator = byId.get(body.evaluatorId);
-  const labTeacher = body.labTeacherId ? byId.get(body.labTeacherId) : null;
+  const labTeacherA = body.labTeacherAId ? byId.get(body.labTeacherAId) : null;
+  const labTeacherB = body.labTeacherBId ? byId.get(body.labTeacherBId) : null;
+  const labTeacherC = body.labTeacherCId ? byId.get(body.labTeacherCId) : null;
   if (body.courseCoordinatorId === body.evaluatorId) return 'The Evaluator must be a different person from the Course Coordinator';
   if (coordinator?.role !== 'COORDINATOR' || evaluator?.role !== 'COORDINATOR') return 'Course Coordinator and Evaluator must be Coordinator users';
-  if (teacher?.role !== 'FACULTY' || (body.labTeacherId && labTeacher?.role !== 'FACULTY')) return 'Course Teacher and Lab Teacher must be Faculty users';
+  if (teacher?.role !== 'FACULTY' || labTeacherA?.role !== 'FACULTY' || labTeacherB?.role !== 'FACULTY' || (body.labTeacherCId && labTeacherC?.role !== 'FACULTY')) return 'Course Teacher and all selected Lab Teachers must be Faculty users';
   return null;
 }
 
@@ -29,11 +31,14 @@ function normalize(body: any) {
     subjectName: String(body.subjectName).trim(),
     department: String(body.department).trim(),
     school: String(body.school).trim(),
+    division: String(body.division).trim(),
     semester: String(body.semester).trim(),
     academicYear: String(body.academicYear).trim(),
     courseCoordinatorId: body.courseCoordinatorId,
     courseTeacherId: body.courseTeacherId,
-    labTeacherId: body.labTeacherId || null,
+    labTeacherAId: body.labTeacherAId || null,
+    labTeacherBId: body.labTeacherBId || null,
+    labTeacherCId: body.labTeacherCId || null,
     evaluatorId: body.evaluatorId
   };
 }

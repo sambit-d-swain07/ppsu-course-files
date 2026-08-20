@@ -31,6 +31,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
     const cf = await getCourseFileById(courseFileId);
     if (!cf) return null;
     const faculty = await getUserById(cf.facultyId);
+    const subject = cf.subjectId ? await getSubjectById(cf.subjectId) : null;
     const items = (await getChecklistItemsByCourseFileId(courseFileId)).sort(
       (a, b) => a.itemIndex - b.itemIndex
     );
@@ -108,10 +109,14 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
             new Paragraph({ children: [new TextRun({ text: `Employee ID: `, bold: true }), new TextRun(faculty?.employeeId ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `Department: `, bold: true }), new TextRun(cf.department ?? faculty?.department ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `School: `, bold: true }), new TextRun(cf.school ?? faculty?.school ?? 'N/A')] }),
+            new Paragraph({ children: [new TextRun({ text: `Division: `, bold: true }), new TextRun(cf.division ?? subject?.division ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `Course Code: `, bold: true }), new TextRun(cf.courseCode)] }),
             new Paragraph({ children: [new TextRun({ text: `Course Title: `, bold: true }), new TextRun(cf.courseTitle)] }),
             new Paragraph({ children: [new TextRun({ text: `Semester: `, bold: true }), new TextRun(cf.semester)] }),
             new Paragraph({ children: [new TextRun({ text: `Academic Year: `, bold: true }), new TextRun(cf.academicYear)] }),
+            new Paragraph({ children: [new TextRun({ text: `Lab Teachers: `, bold: true }), new TextRun([
+              { batch: 'A', teacher: subject?.labTeacherA }, { batch: 'B', teacher: subject?.labTeacherB }, { batch: 'C', teacher: subject?.labTeacherC }
+            ].filter(({ teacher }) => teacher).map(({ batch, teacher }) => `Batch ${batch}: ${teacher!.name}`).join(' | ') || 'None assigned')] }),
             new Paragraph({ text: '' }),
             new Paragraph({ text: 'Course File Details & Evaluation Checklist', heading: HeadingLevel.HEADING_2 }),
             new Table({ rows: [headerRow, ...dataRows], width: { size: 100, type: WidthType.PERCENTAGE } }),
@@ -186,7 +191,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
               email: faculty.email,
               assignedCoordinatorId: faculty.assignedCoordinatorId
             }
-          : null
+          : null,
+        subject: subject ? {
+          division: subject.division,
+          labTeacherA: subject.labTeacherA ? { name: subject.labTeacherA.name, department: subject.labTeacherA.department } : null,
+          labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
+          labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
+        } : null
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });
