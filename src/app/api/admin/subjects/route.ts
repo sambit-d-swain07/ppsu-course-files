@@ -17,6 +17,7 @@ function validateAssignments(body: any, users: any[]) {
   const teacher = byId.get(body.courseTeacherId);
   const evaluator = byId.get(body.evaluatorId);
   const labTeacher = body.labTeacherId ? byId.get(body.labTeacherId) : null;
+  if (body.courseCoordinatorId === body.evaluatorId) return 'The Evaluator must be a different person from the Course Coordinator';
   if (coordinator?.role !== 'COORDINATOR' || evaluator?.role !== 'COORDINATOR') return 'Course Coordinator and Evaluator must be Coordinator users';
   if (teacher?.role !== 'FACULTY' || (body.labTeacherId && labTeacher?.role !== 'FACULTY')) return 'Course Teacher and Lab Teacher must be Faculty users';
   return null;

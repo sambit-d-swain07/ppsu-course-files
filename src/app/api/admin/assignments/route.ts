@@ -32,11 +32,23 @@ export async function GET(req: NextRequest) {
       id: u.id,
       name: u.name,
       email: u.email,
+      employeeId: u.employeeId,
       department: u.department,
+      school: u.school,
       designation: u.designation
     }));
 
-    return NextResponse.json({ faculty, coordinators });
+    const admins = allUsers.filter(u => u.role === 'ADMIN').map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      employeeId: u.employeeId,
+      department: u.department,
+      school: u.school,
+      designation: u.designation
+    }));
+
+    return NextResponse.json({ faculty, coordinators, admins });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }

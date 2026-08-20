@@ -16,7 +16,7 @@ export default function LoginPage() {
       setEmail('aakash@ppsu.ac.in');
       setPassword('123');
     } else if (role === 'COORDINATOR') {
-      setEmail('cc@ppsu.ac.in');
+      setEmail('s.iyer@ppsu.ac.in');
       setPassword('123');
     } else {
       setEmail('admin@ppsu.ac.in');
