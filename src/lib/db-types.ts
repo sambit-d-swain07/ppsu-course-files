@@ -23,6 +23,7 @@ export interface CourseFile {
   facultyName?: string;
   department?: string;
   school?: string;
+  subjectId?: string;
   lastUpdated: string; // ISO String
   createdAt?: string;  // ISO String
 
@@ -45,6 +46,26 @@ export interface CourseFile {
   generatedReportPath?: string;
 }
 
+export interface Subject {
+  id: string;
+  subjectCode: string;
+  subjectName: string;
+  department: string;
+  school: string;
+  semester: string;
+  academicYear: string;
+  courseCoordinatorId: string;
+  courseTeacherId: string;
+  labTeacherId?: string;
+  evaluatorId: string;
+  createdAt?: string;
+  courseCoordinator?: User;
+  courseTeacher?: User;
+  labTeacher?: User;
+  evaluator?: User;
+  courseFile?: CourseFile;
+}
+
 export interface ChecklistItem {
   id: string;
   courseFileId: string;
@@ -64,4 +85,3 @@ export interface Notification {
   timestamp: string; // ISO String
   read: boolean;
 }
-

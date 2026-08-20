@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { User, CourseFile, ChecklistItem, Notification } from './db-types';
+import { User, CourseFile, ChecklistItem, Notification, Subject } from './db-types';
 
 export const SAMPLE_PDF_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQKJSDigqwKMSAwIG9iagoxIDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+CmVuZG9iago yIDAgb2JqCjw8L1R5cGUvUGFnZXMvQ291bnQgMS9LaWRzWzMgMCBSXT4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUvUGFnZS9NZWRpYUJveFswIDAgNjEyIDc5Ml0vUGFyZW50IDIgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA0IDAgUj4+Pj4vQ29udGVudHMgNSAwIFI+PgplbmRvYmoKNCAwIG9iago8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PgplbmRvYmoKNSAwIG9iago8PC9MZW5ndGggNzU+PnN0cmVhbQpCVAovRjEgMTIgVGYKNzIgNzEyIFRkCihQUDMgU2F2YW5pIFVuaXZlcnNpdHkgLSBDb3Vyc2UgRmlsZSBPZmZpY2lhbCBDb3Vyc2UgRmlsZSkgVGoKRW5kCnN0cmVhbQplbmRvYmoKdHJhaWxlcgo8PC9Sb290IDEgMCBSPj4KJSVFT0YK';
 
@@ -51,9 +51,14 @@ export async function getCourseFileStatusCountsByFaculty() {
   }, {});
 }
 export async function getCourseFilesForCoordinator(coordinatorId: string) {
-  const faculty = await prisma.user.findMany({ where: { role: 'FACULTY', assignedCoordinatorId: coordinatorId }, select: { id: true } });
-  if (faculty.length === 0) return getCourseFiles();
-  return (await prisma.courseFile.findMany({ where: { facultyId: { in: faculty.map(u => u.id) } } })).map(toCourseFile);
+  return (await prisma.courseFile.findMany({
+    where: {
+      OR: [
+        { subject: { evaluatorId: coordinatorId } },
+        { subjectId: null, faculty: { assignedCoordinatorId: coordinatorId } }
+      ]
+    }
+  })).map(toCourseFile);
 }
 export async function assignFacultyCoordinator(facultyId: string, coordinatorId: string) {
   const faculty = await prisma.user.findFirst({ where: { id: facultyId, role: 'FACULTY' } });
@@ -85,6 +90,73 @@ export async function createCourseFile(data: {
   return toCourseFile(file);
 }
 
+const checklistSubItems = (i: number) => i === 1
+  ? JSON.stringify({ vision: null, mission: null, peo: null, pso: null, po: null })
+  : i === 11 || i === 12
+    ? JSON.stringify({ timetable: null, questionPaper: null, sampleAnswerSheet: null, additionalDocuments: [{ id: `doc-new-${i}-1`, name: 'Mark Statement & Result Analysis', fileName: null, fileUrl: null, fileType: null, uploadDate: null }] })
+    : i === 15 ? JSON.stringify({ questionPaper: null, gradeSheet: null, resultAnalysis: null }) : null;
+
+async function createSubjectCourseFile(tx: any, subject: any, teacher: any) {
+  const created = await tx.courseFile.create({ data: {
+    courseCode: subject.subjectCode, courseTitle: subject.subjectName,
+    semester: subject.semester, academicYear: subject.academicYear,
+    facultyId: subject.courseTeacherId, facultyName: teacher.name,
+    department: subject.department, school: subject.school,
+    subjectId: subject.id, progress: 0, status: 'DRAFT'
+  } });
+  await tx.checklistItem.createMany({ data: Array.from({ length: 20 }, (_, index) => ({
+    courseFileId: created.id, itemIndex: index + 1, status: 'EMPTY', subItemsJson: checklistSubItems(index + 1)
+  })) });
+  return created;
+}
+
+const subjectInclude = {
+  courseCoordinator: true, courseTeacher: true, labTeacher: true, evaluator: true,
+  courseFile: { select: { id: true, status: true } }
+};
+
+export async function getSubjects() {
+  return (await prisma.subject.findMany({ include: subjectInclude, orderBy: { createdAt: 'desc' } })) as unknown as Subject[];
+}
+
+export async function getSubjectById(id: string) {
+  return prisma.subject.findUnique({ where: { id }, include: subjectInclude });
+}
+
+export async function createSubject(data: {
+  subjectCode: string; subjectName: string; department: string; school: string;
+  semester: string; academicYear: string; courseCoordinatorId: string;
+  courseTeacherId: string; labTeacherId?: string | null; evaluatorId: string;
+}) {
+  return prisma.$transaction(async tx => {
+    const subject = await tx.subject.create({ data: { ...data, labTeacherId: data.labTeacherId || null } });
+    const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
+    if (!teacher) throw new Error('Course Teacher not found');
+    await createSubjectCourseFile(tx, subject, teacher);
+    return tx.subject.findUnique({ where: { id: subject.id }, include: subjectInclude });
+  });
+}
+
+export async function updateSubject(id: string, data: {
+  subjectCode: string; subjectName: string; department: string; school: string;
+  semester: string; academicYear: string; courseCoordinatorId: string;
+  courseTeacherId: string; labTeacherId?: string | null; evaluatorId: string;
+}) {
+  return prisma.$transaction(async tx => {
+    const subject = await tx.subject.update({ where: { id }, data: { ...data, labTeacherId: data.labTeacherId || null } });
+    const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
+    if (!teacher) throw new Error('Course Teacher not found');
+    const existing = await tx.courseFile.findUnique({ where: { subjectId: id } });
+    if (!existing) await createSubjectCourseFile(tx, subject, teacher);
+    else if (existing.status === 'DRAFT') await tx.courseFile.update({ where: { id: existing.id }, data: {
+      courseCode: subject.subjectCode, courseTitle: subject.subjectName,
+      department: subject.department, school: subject.school, semester: subject.semester,
+      academicYear: subject.academicYear, facultyId: subject.courseTeacherId, facultyName: teacher.name
+    } });
+    return tx.subject.findUnique({ where: { id }, include: subjectInclude });
+  });
+}
+
 export async function getChecklistItemsByCourseFileId(courseFileId: string) {
   return prisma.checklistItem.findMany({ where: { courseFileId }, orderBy: { itemIndex: 'asc' } });
 }
@@ -114,6 +186,13 @@ export async function updateCourseFile(courseFileId: string, updates: Partial<Om
   const updated = await prisma.courseFile.update({ where: { id: courseFileId }, data });
   if (updates.status === 'SUBMITTED' && updates.status !== current.status) {
     const faculty = await getUserById(current.facultyId);
+    if (current.subjectId) {
+      const subject = await prisma.subject.findUnique({ where: { id: current.subjectId }, select: { evaluatorId: true } });
+      if (subject?.evaluatorId) {
+        await addNotification(subject.evaluatorId, `${faculty?.name || 'Faculty'} submitted ${current.courseCode} for review`);
+        return toCourseFile(updated);
+      }
+    }
     await addNotification(faculty?.assignedCoordinatorId || 'user-2', `${faculty?.name || 'Faculty'} submitted ${current.courseCode} — ${current.courseTitle} for review`);
   }
   return toCourseFile(updated);

@@ -47,6 +47,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (pathname.includes('/assignments')) {
     pageTitle = 'Faculty Evaluator Assignments';
   }
+  if (pathname.includes('/faculty')) pageTitle = 'Faculty & Coordinator List';
+  if (pathname.includes('/subjects')) pageTitle = 'Subject Allocation';
 
   const getInitials = (name: string) => {
     if (!name) return 'A';
@@ -75,6 +77,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-people-fill" viewBox="0 0 16 16">
           <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7Zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5.784 6A2.238 2.238 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1h4.216ZM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/>
         </svg>
+      )
+    },
+    {
+      href: '/admin/faculty',
+      label: 'Faculty List',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H3Zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm3.796 4.98c.188-.51.59-1.232 1.384-1.746C13.07 10.738 14 12.14 14 13c0 .552-.448 1-1 1h-2.204ZM13 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>
+      )
+    },
+    {
+      href: '/admin/subjects',
+      label: 'Subject Allocation',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 1a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM2 5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm12 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5.5 7a.5.5 0 0 1 .5.5v.25a2 2 0 0 0 4 0V7.5a.5.5 0 0 1 1 0v.25a3 3 0 0 1-2.5 2.958V13.5a.5.5 0 0 1-1 0v-2.792A3 3 0 0 1 5 7.75V7.5a.5.5 0 0 1 .5-.5Z"/></svg>
       )
     }
   ];

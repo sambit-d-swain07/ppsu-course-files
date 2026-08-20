@@ -5,6 +5,7 @@ import {
   getCourseFileById,
   getChecklistItemsByCourseFileId,
   getUserById,
+  getSubjectById,
   updateCourseFile,
   addNotification
 } from '@/lib/mock-data';
@@ -158,10 +159,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const faculty = await getUserById(courseFile.facultyId);
+    const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
-      if (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
+      if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId) {
@@ -208,6 +210,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const faculty = await getUserById(courseFile.facultyId);
+    const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
 
     if (!isCoordinator && courseFile.status === 'APPROVED') {
@@ -220,7 +223,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
-      if (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
+      if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId) {
@@ -305,7 +308,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       await updateCourseFile(id, updates);
       if (status === 'SUBMITTED') {
         await addNotification(
-          faculty?.assignedCoordinatorId || 'user-2',
+          subject?.evaluatorId || faculty?.assignedCoordinatorId || 'user-2',
           `Course file ${courseFile.courseCode} submitted by ${faculty?.name || 'Faculty'}.`
         );
       }

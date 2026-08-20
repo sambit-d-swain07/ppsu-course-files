@@ -4,7 +4,6 @@ import {
   getCourseFilesByFacultyId,
   getCourseFilesForCoordinator,
   getUserById,
-  createCourseFile
 } from '@/lib/mock-data';
 import { CourseFile } from '@/lib/db-types';
 import { verifyToken } from '@/lib/jwt';
@@ -57,33 +56,7 @@ export async function POST(req: NextRequest) {
     const payload = await verifyToken(token);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Only faculty can create
-    if (payload.role !== 'FACULTY') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const { courseCode, courseTitle, semester, academicYear, facultyName, department, school } = body;
-
-    if (!courseCode || !courseTitle || !semester || !academicYear) {
-      return NextResponse.json(
-        { error: 'courseCode, courseTitle, semester and academicYear are required' },
-        { status: 400 }
-      );
-    }
-
-    const newFile = await createCourseFile({
-      courseCode: courseCode.trim().toUpperCase(),
-      courseTitle: courseTitle.trim(),
-      semester,
-      academicYear,
-      facultyId: payload.userId,
-      facultyName: facultyName?.trim(),
-      department: department?.trim(),
-      school: school?.trim()
-    });
-
-    return NextResponse.json({ courseFile: newFile }, { status: 201 });
+    return NextResponse.json({ error: 'Course files are created only through Admin Subject Allocation' }, { status: 403 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }

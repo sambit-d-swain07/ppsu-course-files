@@ -21,7 +21,36 @@ model User {
   assignedCoordinatorId String?
   assignedCoordinator   User?   @relation("CoordinatorAssignment", fields: [assignedCoordinatorId], references: [id])
   assignedFaculty       User[]  @relation("CoordinatorAssignment")
+  subjectCourseCoordinators Subject[] @relation("SubjectCourseCoordinator")
+  subjectCourseTeachers     Subject[] @relation("SubjectCourseTeacher")
+  subjectLabTeachers        Subject[] @relation("SubjectLabTeacher")
+  subjectEvaluators         Subject[] @relation("SubjectEvaluator")
   notifications         Notification[]
+}
+
+model Subject {
+  id                String   @id @default(uuid())
+  subjectCode       String
+  subjectName       String
+  department        String
+  school            String
+  semester          String
+  academicYear      String
+  courseCoordinatorId String
+  courseTeacherId     String
+  labTeacherId        String?
+  evaluatorId         String
+  createdAt           DateTime @default(now())
+
+  courseCoordinator User @relation("SubjectCourseCoordinator", fields: [courseCoordinatorId], references: [id])
+  courseTeacher     User @relation("SubjectCourseTeacher", fields: [courseTeacherId], references: [id])
+  labTeacher        User? @relation("SubjectLabTeacher", fields: [labTeacherId], references: [id])
+  evaluator         User @relation("SubjectEvaluator", fields: [evaluatorId], references: [id])
+  courseFile        CourseFile?
+
+  @@index([subjectCode])
+  @@index([courseTeacherId])
+  @@index([evaluatorId])
 }
 
 model CourseFile {
@@ -36,7 +65,9 @@ model CourseFile {
   facultyName        String?
   department         String?
   school             String?
+  subjectId          String?          @unique
   faculty            User            @relation(fields: [facultyId], references: [id])
+  subject            Subject?        @relation(fields: [subjectId], references: [id])
   createdAt          DateTime        @default(now())
   lastUpdated        DateTime        @updatedAt
 

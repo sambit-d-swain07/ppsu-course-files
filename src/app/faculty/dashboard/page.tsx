@@ -2,28 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Row, Col, ProgressBar, Spinner, Modal, Form, Button, Alert } from 'react-bootstrap';
-
-const SEMESTERS = [
-  'Semester I',
-  'Semester II',
-  'Semester III',
-  'Semester IV',
-  'Semester V',
-  'Semester VI',
-  'Semester VII',
-  'Semester VIII'
-];
-
-function currentAcademicYear(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0-indexed
-  // Academic year starts in July (month 6)
-  if (m >= 6) return `${y}-${y + 1}`;
-  return `${y - 1}-${y}`;
-}
+import { Row, Col, ProgressBar, Spinner } from 'react-bootstrap';
 
 function getStatusBadgeClass(status: string) {
   switch (status) {
@@ -54,23 +33,8 @@ function timeAgo(iso: string | undefined): string {
 }
 
 export default function FacultyDashboard() {
-  const router = useRouter();
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Create modal state
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState('');
-  const [form, setForm] = useState({
-    facultyName: '',
-    department: '',
-    school: '',
-    courseCode: '',
-    courseTitle: '',
-    semester: 'Semester I',
-    academicYear: currentAcademicYear()
-  });
 
   const fetchCourses = () => {
     setLoading(true);
@@ -84,31 +48,6 @@ export default function FacultyDashboard() {
   };
 
   useEffect(() => { fetchCourses(); }, []);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateError('');
-    if (!form.facultyName.trim() || !form.department.trim() || !form.school.trim() || !form.courseCode.trim() || !form.courseTitle.trim()) {
-      setCreateError('Complete all Faculty & Course Details before continuing.');
-      return;
-    }
-    setCreating(true);
-    const res = await fetch('/api/course-files', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
-    });
-    const data = await res.json();
-    setCreating(false);
-    if (!res.ok) {
-      setCreateError(data.error || 'Failed to create evaluation.');
-      return;
-    }
-    setShowCreate(false);
-    setForm({ facultyName: '', department: '', school: '', courseCode: '', courseTitle: '', semester: 'Semester I', academicYear: currentAcademicYear() });
-    // Navigate to the new checklist
-    router.push(`/faculty/course-files/${data.courseFile.id}`);
-  };
 
   // Stats
   const totalCourses = courses.length;
@@ -125,16 +64,6 @@ export default function FacultyDashboard() {
           <h4 className="fw-bold text-navy-900 mb-0">Welcome Back!</h4>
           <p className="text-secondary small mb-0">Overview of your course file evaluation progress.</p>
         </div>
-        <button
-          id="btn-create-evaluation"
-          className="btn btn-ppsu-accent px-4 py-2 d-flex align-items-center gap-2"
-          onClick={() => setShowCreate(true)}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-          </svg>
-          Create Evaluation
-        </button>
       </div>
 
       {/* Stats */}
@@ -179,9 +108,7 @@ export default function FacultyDashboard() {
         <div className="card-custom text-center py-5 m-0">
           <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
           <p className="text-secondary mb-3">No course evaluations yet.</p>
-          <button className="btn btn-ppsu-accent px-4" onClick={() => setShowCreate(true)}>
-            Create your first evaluation
-          </button>
+          <p className="text-secondary small mb-0">Course files are created by Admin through Subject Allocation.</p>
         </div>
       ) : (
         <Row className="g-3">
@@ -250,95 +177,6 @@ export default function FacultyDashboard() {
         </Row>
       )}
 
-      {/* Create Evaluation Modal */}
-      <Modal show={showCreate} onHide={() => { setShowCreate(false); setCreateError(''); }} centered>
-        <Modal.Header closeButton style={{ borderBottom: '1px solid #e8edf6' }}>
-          <Modal.Title style={{ fontSize: 18, fontWeight: 700, color: 'var(--ppsu-primary)' }}>
-            Create New Evaluation
-          </Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleCreate}>
-          <Modal.Body>
-            {createError && (
-              <Alert variant="danger" className="py-2 small">{createError}</Alert>
-            )}
-            <Form.Group className="mb-3" controlId="form-course-code">
-              <Form.Label className="small fw-semibold text-secondary">Faculty &amp; Course Details</Form.Label>
-              <Row className="g-3 mb-1">
-                <Col xs={12}><Form.Control placeholder="Faculty Name" value={form.facultyName} onChange={(e) => setForm({ ...form, facultyName: e.target.value })} required /></Col>
-                <Col xs={12} md={6}><Form.Control placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required /></Col>
-                <Col xs={12} md={6}><Form.Control placeholder="School" value={form.school} onChange={(e) => setForm({ ...form, school: e.target.value })} required /></Col>
-              </Row>
-            </Form.Group>
-            <Form.Group className="mb-3" controlId="form-course-code">
-              <Form.Label className="small fw-semibold text-secondary">Course Code *</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="e.g. SEIT2102"
-                value={form.courseCode}
-                onChange={(e) => setForm({ ...form, courseCode: e.target.value })}
-                className="ppsu-input"
-                style={{ textTransform: 'uppercase' }}
-              />
-            </Form.Group>
-            <Form.Group className="mb-3" controlId="form-course-title">
-              <Form.Label className="small fw-semibold text-secondary">Course Title *</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="e.g. Web Technologies"
-                value={form.courseTitle}
-                onChange={(e) => setForm({ ...form, courseTitle: e.target.value })}
-                className="ppsu-input"
-              />
-            </Form.Group>
-            <Row className="g-3">
-              <Col xs={6}>
-                <Form.Group controlId="form-semester">
-                  <Form.Label className="small fw-semibold text-secondary">Semester *</Form.Label>
-                  <Form.Select
-                    value={form.semester}
-                    onChange={(e) => setForm({ ...form, semester: e.target.value })}
-                    className="ppsu-input"
-                  >
-                    {SEMESTERS.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col xs={6}>
-                <Form.Group controlId="form-academic-year">
-                  <Form.Label className="small fw-semibold text-secondary">Academic Year *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="2026-2027"
-                    value={form.academicYear}
-                    onChange={(e) => setForm({ ...form, academicYear: e.target.value })}
-                    className="ppsu-input"
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-          </Modal.Body>
-          <Modal.Footer style={{ borderTop: '1px solid #e8edf6' }}>
-            <Button variant="light" onClick={() => { setShowCreate(false); setCreateError(''); }}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={creating}
-              style={{
-                backgroundColor: 'var(--ppsu-accent)',
-                borderColor: 'var(--ppsu-accent)',
-                color: '#fff',
-                fontWeight: 600
-              }}
-            >
-              {creating ? <Spinner animation="border" size="sm" /> : 'Create & Open'}
-            </Button>
-          </Modal.Footer>
-        </Form>
-      </Modal>
     </div>
   );
 }
