@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab } from 'react-bootstrap';
@@ -28,7 +28,7 @@ const CHECKLIST_ITEMS = [
   { index: 19, name: 'Lecture notes', maxScore: 20 },
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
-const LAB_TEACHER_ITEM_INDICES = [2, 4, 7, 8, 20];
+const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14];
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -57,41 +57,36 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
   });
 };
 
-export default function FacultyCourseFileDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id: courseFileId } = use(params);
-  const router = useRouter();
+const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
+  .filter((criterion: any) => criterion && typeof criterion === 'object' && String(criterion.id || '').trim())
+  .map((criterion: any) => ({
+    ...criterion,
+    id: String(criterion.id),
+    label: String(criterion.label || 'Criterion'),
+    max: Number(criterion.max) || 0
+  }));
 
+export default function FacultyCourseFileDetail({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
+  const [courseFileId, setCourseFileId] = useState<string>('');
   const [courseFile, setCourseFile] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [headerSaving, setHeaderSaving] = useState(false);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
-  const [access, setAccess] = useState<{ mode: string; batch?: string; allowedItems?: number[] }>({ mode: 'OWNER' });
-
-  // Section 0: Faculty & Course Header State
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [headerSaving, setHeaderSaving] = useState(false);
   const [headerEdit, setHeaderEdit] = useState({
-    facultyName: '',
-    department: '',
-    school: '',
-    semester: '',
-    courseCode: '',
-    courseTitle: ''
+    facultyName: '', department: '', school: '', semester: '', courseCode: '', courseTitle: ''
   });
-
-  // Section 7: Submission Gate State
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
-
-  // Real Document Viewer Modal State (Section 19 View Control)
-  const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
-
-  // Section 1: Additional document modal state for IA1 / IA2
+  const [access, setAccess] = useState<{ mode: string; batch?: string; allowedItems?: number[] }>({ mode: 'OWNER' });
+  const saveTimeoutsRef = useRef<Record<number, NodeJS.Timeout>>({});
   const [activeIaItem, setActiveIaItem] = useState<number | null>(null);
   const [addDocName, setAddDocName] = useState('Mark Statement & Result Analysis');
   const [addDocFile, setAddDocFile] = useState<File | null>(null);
-
+  const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
   // Item 8 and Item 9 student marks state. Student identity fields are synced from Item 4.
   const [rubricsModalOpen, setRubricsModalOpen] = useState(false);
   const [activeRubricBatchId, setActiveRubricBatchId] = useState<string>('batch-a');
@@ -280,29 +275,110 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   const getStudentList = () => {
     const raw = getSubItems(4);
-    const students = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
-    return students.map((student: any, index: number) => ({
-      id: student.id || student.enrolmentNumber || student.rollNo || `student-${index}`,
-      name: student.name || student.studentName || '',
-      enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || ''
-    }));
+    let allStudents: any[] = [];
+    const seenIds = new Set();
+
+    const addStudent = (student: any, index: number) => {
+      const id = student.id || student.studentId || student.enrolmentNumber || student.rollNo || `student-${index}`;
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        allStudents.push({
+          id,
+          name: student.name || student.studentName || '',
+          enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '',
+          batch: student.batch
+        });
+      }
+    };
+
+    // Add main/Course Teacher Item 4 students first
+    const mainStudents = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
+    mainStudents.forEach(addStudent);
+
+    // Add lab batch submission students if present (from Item 4 batchSubmissions)
+    const item4Db = checklist.find((c: any) => c.itemIndex === 4);
+    if (Array.isArray(item4Db?.batchSubmissions)) {
+      item4Db.batchSubmissions.forEach((bSub: any) => {
+        let bStudents: any[] = [];
+        if (Array.isArray(bSub.students)) {
+          bStudents = bSub.students;
+        } else if (bSub.subItemsJson) {
+          try {
+            const parsed = JSON.parse(bSub.subItemsJson);
+            if (Array.isArray(parsed.students)) bStudents = parsed.students;
+          } catch (e) {}
+        }
+        bStudents.filter(Boolean).forEach(addStudent);
+      });
+    }
+
+    return allStudents;
   };
 
-  const syncStudentRows = (rows: any[] = [], criteria: any[] = []) => {
+  const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
+    let itemIndex = 8;
+    let rows: any[] = [];
+    let criteria: any[] = [];
+
+    if (typeof arg1 === 'number') {
+      itemIndex = arg1;
+      rows = arg2;
+      criteria = arg3;
+    } else {
+      rows = arg1;
+      criteria = arg2;
+    }
+
     const studentList = getStudentList();
     const safeRows = (Array.isArray(rows) ? rows : []).filter(Boolean);
     const safeCriteria = normalizeCriteria(criteria);
     const storedById = new Map(safeRows.map((row: any) => [row.studentId || row.enrolmentNumber, row]));
-    
-    // 1. Map auto-populated students from Item 4
+
+    // Build lookup map of marks submitted by Lab Teachers across batches for Item 8 and Item 9
+    const labMarksByStudentId = new Map<string, Record<string, number>>();
+    const itemDb = checklist.find((c: any) => c.itemIndex === itemIndex);
+    if (itemDb?.batchSubmissions && Array.isArray(itemDb.batchSubmissions)) {
+      itemDb.batchSubmissions.forEach((bSub: any) => {
+        let bStudents: any[] = [];
+        if (Array.isArray(bSub.students)) {
+          bStudents = bSub.students;
+        } else if (bSub.subItemsJson) {
+          try {
+            const parsed = JSON.parse(bSub.subItemsJson);
+            if (Array.isArray(parsed.students)) bStudents = parsed.students;
+          } catch (e) {}
+        }
+        bStudents.forEach((st: any) => {
+          const id = st.studentId || st.id || st.enrolmentNumber;
+          if (id && st.marks) {
+            const current = labMarksByStudentId.get(id) || {};
+            labMarksByStudentId.set(id, { ...current, ...st.marks });
+          }
+        });
+      });
+    }
+
+    // 1. Map auto-populated students from Item 4 merged list
     const autoRows = studentList.map((student: any) => {
       const previous = storedById.get(student.id) || storedById.get(student.enrolmentNumber) || {};
-      const marks = { ...(previous.marks || {}) };
-      safeCriteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
-      return { studentId: student.id, name: student.name, enrolmentNumber: student.enrolmentNumber, marks };
+      const labMarks = labMarksByStudentId.get(student.id) || labMarksByStudentId.get(student.enrolmentNumber) || {};
+
+      const marks: Record<string, number> = {};
+      safeCriteria.forEach((criterion: any) => {
+        const val = previous.marks?.[criterion.id] ?? labMarks[criterion.id];
+        marks[criterion.id] = val !== undefined ? Number(val) : 0;
+      });
+
+      return {
+        studentId: student.id,
+        name: student.name,
+        enrolmentNumber: student.enrolmentNumber,
+        marks,
+        batch: student.batch
+      };
     });
 
-    // 2. Map manually added students (those in rows that have isManual: true)
+    // 2. Map manually added students
     const manualRows = safeRows
       .filter((row: any) => row.isManual)
       .map((row: any) => {
@@ -355,15 +431,24 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     fetchData();
   };
 
-  const handleManualStudentFieldChange = async (itemIndex: number, studentId: string, field: 'name' | 'enrolmentNumber', value: string) => {
+  const debouncedSaveStructuredItem = (itemIndex: number, subs: any, status = 'UPLOADED') => {
+    if (saveTimeoutsRef.current[itemIndex]) {
+      clearTimeout(saveTimeoutsRef.current[itemIndex]);
+    }
+    saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
+      saveStructuredItem(itemIndex, subs, status);
+    }, 600);
+  };
+
+  const handleManualStudentFieldChange = (itemIndex: number, studentId: string, field: 'name' | 'enrolmentNumber', value: string) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
     const student = subs.students.find((st: any) => st.studentId === studentId);
     if (student) {
       student[field] = value;
-      await saveStructuredItem(itemIndex, subs, 'UPLOADED');
       setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
+      debouncedSaveStructuredItem(itemIndex, subs, 'UPLOADED');
     }
   };
 
@@ -405,7 +490,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   const handleAssignmentMarkChange = async (studentId: string, value: number) => {
     if (isLocked) return;
     const subs = getSubItems(13) || {};
-    subs.marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
+    subs.marks = syncStudentRows(13, subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
     const row = subs.marks.find((entry: any) => entry.studentId === studentId);
     if (row) {
       row.marks = row.marks && typeof row.marks === 'object' ? row.marks : {};
@@ -419,19 +504,40 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
     subs.criteria = remove ? (subs.criteria || []).filter((entry: any) => entry.id !== criterion.id) : [...(subs.criteria || []), criterion];
-    subs.students = syncStudentRows(subs.students, subs.criteria);
+    subs.students = syncStudentRows(itemIndex, subs.students, subs.criteria);
     await saveStructuredItem(itemIndex, subs, 'UPLOADED');
     fetchData();
   };
 
-  const handleMarkChange = async (itemIndex: number, studentId: string, criterionId: string, value: number) => {
+  const handleMarkChange = (itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
-    subs.students = syncStudentRows(subs.students, subs.criteria || []);
+    subs.students = syncStudentRows(itemIndex, subs.students, subs.criteria || []);
     const student = subs.students.find((row: any) => row.studentId === studentId);
-    if (student) student.marks[criterionId] = Math.max(0, value || 0);
-    await saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
+    if (student) {
+      student.marks[criterionId] = Math.max(0, value || 0);
+      setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
+      debouncedSaveStructuredItem(itemIndex, subs, 'UPLOADED');
+    }
+  };
+
+  const handleLabTeacherSubmit = async () => {
+    if (isLocked || submitLoading) return;
+    setSubmitLoading(true);
+    setActionError(''); setActionSuccess('');
+    try {
+      const allowedItems = [2, 4, 8, 9, 14];
+      for (const idx of allowedItems) {
+        const subs = getSubItems(idx) || {};
+        await saveStructuredItem(idx, subs, 'SUBMITTED');
+      }
+      setActionSuccess(`Batch ${access.batch} lab data submitted successfully to Course Teacher!`);
+      fetchData();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to submit lab data');
+    } finally {
+      setSubmitLoading(false);
+    }
   };
 
   const handleAssignmentTopic = async (topic: any, remove = false) => {
@@ -1120,6 +1226,26 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
       {actionError && <Alert variant="danger" dismissible onClose={() => setActionError('')}>{actionError}</Alert>}
       {actionSuccess && <Alert variant="success" dismissible onClose={() => setActionSuccess('')}>{actionSuccess}</Alert>}
+
+      {access.mode === 'LAB_BATCH' && (
+        <Card className="mb-4 border-0 shadow-sm" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
+          <Card.Body className="d-flex align-items-center justify-content-between flex-wrap gap-2 py-3">
+            <div>
+              <h6 className="fw-bold text-success mb-1">Batch {access.batch} Lab Teacher Submission Portal</h6>
+              <p className="small text-secondary mb-0">Manage your assigned lab items (Items 2, 4, 8, 9, 14). Submitting will send your lab data & rubrics directly to the Course Teacher.</p>
+            </div>
+            <Button
+              variant="success"
+              size="sm"
+              className="fw-bold px-3 py-2"
+              disabled={isLocked || submitLoading}
+              onClick={handleLabTeacherSubmit}
+            >
+              {submitLoading ? <Spinner animation="border" size="sm" /> : `✓ Submit Batch ${access.batch} Data`}
+            </Button>
+          </Card.Body>
+        </Card>
+      )}
 
       {/* SECTION 0: Faculty & Course Details Header Block */}
       <Card className="card-custom mb-4 border-0 shadow-sm">

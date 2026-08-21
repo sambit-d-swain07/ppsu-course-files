@@ -228,14 +228,63 @@ export async function getMergedChecklistItems(courseFileId: string) {
   if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
   if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
   return items.map((item: any) => {
-    if (![2, 4, 7, 8].includes(item.itemIndex)) return item;
+    if (![4, 8, 9].includes(item.itemIndex)) return item;
     const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
     const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
     const existingBatches = new Set(related.map((submission: any) => submission.batch));
     const pending = assignedBatches.filter((batch) => !existingBatches.has(batch)).map((batch) => ({ batch, status: 'PENDING', subItemsJson: JSON.stringify({ batch, pending: true }), facultyName: facultyNames.get(batch) }));
+    
+    const batchSubmissions = [
+      withBatchJson(item, 'A', facultyNames.get('A')),
+      ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))),
+      ...pending
+    ];
+
+    // For Item 4, auto-merge all batch student lists into one combined list in subItemsJson
+    let subItemsJson = item.subItemsJson;
+    if (item.itemIndex === 4) {
+      let combinedStudents: any[] = [];
+      const seenIds = new Set();
+
+      const parseStudents = (jsonStr?: string) => {
+        if (!jsonStr) return [];
+        try {
+          const parsed = JSON.parse(jsonStr);
+          return Array.isArray(parsed.students) ? parsed.students : [];
+        } catch (e) {
+          return [];
+        }
+      };
+
+      // Add main/Course Teacher item students first
+      parseStudents(item.subItemsJson).forEach((st: any) => {
+        const id = st.id || st.enrolmentNumber;
+        if (id && !seenIds.has(id)) {
+          seenIds.add(id);
+          combinedStudents.push(st);
+        }
+      });
+
+      // Add lab batch submissions students
+      related.forEach((sub: any) => {
+        parseStudents(sub.subItemsJson).forEach((st: any) => {
+          const id = st.id || st.enrolmentNumber;
+          if (id && !seenIds.has(id)) {
+            seenIds.add(id);
+            combinedStudents.push(st);
+          }
+        });
+      });
+
+      let existingSubItems: any = {};
+      try { existingSubItems = item.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
+      subItemsJson = JSON.stringify({ ...existingSubItems, students: combinedStudents });
+    }
+
     return {
       ...item,
-      batchSubmissions: [withBatchJson(item, 'A', facultyNames.get('A')), ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))), ...pending],
+      subItemsJson,
+      batchSubmissions,
       merged: true
     };
   });

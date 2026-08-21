@@ -112,6 +112,67 @@ export default function CoordinatorDashboard() {
         ))}
       </Row>
 
+      {/* Search panel */}
+      <div className="mb-4">
+        <h5 className="fw-bold text-navy-900 mb-3">Search Course Files</h5>
+        <SearchPanel onSearch={handleSearch} />
+      </div>
+
+      {/* Search result */}
+      {selectedCourse && (
+        <div
+          className="card-custom mb-4"
+          style={{ borderLeft: '4px solid var(--ppsu-accent)' }}
+        >
+          <Row className="align-items-center g-3">
+            <Col xs={12} md={8}>
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <span className="font-mono-ppsu small fw-bold text-secondary bg-light px-2 py-1 rounded">
+                  {selectedCourse.courseCode}
+                </span>
+                <span className={`badge-custom ${statusBadgeClass(selectedCourse.status)}`}>
+                  {statusLabel(selectedCourse.status)}
+                </span>
+              </div>
+              <h5 className="fw-bold text-navy-900 mb-1">{selectedCourse.courseTitle}</h5>
+              <p className="text-muted small mb-2">{selectedCourse.semester} · {selectedCourse.academicYear}</p>
+              <div className="d-flex gap-4 mt-2 flex-wrap">
+                <div>
+                  <span className="small text-secondary d-block">Faculty</span>
+                  <span className="fw-semibold small">{selectedCourse.faculty?.name}</span>
+                </div>
+                <div>
+                  <span className="small text-secondary d-block">Employee ID</span>
+                  <span className="fw-semibold small font-mono-ppsu">{selectedCourse.faculty?.employeeId}</span>
+                </div>
+                <div>
+                  <span className="small text-secondary d-block">Progress</span>
+                  <span className="fw-semibold small">{Math.min(20, selectedCourse.progress || 0)}/20</span>
+                </div>
+              </div>
+            </Col>
+            <Col xs={12} md={4} className="text-md-end d-flex flex-column align-items-md-end gap-2">
+              <Link
+                href={`/coordinator/review/${selectedCourse.id}`}
+                className="btn btn-ppsu-navy py-2 px-4 text-decoration-none"
+              >
+                Open Evaluation
+              </Link>
+              {selectedCourse.generatedReportPath && (
+                <a
+                  href={selectedCourse.generatedReportPath}
+                  download
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  ⬇ Download Report
+                </a>
+              )}
+            </Col>
+          </Row>
+        </div>
+      )}
+
+      {/* My Assigned Faculty Section */}
       <div id="my-assigned-faculty" className="card-custom p-0 overflow-hidden mb-4">
         <div className="px-4 py-3 d-flex align-items-center justify-content-between" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
           <span className="fw-bold">My Assigned Faculty</span>
@@ -173,72 +234,6 @@ export default function CoordinatorDashboard() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Search panel */}
-      <div className="mb-3">
-        <h5 className="fw-bold text-navy-900 mb-3">Search Course Files</h5>
-        <SearchPanel onSearch={handleSearch} />
-      </div>
-
-      {/* Search result */}
-      {selectedCourse && (
-        <div
-          className="card-custom"
-          style={{ borderLeft: '4px solid var(--ppsu-accent)' }}
-        >
-          <Row className="align-items-center g-3">
-            <Col xs={12} md={8}>
-              <div className="d-flex align-items-center gap-2 mb-2">
-                <span className="font-mono-ppsu small fw-bold text-secondary bg-light px-2 py-1 rounded">
-                  {selectedCourse.courseCode}
-                </span>
-                <span className={`badge-custom ${statusBadgeClass(selectedCourse.status)}`}>
-                  {statusLabel(selectedCourse.status)}
-                </span>
-              </div>
-              <h5 className="fw-bold text-navy-900 mb-1">{selectedCourse.courseTitle}</h5>
-              <p className="text-muted small mb-2">{selectedCourse.semester} · {selectedCourse.academicYear}</p>
-              <div className="d-flex gap-4 mt-2 flex-wrap">
-                <div>
-                  <span className="small text-secondary d-block">Faculty</span>
-                  <span className="fw-semibold small">{selectedCourse.faculty?.name}</span>
-                </div>
-                <div>
-                  <span className="small text-secondary d-block">Employee ID</span>
-                  <span className="fw-semibold small font-mono-ppsu">{selectedCourse.faculty?.employeeId}</span>
-                </div>
-                <div>
-                  <span className="small text-secondary d-block">Progress</span>
-                  <span className="fw-semibold small">{Math.min(20, selectedCourse.progress || 0)}/20</span>
-                </div>
-              </div>
-            </Col>
-            <Col xs={12} md={4} className="text-md-end d-flex flex-column align-items-md-end gap-2">
-              <Link
-                href={`/coordinator/review/${selectedCourse.id}`}
-                className="btn btn-ppsu-navy py-2 px-4 text-decoration-none"
-              >
-                Open Evaluation
-              </Link>
-              {selectedCourse.generatedReportPath && (
-                <a
-                  href={selectedCourse.generatedReportPath}
-                  download
-                  className="btn btn-outline-secondary btn-sm"
-                >
-                  ⬇ Download Report
-                </a>
-              )}
-            </Col>
-          </Row>
-        </div>
-      )}
-
-      {!selectedCourse && (
-        <div className="card-custom text-center py-5 m-0 text-muted small">
-          Use the search filters above to find a specific course file.
         </div>
       )}
     </div>

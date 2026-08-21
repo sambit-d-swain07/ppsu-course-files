@@ -1,20 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { Table, Button, Badge } from 'react-bootstrap';
+import { Table } from 'react-bootstrap';
 
 function statusBadge(status: string) {
   if (status === 'APPROVED') return 'badge-custom-approved';
   if (status === 'NEEDS_REVISION') return 'badge-custom-revision';
   if (status === 'SUBMITTED' || status === 'UNDER_REVIEW') return 'badge-custom-review';
   return 'badge-custom-draft';
-}
-
-function statusLabel(status: string) {
-  if (status === 'SUBMITTED' || status === 'UNDER_REVIEW') return 'Under Review';
-  if (status === 'NEEDS_REVISION') return 'Needs Revision';
-  if (status === 'APPROVED') return 'Approved';
-  return 'Not Yet Submitted';
 }
 
 export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
@@ -30,26 +23,26 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
 
   return (
     <div className="table-responsive">
-      <Table hover responsive className="align-middle mb-0 small text-nowrap">
+      <Table hover responsive className="align-middle mb-0 small">
         <thead className="bg-light">
           <tr>
-            <th className="ps-4">Faculty Member</th>
-            <th>Employee ID</th>
-            <th>Department</th>
-            <th className="text-center">Total Files</th>
-            <th>Status Breakdown</th>
-            <th className="pe-4 text-end">Assigned Course Files / Actions</th>
+            <th className="ps-4 py-3" style={{ minWidth: 200 }}>Faculty Member</th>
+            <th className="py-3" style={{ minWidth: 120 }}>Employee ID</th>
+            <th className="py-3" style={{ minWidth: 160 }}>Department</th>
+            <th className="text-center py-3" style={{ minWidth: 100 }}>Total Files</th>
+            <th className="py-3" style={{ minWidth: 220 }}>Status Breakdown</th>
+            <th className="pe-4 py-3 text-end" style={{ minWidth: 240 }}>Assigned Course Files / Actions</th>
           </tr>
         </thead>
         <tbody>
           {faculty.map((member) => (
             <tr key={member.id}>
-              <td className="ps-4">
+              <td className="ps-4 py-3">
                 <div className="d-flex align-items-center gap-2">
                   <div
                     style={{
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       borderRadius: '50%',
                       background: 'rgba(30,58,138,0.1)',
                       color: 'var(--ppsu-primary)',
@@ -64,26 +57,26 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
                     {member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div className="fw-bold text-navy-900">{member.name}</div>
+                    <div className="fw-bold text-navy-900" style={{ fontSize: 13 }}>{member.name}</div>
                     {member.designation && <div className="text-muted" style={{ fontSize: 11 }}>{member.designation}</div>}
                   </div>
                 </div>
               </td>
-              <td>
-                <span className="font-mono-ppsu px-2 py-1 bg-light rounded border small">
+              <td className="py-3">
+                <span className="font-mono-ppsu px-2 py-1 bg-light rounded border small fw-semibold">
                   {member.employeeId || '—'}
                 </span>
               </td>
-              <td>
-                <span className="text-secondary">{member.department || '—'}</span>
+              <td className="py-3">
+                <span className="text-secondary fw-semibold">{member.department || '—'}</span>
               </td>
-              <td className="text-center">
-                <span className="badge rounded-pill bg-light text-dark border px-2 py-1 fw-bold">
+              <td className="text-center py-3">
+                <span className="badge rounded-pill bg-light text-navy-900 border px-2 py-1 fw-bold" style={{ fontSize: 12 }}>
                   {member.totalCourseFiles}
                 </span>
               </td>
-              <td>
-                <div className="d-flex gap-1 flex-wrap">
+              <td className="py-3">
+                <div className="d-flex gap-1 flex-wrap align-items-center">
                   <span className={`badge-custom ${statusBadge('APPROVED')}`}>
                     Approved: {member.statusCounts.approved}
                   </span>
@@ -98,24 +91,29 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
                   </span>
                 </div>
               </td>
-              <td className="pe-4 text-end">
+              <td className="pe-4 py-3 text-end">
                 {member.courseFiles && member.courseFiles.length > 0 ? (
-                  <div className="d-flex flex-column gap-1 align-items-end">
+                  <div className="d-flex flex-column gap-2 align-items-end">
                     {member.courseFiles.map((file: any) => (
-                      <div key={file.id} className="d-flex align-items-center gap-1">
+                      <div key={file.id} className="d-flex align-items-center justify-content-end gap-2 p-1 px-2 rounded bg-light border" style={{ minWidth: 200 }}>
+                        <div className="text-end text-truncate" style={{ maxWidth: 140 }}>
+                          <span className="font-mono-ppsu fw-bold me-1" style={{ fontSize: 11 }}>{file.courseCode}</span>
+                          <div className="text-muted text-truncate" style={{ fontSize: 10 }}>{file.courseTitle}</div>
+                        </div>
                         <span className={`badge-custom ${statusBadge(file.status)}`} style={{ fontSize: 10 }}>
-                          {file.courseCode}
+                          {file.status === 'SUBMITTED' || file.status === 'UNDER_REVIEW' ? 'Review' : file.status}
                         </span>
                         <Link
                           href={`/coordinator/review/${file.id}`}
-                          className="btn btn-sm py-0 px-2"
+                          className="btn btn-sm py-1 px-2 font-semibold"
                           style={{
                             background: 'var(--ppsu-accent)',
                             color: '#fff',
                             fontSize: 11,
-                            borderRadius: 4,
-                            fontWeight: 600,
-                            textDecoration: 'none'
+                            borderRadius: 6,
+                            border: 'none',
+                            textDecoration: 'none',
+                            whiteSpace: 'nowrap'
                           }}
                         >
                           Review →
@@ -124,7 +122,7 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-muted small">No files created yet</span>
+                  <span className="text-muted small">No course files created yet</span>
                 )}
               </td>
             </tr>
