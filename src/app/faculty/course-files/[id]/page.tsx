@@ -112,7 +112,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       const data = await res.json();
       setCourseFile(data.courseFile);
       setChecklist(data.checklistItems);
-      setAccess(data.access || { mode: 'OWNER' });
+      setAccess(data.courseFile.access || { mode: 'OWNER' });
 
       setHeaderEdit({
         facultyName: data.courseFile.facultyName || data.courseFile.faculty?.name || '',
