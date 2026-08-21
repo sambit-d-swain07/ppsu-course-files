@@ -10,7 +10,7 @@ async function requireAdmin(req: NextRequest) {
 }
 
 function validateAssignments(body: any, users: any[]) {
-  const required = ['subjectCode', 'subjectName', 'department', 'school', 'division', 'semester', 'academicYear', 'courseCoordinatorId', 'courseTeacherId', 'labTeacherAId', 'labTeacherBId', 'evaluatorId'];
+  const required = ['subjectCode', 'subjectName', 'department', 'school', 'division', 'semester', 'academicYear', 'courseCoordinatorId', 'courseTeacherId', 'labTeacherAId', 'evaluatorId'];
   if (required.some(key => !String(body[key] ?? '').trim())) return 'All subject and required role fields are required';
   const byId = new Map(users.map(user => [user.id, user]));
   const coordinator = byId.get(body.courseCoordinatorId);
@@ -20,8 +20,8 @@ function validateAssignments(body: any, users: any[]) {
   const labTeacherB = body.labTeacherBId ? byId.get(body.labTeacherBId) : null;
   const labTeacherC = body.labTeacherCId ? byId.get(body.labTeacherCId) : null;
   if (body.courseCoordinatorId === body.evaluatorId) return 'The Evaluator must be a different person from the Course Coordinator';
-  if (coordinator?.role !== 'COORDINATOR' || evaluator?.role !== 'COORDINATOR') return 'Course Coordinator and Evaluator must be Coordinator users';
-  if (teacher?.role !== 'FACULTY' || labTeacherA?.role !== 'FACULTY' || labTeacherB?.role !== 'FACULTY' || (body.labTeacherCId && labTeacherC?.role !== 'FACULTY')) return 'Course Teacher and all selected Lab Teachers must be Faculty users';
+  if (coordinator?.role !== 'FACULTY' || evaluator?.role !== 'COORDINATOR') return 'Course Coordinator must be a Faculty user and Evaluator must be a Coordinator user';
+  if (teacher?.role !== 'FACULTY' || labTeacherA?.role !== 'FACULTY' || (body.labTeacherBId && labTeacherB?.role !== 'FACULTY') || (body.labTeacherCId && labTeacherC?.role !== 'FACULTY')) return 'Course Teacher and all selected Lab Teachers must be Faculty users';
   return null;
 }
 

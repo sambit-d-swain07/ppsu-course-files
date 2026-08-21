@@ -37,7 +37,7 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
   return (await prisma.courseFile.findMany({ where: {
     OR: [
       { facultyId },
-      { subject: { OR: [{ labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
+      { subject: { OR: [{ courseCoordinatorId: facultyId }, { labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
     ]
   } })).map(toCourseFile);
 }
@@ -172,7 +172,7 @@ export async function getMergedChecklistItems(courseFileId: string) {
   if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
   if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
   return items.map((item: any) => {
-    if (![2, 4, 8].includes(item.itemIndex)) return item;
+    if (![2, 4, 7, 8].includes(item.itemIndex)) return item;
     const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
     const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
     const existingBatches = new Set(related.map((submission: any) => submission.batch));

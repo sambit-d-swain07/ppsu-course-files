@@ -395,7 +395,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                               );
                             })}
                           </div>
-                        ) : item.index === 2 || item.index === 4 ? (
+                        ) : item.index === 2 || item.index === 4 || item.index === 7 ? (
                           <div className="mt-2 small text-secondary">{(dbItem.batchSubmissions || []).map((batch: any, bIdx: number) => <div key={batch.batch || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border"><span className="fw-semibold">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : ''}</span>{batch.status === 'PENDING' ? <span className="text-warning fw-bold">Pending</span> : <span className="text-success fw-bold">✓ Submitted</span>}</div>)}</div>
                         ) : item.index === 8 ? (
                           /* SECTION 33: Item 8 Laboratory Rubrics Batches display */

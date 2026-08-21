@@ -167,7 +167,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
 
-  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status);
+  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status) || access.mode === 'COURSE_COORDINATOR';
 
   const getSubItems = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
@@ -232,7 +232,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       const criteria = Array.from(new Map(submissions.flatMap((entry: any) => entry.criteria || []).map((criterion: any) => [criterion.id, criterion])).values());
       return { ...base, criteria, students: submissions.flatMap((entry: any) => (entry.students || []).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
     }
-    if (itemIndex === 2) return { batches: submissions };
+    if (itemIndex === 2 || itemIndex === 7) return { batches: submissions };
     return base;
   };
 
@@ -1170,7 +1170,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                         </div>
                       )}
 
-                      {(item.index === 2 || item.index === 4) && access.mode === 'OWNER' && (() => {
+                      {(item.index === 2 || item.index === 4 || item.index === 7) && access.mode !== 'LAB_BATCH' && (() => {
                         const batches = getMergedSubItems(item.index)?.batches || [];
                         return batches.length > 1 ? <div className="mt-2 small"><strong>Batch-wise submissions</strong>{batches.map((batch: any) => <div key={batch.batch} className="border rounded p-2 mt-1"><span className="fw-semibold">Batch {batch.batch}</span> — {batch.students?.length || batch.file?.fileName || batch.fileName ? 'Submitted' : 'Pending'}</div>)}</div> : null;
                       })()}

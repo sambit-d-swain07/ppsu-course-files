@@ -170,19 +170,20 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     const faculty = await getUserById(courseFile.facultyId);
     const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
     const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
+    const isSubjectCoordinator = payload.role === 'FACULTY' && subject?.courseCoordinatorId === payload.userId;
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
-    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId && !labBatch) {
+    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId && !labBatch && !isSubjectCoordinator) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     let checklist: any[];
     if (labBatch) {
-      const restrictedItems = await Promise.all([2, 4, 8].map(async (itemIndex) => {
+      const restrictedItems = await Promise.all([2, 4, 7, 8].map(async (itemIndex) => {
         const submission = await getLabSubmission(id, labBatch, itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8] } : { mode: 'OWNER' }
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });
