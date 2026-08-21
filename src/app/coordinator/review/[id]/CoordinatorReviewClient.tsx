@@ -508,43 +508,157 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               </div>
                             )}
                           </div>
-                        ) : item.index === 11 || item.index === 12 ? (
-                          <div className="mt-2 small text-secondary">
-                            {[
-                              { k: 'timetable', l: '(a) Timetable' },
-                              { k: 'questionPaper', l: '(b) Question Paper' },
-                              { k: 'sampleAnswerSheet', l: '(c) Sample Answer Sheet' }
-                            ].map((sub) => {
-                              const sFile = subItems?.[sub.k];
-                              return (
-                                <div key={sub.k} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
-                                  <span className="fw-semibold text-truncate">{sub.l}</span>
-                                  {sFile?.fileName ? (
-                                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item ${item.index} — ${sub.l}`, fileName: sFile.fileName, fileUrl: sFile.fileUrl })}>
-                                        👁️ View
-                                      </Button>
+                        ) : item.index === 11 || item.index === 12 ? (<>{(() => {
+                          // Pull Item 9 (Continuous Evaluation Rubrics) data for (d) Mark Statement
+                          const item9Db = checklist.find((c) => c?.itemIndex === 9);
+                          const item9Subs = item9Db?.subItemsJson ? (() => { try { return JSON.parse(item9Db.subItemsJson); } catch { return {}; } })() : {};
+                          const criteria: any[] = Array.isArray(item9Subs.criteria) ? item9Subs.criteria : [];
+                          const rawStudents: any[] = Array.isArray(item9Subs.students) ? item9Subs.students : [];
+                          // Compute per-student total marks from Item 9
+                          const studentRows = rawStudents.map((s: any) => ({
+                            name: s.name || s.studentName || '',
+                            enrolmentNumber: s.enrolmentNumber || s.id || '',
+                            total: criteria.reduce((sum: number, c: any) => sum + (Number(s.marks?.[c.id]) || 0), 0)
+                          }));
+                          // Marks-band chart data (out of 30)
+                          const markBands = ['below 12', '13–15', '16–18', '19–21', '22–24', '25–27', '28–30'];
+                          const markCounts = markBands.map((band) =>
+                            studentRows.filter(({ total }) =>
+                              band === 'below 12'  ? total < 12 :
+                              band === '13–15'     ? total >= 13 && total <= 15 :
+                              band === '16–18'     ? total >= 16 && total <= 18 :
+                              band === '19–21'     ? total >= 19 && total <= 21 :
+                              band === '22–24'     ? total >= 22 && total <= 24 :
+                              band === '25–27'     ? total >= 25 && total <= 27 :
+                                                     total >= 28
+                            ).length
+                          );
+                          // Percentage-band chart data
+                          const pctBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
+                          const maxMark = criteria.reduce((s: number, c: any) => s + (Number(c.max) || 0), 0) || 30;
+                          const pctCounts = pctBands.map((band) =>
+                            studentRows.filter(({ total }) => {
+                              const p = (total / maxMark) * 100;
+                              return band === '<40%'   ? p < 40 :
+                                     band === '41–50%' ? p >= 41 && p <= 50 :
+                                     band === '51–60%' ? p >= 51 && p <= 60 :
+                                     band === '61–70%' ? p >= 61 && p <= 70 :
+                                     band === '71–80%' ? p >= 71 && p <= 80 :
+                                     band === '81–90%' ? p >= 81 && p <= 90 :
+                                                          p > 90;
+                            }).length
+                          );
+                          const miniChart = (labels: string[], counts: number[]) => (
+                            <div className="d-flex align-items-end gap-1 mt-2" style={{ height: 72 }}>
+                              {labels.map((label, i) => (
+                                <div key={label} className="text-center flex-fill">
+                                  <div
+                                    className="bg-primary mx-auto"
+                                    style={{ height: `${Math.max(4, counts[i] * 14)}px`, width: '70%' }}
+                                    title={`${counts[i]} students`}
+                                  />
+                                  <div style={{ fontSize: 8, lineHeight: 1.2, marginTop: 2 }}>{label}</div>
+                                  <div className="fw-bold font-mono-ppsu" style={{ fontSize: 9 }}>{counts[i]}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+
+                          return (
+                            <div className="mt-2 small text-secondary">
+                              {/* (a), (b), (c) — unchanged */}
+                              {[
+                                { k: 'timetable',        l: '(a) Timetable' },
+                                { k: 'questionPaper',    l: '(b) Question Paper' },
+                                { k: 'sampleAnswerSheet', l: '(c) Sample Answer Sheet' }
+                              ].map((sub) => {
+                                const sFile = subItems?.[sub.k];
+                                return (
+                                  <div key={sub.k} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                    <span className="fw-semibold text-truncate">{sub.l}</span>
+                                    {sFile?.fileName ? (
+                                      <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                        <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item ${item.index} — ${sub.l}`, fileName: sFile.fileName, fileUrl: sFile.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+
+                              {/* (d) Mark Statement & Result Analysis — live from Item 9 */}
+                              <div className="mt-2 p-2 rounded border" style={{ background: '#f0f7ff', borderColor: '#bfdbfe' }}>
+                                <div className="fw-semibold mb-2 d-flex align-items-center gap-2" style={{ color: '#1e3a8a' }}>
+                                  <span>(d) Mark Statement &amp; Result Analysis</span>
+                                  <span className="badge" style={{ background: '#1e3a8a', color: '#fff', fontSize: 9, fontWeight: 500 }}>
+                                    Auto-linked from Item 9
+                                  </span>
+                                </div>
+
+                                {studentRows.length === 0 ? (
+                                  <div className="text-muted" style={{ fontSize: 11 }}>
+                                    ⚠ No marks entered in Item 9 yet — table will populate once faculty saves Continuous Evaluation Rubrics.
+                                  </div>
+                                ) : (
+                                  <>
+                                    {/* Marks table */}
+                                    <div className="table-responsive border rounded mb-2" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                                      <Table bordered size="sm" className="small mb-0">
+                                        <thead className="bg-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                                          <tr>
+                                            <th>Student Name</th>
+                                            <th>Enrolment No.</th>
+                                            <th>Total Marks / {maxMark}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {studentRows.map((row, ri) => (
+                                            <tr key={ri}>
+                                              <td>{row.name}</td>
+                                              <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                              <td className="fw-bold">{row.total}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </Table>
                                     </div>
-                                  ) : (
-                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {subItems?.additionalDocuments?.[0]?.fileName && (
-                              <div className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
-                                <span className="fw-semibold text-truncate">(d) Additional Doc</span>
-                                <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                  <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: subItems.additionalDocuments[0].name, fileName: subItems.additionalDocuments[0].fileName, fileUrl: subItems.additionalDocuments[0].fileUrl })}>
-                                    👁️ View
-                                  </Button>
-                                </div>
+
+                                    {/* Charts row */}
+                                    <Row className="g-2">
+                                      <Col xs={12} md={6}>
+                                        <div className="p-2 bg-white border rounded">
+                                          <div className="fw-semibold mb-1" style={{ fontSize: 11 }}>Marks-band Distribution</div>
+                                          {miniChart(markBands, markCounts)}
+                                        </div>
+                                      </Col>
+                                      <Col xs={12} md={6}>
+                                        <div className="p-2 bg-white border rounded">
+                                          <div className="fw-semibold mb-1" style={{ fontSize: 11 }}>Percentage Distribution</div>
+                                          {miniChart(pctBands, pctCounts)}
+                                        </div>
+                                      </Col>
+                                    </Row>
+
+                                    {/* Optional uploaded file */}
+                                    {subItems?.file?.fileName && (
+                                      <div className="d-flex align-items-center gap-2 mt-2">
+                                        <span className="text-success fw-semibold" style={{ fontSize: 11 }}>✓ {subItems.file.fileName}</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }}
+                                          onClick={() => setViewingDoc({ title: `IA ${item.index === 11 ? 1 : 2} Mark Statement`, fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        ) : item.index === 13 ? (
+                            </div>
+                          );
+                        })()}</>) : item.index === 13 ? (
                           <div className="mt-2 small text-secondary">
                             <div className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
                               <span className="fw-semibold text-truncate">(a) Assignment Topics</span>
