@@ -1507,6 +1507,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         </div>
                       )}
 
+                      {/* Course Coordinator Centrally Uploaded & Locked Banner */}
+                      {dbItem.isCoordinatorShared && !isRestricted && (
+                        <div className="mt-1.5 d-flex align-items-center gap-2">
+                          {dbItem.coordinatorUploaded ? (
+                            <span className="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small fw-semibold">
+                              ✓ Uploaded by Course Coordinator — view only
+                            </span>
+                          ) : (
+                            <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1 rounded-pill small fw-semibold">
+                              ⏳ Not uploaded yet — pending Course Coordinator (Locked)
+                            </span>
+                          )}
+                        </div>
+                      )}
+
 
                       {/* Single upload complete indicator */}
                       {!isItem1 && !isItem8 && !isIA && !isUniv && complete && !isRestricted && (
@@ -2024,7 +2039,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         return (
                           <Col xs={12} md={4} key={sub.key}>
                             <div className="p-2 bg-light rounded border">
-                              <div className="fw-bold mb-1">{sub.label}</div>
+                              <div className="fw-bold mb-1">
+                                {sub.label}
+                                {dbItem.isCoordinatorShared && <span className="ms-2 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>}
+                              </div>
                               {sub.key === 'gradeSheet' && <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />}
                               {subData?.fileName ? (
                                 <div>
@@ -2033,7 +2051,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
                                       View
                                     </Button>
-                                    {!isLocked && (
+                                    {!isLocked && !dbItem.isCoordinatorShared && (
                                       <>
                                         <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
                                           Replace
@@ -2047,10 +2065,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   </div>
                                 </div>
                               ) : (
-                                <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
-                                  Choose Document
-                                  <input type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
-                                </label>
+                                !dbItem.isCoordinatorShared && (
+                                  <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
+                                    Choose Document
+                                    <input type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
+                                  </label>
+                                )
                               )}
                             </div>
                           </Col>
@@ -2070,11 +2090,17 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         { key: 'sampleAnswerSheet', label: '(c) Sample Answer Sheet *' },
                       ].map((sub) => {
                         const subData = getSubItems(item.index)?.[sub.key];
+                        const isSubLockedByCoord = dbItem.isCoordinatorShared && ['timetable', 'questionPaper'].includes(sub.key);
                         return (
                           <Col xs={12} md={6} key={sub.key}>
                             <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
                               <div>
-                                <div className="fw-bold mb-1">{sub.label}</div>
+                                <div className="fw-bold mb-1">
+                                  {sub.label}
+                                  {isSubLockedByCoord && (
+                                    <span className="ms-2 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>
+                                  )}
+                                </div>
                                 {subData?.fileName ? (
                                   <div>
                                     <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
@@ -2089,7 +2115,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     View
                                   </Button>
                                 )}
-                                {!isLocked && (
+                                {!isLocked && !isSubLockedByCoord && (
                                   <>
                                     <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
                                       {subData?.fileName ? 'Replace' : 'Choose File'}

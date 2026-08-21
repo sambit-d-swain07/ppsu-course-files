@@ -92,3 +92,15 @@ export interface Notification {
   timestamp: string; // ISO String
   read: boolean;
 }
+
+export interface SubjectSharedDocument {
+  id: string;
+  subjectId: string;
+  itemIndex: number;
+  status: 'EMPTY' | 'UPLOADED';
+  fileName?: string;
+  fileUrl?: string;
+  subItemsJson?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

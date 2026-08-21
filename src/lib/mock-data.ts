@@ -299,32 +299,102 @@ export async function getLabSubmissions(courseFileId: string) {
   return prisma.labChecklistSubmission.findMany({ where: { courseFileId }, orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }] });
 }
 
+export const SHARED_COORDINATOR_ITEM_INDICES = [1, 3, 5, 6, 7, 10, 11, 12, 13];
+
+export async function getSubjectSharedDocuments(subjectId: string) {
+  return prisma.subjectSharedDocument.findMany({
+    where: { subjectId },
+    orderBy: { itemIndex: 'asc' }
+  });
+}
+
+export async function upsertSubjectSharedDocument(
+  subjectId: string,
+  itemIndex: number,
+  updates: { status?: string; fileName?: string | null; fileUrl?: string | null; subItemsJson?: string | null }
+) {
+  return prisma.subjectSharedDocument.upsert({
+    where: { subjectId_itemIndex: { subjectId, itemIndex } },
+    create: { subjectId, itemIndex, status: updates.status || 'EMPTY', ...updates },
+    update: updates
+  });
+}
+
+export async function getSubjectsByCoordinatorId(coordinatorId: string) {
+  return prisma.subject.findMany({
+    where: { courseCoordinatorId: coordinatorId },
+    include: {
+      ...subjectInclude,
+      sharedDocuments: { orderBy: { itemIndex: 'asc' } }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+}
+
 function withBatchJson(item: any, batch: string, facultyName?: string) {
   let parsed: any = {};
   try { parsed = item?.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
   return { ...item, batch, facultyName, subItemsJson: JSON.stringify({ ...parsed, batch }) };
 }
 
-export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any) {
+export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any, sharedDocs: any[] = []) {
   const facultyNames = new Map<string, string>();
   if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
   if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
   if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
+  const sharedMap = new Map(sharedDocs.map((sd: any) => [sd.itemIndex, sd]));
+
   return items.map((item: any) => {
-    if (![4, 8, 9].includes(item.itemIndex)) return item;
+    let currentItem = { ...item };
+
+    // Merge Course Coordinator shared document if item is in SHARED_COORDINATOR_ITEM_INDICES
+    if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex)) {
+      const shared = sharedMap.get(item.itemIndex);
+      const isSharedUploaded = shared && shared.status === 'UPLOADED';
+
+      let mergedSubItemsJson = item.subItemsJson;
+      if (shared?.subItemsJson) {
+        try {
+          const sharedParsed = JSON.parse(shared.subItemsJson);
+          const teacherParsed = item.subItemsJson ? JSON.parse(item.subItemsJson) : {};
+          mergedSubItemsJson = JSON.stringify({
+            ...teacherParsed,
+            ...sharedParsed,
+            isCoordinatorShared: true,
+            coordinatorUploaded: isSharedUploaded
+          });
+        } catch (e) {}
+      }
+
+      currentItem = {
+        ...currentItem,
+        subItemsJson: mergedSubItemsJson,
+        isCoordinatorShared: true,
+        coordinatorUploaded: isSharedUploaded,
+        sharedStatus: isSharedUploaded ? 'UPLOADED' : 'PENDING',
+        sharedFileName: shared?.fileName || null,
+        sharedFileUrl: shared?.fileUrl || null,
+        ...(isSharedUploaded && !['sub-items-only', 1, 11, 12, 13].includes(item.itemIndex)
+          ? { status: 'UPLOADED', fileName: shared.fileName, fileUrl: shared.fileUrl }
+          : {})
+      };
+    }
+
+    if (![4, 8, 9].includes(item.itemIndex)) return currentItem;
+
     const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
     const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
     const existingBatches = new Set(related.map((submission: any) => submission.batch));
     const pending = assignedBatches.filter((batch) => !existingBatches.has(batch)).map((batch) => ({ batch, status: 'PENDING', subItemsJson: JSON.stringify({ batch, pending: true }), facultyName: facultyNames.get(batch) }));
     
     const batchSubmissions = [
-      withBatchJson(item, 'A', facultyNames.get('A')),
+      withBatchJson(currentItem, 'A', facultyNames.get('A')),
       ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))),
       ...pending
     ];
 
     // For Item 4, auto-merge all batch student lists into one combined list in subItemsJson
-    let subItemsJson = item.subItemsJson;
+    let subItemsJson = currentItem.subItemsJson;
     if (item.itemIndex === 4) {
       let combinedStudents: any[] = [];
       const seenIds = new Set();
@@ -340,7 +410,7 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
       };
 
       // Add main/Course Teacher item students first
-      parseStudents(item.subItemsJson).forEach((st: any) => {
+      parseStudents(currentItem.subItemsJson).forEach((st: any) => {
         const id = st.id || st.enrolmentNumber;
         if (id && !seenIds.has(id)) {
           seenIds.add(id);
@@ -360,12 +430,12 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
       });
 
       let existingSubItems: any = {};
-      try { existingSubItems = item.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
+      try { existingSubItems = currentItem.subItemsJson ? JSON.parse(currentItem.subItemsJson) : {}; } catch (e) {}
       subItemsJson = JSON.stringify({ ...existingSubItems, students: combinedStudents });
     }
 
     return {
-      ...item,
+      ...currentItem,
       subItemsJson,
       batchSubmissions,
       merged: true
@@ -407,71 +477,8 @@ export async function getCourseFileDetailWithChecklist(id: string) {
 export async function getMergedChecklistItems(courseFileId: string) {
   const [items, submissions] = await Promise.all([getChecklistItemsByCourseFileId(courseFileId), getLabSubmissions(courseFileId)]);
   const subject = await getSubjectForCourseFile(courseFileId);
-  const facultyNames = new Map<string, string>();
-  if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
-  if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
-  if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
-  return items.map((item: any) => {
-    if (![4, 8, 9].includes(item.itemIndex)) return item;
-    const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
-    const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
-    const existingBatches = new Set(related.map((submission: any) => submission.batch));
-    const pending = assignedBatches.filter((batch) => !existingBatches.has(batch)).map((batch) => ({ batch, status: 'PENDING', subItemsJson: JSON.stringify({ batch, pending: true }), facultyName: facultyNames.get(batch) }));
-    
-    const batchSubmissions = [
-      withBatchJson(item, 'A', facultyNames.get('A')),
-      ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))),
-      ...pending
-    ];
-
-    // For Item 4, auto-merge all batch student lists into one combined list in subItemsJson
-    let subItemsJson = item.subItemsJson;
-    if (item.itemIndex === 4) {
-      let combinedStudents: any[] = [];
-      const seenIds = new Set();
-
-      const parseStudents = (jsonStr?: string) => {
-        if (!jsonStr) return [];
-        try {
-          const parsed = JSON.parse(jsonStr);
-          return Array.isArray(parsed.students) ? parsed.students : [];
-        } catch (e) {
-          return [];
-        }
-      };
-
-      // Add main/Course Teacher item students first
-      parseStudents(item.subItemsJson).forEach((st: any) => {
-        const id = st.id || st.enrolmentNumber;
-        if (id && !seenIds.has(id)) {
-          seenIds.add(id);
-          combinedStudents.push(st);
-        }
-      });
-
-      // Add lab batch submissions students
-      related.forEach((sub: any) => {
-        parseStudents(sub.subItemsJson).forEach((st: any) => {
-          const id = st.id || st.enrolmentNumber;
-          if (id && !seenIds.has(id)) {
-            seenIds.add(id);
-            combinedStudents.push(st);
-          }
-        });
-      });
-
-      let existingSubItems: any = {};
-      try { existingSubItems = item.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
-      subItemsJson = JSON.stringify({ ...existingSubItems, students: combinedStudents });
-    }
-
-    return {
-      ...item,
-      subItemsJson,
-      batchSubmissions,
-      merged: true
-    };
-  });
+  const sharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
+  return mergeChecklistItemsInMemory(items, submissions, subject, sharedDocs);
 }
 
 export async function createSubject(data: {
