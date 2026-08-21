@@ -47,6 +47,35 @@ export async function GET(req: NextRequest) {
               school: faculty.school,
               assignedCoordinatorId: faculty.assignedCoordinatorId
             }
+          : null,
+        division: cf.division || subject?.division || null,
+        subject: subject
+          ? {
+              id: subject.id,
+              subjectCode: subject.subjectCode,
+              subjectName: subject.subjectName,
+              division: subject.division,
+              semester: subject.semester,
+              academicYear: subject.academicYear,
+              courseCoordinatorId: subject.courseCoordinatorId,
+              courseCoordinator: subject.courseCoordinator
+                ? {
+                    id: subject.courseCoordinator.id,
+                    name: subject.courseCoordinator.name,
+                    email: subject.courseCoordinator.email,
+                    department: subject.courseCoordinator.department
+                  }
+                : null,
+              evaluatorId: subject.evaluatorId,
+              evaluator: subject.evaluator
+                ? {
+                    id: subject.evaluator.id,
+                    name: subject.evaluator.name,
+                    email: subject.evaluator.email,
+                    department: subject.evaluator.department
+                  }
+                : null
+            }
           : null
       };
     }));
