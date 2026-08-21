@@ -68,7 +68,7 @@ const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : []
 
 export default function FacultyCourseFileDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const [courseFileId, setCourseFileId] = useState<string>('');
+  const { id: courseFileId } = use(params);
   const [courseFile, setCourseFile] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,9 +101,16 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   const [hasSeparatePracticalGrade, setHasSeparatePracticalGrade] = useState(false);
 
   const fetchData = async () => {
+    if (!courseFileId) return;
     try {
       const res = await fetch(`/api/course-files/${courseFileId}`);
-      if (!res.ok) throw new Error('Failed to load course details');
+      if (!res.ok) {
+        let errMsg = 'Failed to load course details';
+        try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch (_) {}
+        setActionError(errMsg);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       setCourseFile(data.courseFile);
       const checklistItems = Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : [];
@@ -154,7 +161,8 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     }
   };
 
-  useEffect(() => { fetchData(); }, [courseFileId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (courseFileId) fetchData(); }, [courseFileId]);
 
   if (loading) return (
     <div className="d-flex justify-content-center py-5">
