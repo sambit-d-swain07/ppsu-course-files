@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCourseFileById, getMergedChecklistItems, getSubjectById } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
+import { noStoreJson } from '@/lib/api-response';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
     const payload = token ? await verifyToken(token) : null;
-    if (!payload || !['COORDINATOR', 'ADMIN'].includes(payload.role)) return NextResponse.json({ error: 'Only the evaluator or Admin can download the merged report.' }, { status: 403 });
+    if (!payload || !['COORDINATOR', 'ADMIN'].includes(payload.role)) return noStoreJson({ error: 'Only the evaluator or Admin can download the merged report.' }, { status: 403 });
     const { id } = await props.params;
     const courseFile = await getCourseFileById(id);
-    if (!courseFile) return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
+    if (!courseFile) return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
-    if (payload.role === 'COORDINATOR' && subject?.evaluatorId !== payload.userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (payload.role === 'COORDINATOR' && subject?.evaluatorId !== payload.userId) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
 
     const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
     const checklist = await getMergedChecklistItems(id);
@@ -36,8 +39,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       }
     }
     const buffer = await Packer.toBuffer(new Document({ sections: [{ children: lines }] }));
-    return new NextResponse(buffer as BodyInit, { headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'Content-Disposition': `attachment; filename="merged-course-file-${id}.docx"` } });
+    return new NextResponse(buffer as BodyInit, { headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'Content-Disposition': `attachment; filename="merged-course-file-${id}.docx"`, 'Cache-Control': 'private, no-store, max-age=0, must-revalidate', Vary: 'Cookie' } });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Unable to generate merged report' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Unable to generate merged report' }, { status: 500 });
   }
 }

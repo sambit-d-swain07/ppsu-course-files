@@ -65,6 +65,44 @@ export async function getCourseFilesForCoordinator(coordinatorId: string) {
     }
   })).map(toCourseFile);
 }
+
+export async function getAssignedFacultySummary(coordinatorId: string) {
+  const faculty = await prisma.user.findMany({
+    where: { role: 'FACULTY', assignedCoordinatorId: coordinatorId },
+    orderBy: { name: 'asc' }
+  });
+  const courseFiles = faculty.length
+    ? await prisma.courseFile.findMany({
+        where: { facultyId: { in: faculty.map((member) => member.id) } },
+        orderBy: { lastUpdated: 'desc' }
+      })
+    : [];
+
+  return faculty.map((member) => {
+    const files = courseFiles.filter((file) => file.facultyId === member.id);
+    const statusCounts = {
+      approved: files.filter((file) => file.status === 'APPROVED').length,
+      underReview: files.filter((file) => file.status === 'SUBMITTED' || file.status === 'UNDER_REVIEW').length,
+      needsRevision: files.filter((file) => file.status === 'NEEDS_REVISION').length,
+      notSubmitted: files.filter((file) => file.status === 'DRAFT').length
+    };
+    return {
+      id: member.id,
+      name: member.name,
+      employeeId: member.employeeId,
+      department: member.department,
+      totalCourseFiles: files.length,
+      statusCounts,
+      courseFiles: files.map((file) => ({
+        id: file.id,
+        courseCode: file.courseCode,
+        courseTitle: file.courseTitle,
+        status: file.status,
+        lastUpdated: file.lastUpdated
+      }))
+    };
+  });
+}
 export async function assignFacultyCoordinator(facultyId: string, coordinatorId: string) {
   const faculty = await prisma.user.findFirst({ where: { id: facultyId, role: 'FACULTY' } });
   if (!faculty) return false;

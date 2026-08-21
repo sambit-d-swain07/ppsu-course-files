@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUsers, assignFacultyCoordinator, getCourseFileStatusCountsByFaculty } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
+import { noStoreJson } from '@/lib/api-response';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await verifyToken(token);
     if (!payload || payload.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
     const [allUsers, statusCounts] = await Promise.all([
@@ -48,34 +51,34 @@ export async function GET(req: NextRequest) {
       designation: u.designation
     }));
 
-    return NextResponse.json({ faculty, coordinators, admins });
+    return noStoreJson({ faculty, coordinators, admins });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await verifyToken(token);
     if (!payload || payload.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { facultyId, coordinatorId } = await req.json();
     if (!facultyId || coordinatorId === undefined) {
-      return NextResponse.json({ error: 'facultyId and coordinatorId are required' }, { status: 400 });
+      return noStoreJson({ error: 'facultyId and coordinatorId are required' }, { status: 400 });
     }
 
     const success = await assignFacultyCoordinator(facultyId, coordinatorId);
     if (!success) {
-      return NextResponse.json({ error: 'Faculty member not found' }, { status: 404 });
+      return noStoreJson({ error: 'Faculty member not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, message: 'Coordinator assigned successfully' });
+    return noStoreJson({ success: true, message: 'Coordinator assigned successfully' });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }

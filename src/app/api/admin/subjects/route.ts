@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSubject, getSubjects, getUsers, updateSubject } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
+import { noStoreJson } from '@/lib/api-response';
+
+export const dynamic = 'force-dynamic';
 
 async function requireAdmin(req: NextRequest) {
   const token = req.cookies.get('ppsu_auth_token')?.value;
@@ -44,34 +47,34 @@ function normalize(body: any) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!await requireAdmin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
   const [subjects, users] = await Promise.all([getSubjects(), getUsers()]);
-  return NextResponse.json({ subjects, users: users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR') });
+  return noStoreJson({ subjects, users: users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR') });
 }
 
 export async function POST(req: NextRequest) {
-  if (!await requireAdmin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
   try {
     const body = await req.json();
     const users = await getUsers();
     const error = validateAssignments(body, users);
-    if (error) return NextResponse.json({ error }, { status: 400 });
-    return NextResponse.json({ subject: await createSubject(normalize(body)) }, { status: 201 });
+    if (error) return noStoreJson({ error }, { status: 400 });
+    return noStoreJson({ subject: await createSubject(normalize(body)) }, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Unable to create subject' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Unable to create subject' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
-  if (!await requireAdmin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
   try {
     const body = await req.json();
-    if (!body.id) return NextResponse.json({ error: 'Subject id is required' }, { status: 400 });
+    if (!body.id) return noStoreJson({ error: 'Subject id is required' }, { status: 400 });
     const users = await getUsers();
     const error = validateAssignments(body, users);
-    if (error) return NextResponse.json({ error }, { status: 400 });
-    return NextResponse.json({ subject: await updateSubject(body.id, normalize(body)) });
+    if (error) return noStoreJson({ error }, { status: 400 });
+    return noStoreJson({ subject: await updateSubject(body.id, normalize(body)) });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Unable to update subject' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Unable to update subject' }, { status: 500 });
   }
 }

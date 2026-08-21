@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Row, Col, Spinner } from 'react-bootstrap';
 import SearchPanel from '../SearchPanel';
+import AssignedFacultyList from '../AssignedFacultyList';
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -37,6 +38,7 @@ export default function CoordinatorDashboard() {
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [assignedFaculty, setAssignedFaculty] = useState<any[]>([]);
 
   const fetchCourses = () => {
     fetch('/api/course-files')
@@ -49,6 +51,12 @@ export default function CoordinatorDashboard() {
   };
 
   useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => {
+    fetch('/api/coordinator/faculty', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => setAssignedFaculty(Array.isArray(data.faculty) ? data.faculty : []))
+      .catch(() => setAssignedFaculty([]));
+  }, []);
 
   const handleSearch = (courseFileId: string) => {
     const match = courses.find((c) => c.id === courseFileId);
@@ -63,7 +71,7 @@ export default function CoordinatorDashboard() {
     );
   }
 
-  const uniqueFaculty   = new Set(courses.map((c) => c.facultyId)).size;
+  const uniqueFaculty   = assignedFaculty.length;
   const pendingCount    = courses.filter((c) => c.status === 'SUBMITTED' || c.status === 'UNDER_REVIEW').length;
   const approvedCount   = courses.filter((c) => c.status === 'APPROVED').length;
   const revisionCount   = courses.filter((c) => c.status === 'NEEDS_REVISION').length;
@@ -91,7 +99,7 @@ export default function CoordinatorDashboard() {
           { label: 'Needs Revision',  val: revisionCount,  color: 'var(--ppsu-danger-text)',    bg: 'var(--ppsu-danger-bg)' }
         ].map(({ label, val, color, bg }) => (
           <Col xs={6} md={3} key={label}>
-            <div className="card-custom m-0 h-100 d-flex align-items-center gap-3">
+            <a href={label === 'Total Faculty' ? '#my-assigned-faculty' : undefined} className={`card-custom m-0 h-100 d-flex align-items-center gap-3 text-decoration-none ${label === 'Total Faculty' ? 'card-custom-hover' : ''}`} style={{ cursor: label === 'Total Faculty' ? 'pointer' : 'default' }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <span style={{ fontSize: 18, fontWeight: 800, color }}>{val}</span>
               </div>
@@ -99,10 +107,18 @@ export default function CoordinatorDashboard() {
                 <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1.1 }}>{val}</div>
                 <div className="stat-label">{label}</div>
               </div>
-            </div>
+            </a>
           </Col>
         ))}
       </Row>
+
+      <div id="my-assigned-faculty" className="card-custom p-0 overflow-hidden mb-4">
+        <div className="px-4 py-3 d-flex align-items-center justify-content-between" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
+          <span className="fw-bold">My Assigned Faculty</span>
+          <Link href="/coordinator/my-faculty" className="btn btn-sm btn-light">View Full List</Link>
+        </div>
+        <div className="p-0"><AssignedFacultyList faculty={assignedFaculty} /></div>
+      </div>
 
       {/* Recent Submissions */}
       {recentSubmissions.length > 0 && (

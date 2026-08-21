@@ -109,7 +109,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
       }
       const data = await res.json();
       setCourseFile(data.courseFile);
-      setChecklist(data.checklistItems);
+      setChecklist(Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : []);
       setOverallRemarks(data.courseFile.coordinatorRemarks || '');
 
       setReviewerSignatureName(data.courseFile.reviewerSignatureName || 'Dr. S. Iyer');
@@ -118,7 +118,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
 
       const initScores: Record<number, number> = {};
       const initRemarks: Record<number, string> = {};
-      data.checklistItems.forEach((cli: any) => {
+      (Array.isArray(data.checklistItems) ? data.checklistItems : []).filter(Boolean).forEach((cli: any) => {
         initScores[cli.itemIndex] = cli.score ?? (cli.itemIndex === 20 ? 10 : 0);
         initRemarks[cli.itemIndex] = cli.remarks ?? '';
       });
@@ -148,7 +148,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
 
   const totalScore = Object.entries(scores)
     .filter(([k]) => Number(k) !== 20)
-    .reduce((sum, [, s]) => sum + s, 0);
+    .reduce((sum, [, s]) => sum + (Number(s) || 0), 0);
   const rating = getRating(totalScore);
   const scorePercent = Math.round((totalScore / MAX_TOTAL) * 100);
   const reviewLocked = ['APPROVED', 'NEEDS_REVISION', 'UNDER_REVIEW'].includes(courseFile.status);
@@ -340,7 +340,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
 
         <div className="p-0">
           {CHECKLIST_ITEMS.map((item, idx) => {
-            const dbItem = checklist.find((c) => c.itemIndex === item.index) ?? { status: 'EMPTY' };
+            const dbItem = checklist.find((c) => c?.itemIndex === item.index) ?? { status: 'EMPTY' };
             const uploaded = dbItem.status === 'UPLOADED';
             const score = scores[item.index] ?? 0;
             const subItems = parseSubItems(dbItem);

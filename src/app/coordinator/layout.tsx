@@ -98,6 +98,13 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
       )
     },
     {
+      href: '/coordinator/my-faculty',
+      label: 'My Faculty',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-4 8a4 4 0 0 1 8 0H3Zm9.5-7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM13 14a3 3 0 0 0-2.25-2.9A3.99 3.99 0 0 1 12 14h1Z"/></svg>
+      )
+    },
+    {
       href: '/coordinator/course-files',
       label: 'Course Files',
       icon: (

@@ -28,7 +28,7 @@ const CHECKLIST_ITEMS = [
   { index: 19, name: 'Lecture notes', maxScore: 20 },
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
-const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 14, 20];
+const LAB_TEACHER_ITEM_INDICES = [2, 4, 7, 8, 20];
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -111,7 +111,8 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       if (!res.ok) throw new Error('Failed to load course details');
       const data = await res.json();
       setCourseFile(data.courseFile);
-      setChecklist(data.checklistItems);
+      const checklistItems = Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : [];
+      setChecklist(checklistItems);
       setAccess(data.courseFile.access || { mode: 'OWNER' });
 
       setHeaderEdit({
@@ -126,7 +127,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       setFacultySignatureName(data.courseFile.facultySignatureName || data.courseFile.faculty?.name || '');
       setFacultyConfirmed(!!data.courseFile.facultyConfirmed);
 
-      const item8 = data.checklistItems.find((cli: any) => cli.itemIndex === 8);
+      const item8 = checklistItems.find((cli: any) => cli.itemIndex === 8);
       if (item8?.subItemsJson) {
         try {
           const parsed = JSON.parse(item8.subItemsJson);
@@ -135,7 +136,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
         } catch (e) {}
       }
 
-      const item9 = data.checklistItems.find((cli: any) => cli.itemIndex === 9);
+      const item9 = checklistItems.find((cli: any) => cli.itemIndex === 9);
       if (item9?.subItemsJson) {
         try {
           const parsed = JSON.parse(item9.subItemsJson);
@@ -144,7 +145,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
         } catch (e) {}
       }
 
-      const item15 = data.checklistItems.find((cli: any) => cli.itemIndex === 15);
+      const item15 = checklistItems.find((cli: any) => cli.itemIndex === 15);
       if (item15?.subItemsJson) {
         try {
           const parsed = JSON.parse(item15.subItemsJson);
@@ -168,7 +169,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
 
-  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status) || access.mode === 'COURSE_COORDINATOR';
+  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status);
 
   const getSubItems = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
@@ -221,17 +222,27 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     }
   };
 
+  const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
+    .filter((criterion: any) => criterion && typeof criterion === 'object' && String(criterion.id || '').trim())
+    .map((criterion: any) => ({
+      ...criterion,
+      id: String(criterion.id),
+      label: String(criterion.label || 'Criterion'),
+      max: Number(criterion.max) || 0
+    }));
+
   const getMergedSubItems = (itemIndex: number) => {
     const item = checklist.find((entry) => entry.itemIndex === itemIndex);
     if (!item?.batchSubmissions) return getSubItems(itemIndex);
-    const submissions = item.batchSubmissions.map((entry: any) => {
+    const submissions = (Array.isArray(item.batchSubmissions) ? item.batchSubmissions : []).filter(Boolean).map((entry: any) => {
       try { return { batch: entry.batch, fileName: entry.fileName, fileUrl: entry.fileUrl, ...(entry.subItemsJson ? JSON.parse(entry.subItemsJson) : {}) }; } catch (e) { return { batch: entry.batch, fileName: entry.fileName, fileUrl: entry.fileUrl }; }
     });
     const base = submissions[0] || {};
-    if (itemIndex === 4) return { ...base, students: submissions.flatMap((entry: any) => (entry.students || []).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
+    if (itemIndex === 4) return { ...base, students: submissions.flatMap((entry: any) => (Array.isArray(entry.students) ? entry.students : []).filter(Boolean).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
     if (itemIndex === 8) {
-      const criteria = Array.from(new Map(submissions.flatMap((entry: any) => entry.criteria || []).map((criterion: any) => [criterion.id, criterion])).values());
-      return { ...base, criteria, students: submissions.flatMap((entry: any) => (entry.students || []).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
+      const criterionPairs = submissions.flatMap((entry: any) => (Array.isArray(entry.criteria) ? entry.criteria : []).filter(Boolean).filter((criterion: any) => String(criterion.id || '').trim()).map((criterion: any) => [String(criterion.id), criterion] as [string, any]));
+      const criteria = normalizeCriteria(Array.from(new Map(criterionPairs).values()));
+      return { ...base, criteria, students: submissions.flatMap((entry: any) => (Array.isArray(entry.students) ? entry.students : []).filter(Boolean).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
     }
     if (itemIndex === 2 || itemIndex === 7) return { batches: submissions };
     return base;
@@ -269,7 +280,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   const getStudentList = () => {
     const raw = getSubItems(4);
-    const students = Array.isArray(raw?.students) ? raw.students : [];
+    const students = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
     return students.map((student: any, index: number) => ({
       id: student.id || student.enrolmentNumber || student.rollNo || `student-${index}`,
       name: student.name || student.studentName || '',
@@ -279,22 +290,24 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   const syncStudentRows = (rows: any[] = [], criteria: any[] = []) => {
     const studentList = getStudentList();
-    const storedById = new Map(rows.map((row: any) => [row.studentId || row.enrolmentNumber, row]));
+    const safeRows = (Array.isArray(rows) ? rows : []).filter(Boolean);
+    const safeCriteria = normalizeCriteria(criteria);
+    const storedById = new Map(safeRows.map((row: any) => [row.studentId || row.enrolmentNumber, row]));
     
     // 1. Map auto-populated students from Item 4
     const autoRows = studentList.map((student: any) => {
       const previous = storedById.get(student.id) || storedById.get(student.enrolmentNumber) || {};
       const marks = { ...(previous.marks || {}) };
-      criteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
+      safeCriteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
       return { studentId: student.id, name: student.name, enrolmentNumber: student.enrolmentNumber, marks };
     });
 
     // 2. Map manually added students (those in rows that have isManual: true)
-    const manualRows = rows
+    const manualRows = safeRows
       .filter((row: any) => row.isManual)
       .map((row: any) => {
         const marks = { ...(row.marks || {}) };
-        criteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
+        safeCriteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
         return {
           studentId: row.studentId,
           name: row.name,
@@ -312,7 +325,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
-    if (!subs.criteria) {
+    if (!Array.isArray(subs.criteria) || subs.criteria.length === 0) {
       if (itemIndex === 8) {
         subs.criteria = [
           { id: 'term-work', label: 'Term Work', max: 20, fixed: true },
@@ -334,7 +347,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       isManual: true,
       batch: access.batch || 'A'
     };
-    subs.criteria.forEach((criterion: any) => {
+    normalizeCriteria(subs.criteria).forEach((criterion: any) => {
       newStudent.marks[criterion.id] = 0;
     });
     subs.students.push(newStudent);
@@ -394,7 +407,10 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     const subs = getSubItems(13) || {};
     subs.marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
     const row = subs.marks.find((entry: any) => entry.studentId === studentId);
-    if (row) row.marks['assignment-marks'] = Math.max(0, value || 0);
+    if (row) {
+      row.marks = row.marks && typeof row.marks === 'object' ? row.marks : {};
+      row.marks['assignment-marks'] = Math.max(0, value || 0);
+    }
     await saveStructuredItem(13, subs, 'UPLOADED');
     setChecklist((prev) => prev.map((item) => item.itemIndex === 13 ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
   };
@@ -1368,7 +1384,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   {/* Item 8: per-student Laboratory Rubrics */}
                   {isItem8 && (() => {
                     const subs = getMergedSubItems(8) || {};
-                    const criteria = subs.criteria || [];
+                    const criteria = normalizeCriteria(subs.criteria);
                     const rows = syncStudentRows(subs.students, criteria);
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
@@ -1414,7 +1430,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                                 </tr>
                               ) : (
                                 rows.map((row: any) => {
-                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0);
+                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0);
                                   return (
                                     <tr key={`${row.batch || 'A'}-${row.studentId}`}>
                                       <td className="fw-semibold">{row.batch || 'A'}</td>
@@ -1455,7 +1471,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                                             max={criterion.max}
                                             size="sm"
                                             className="text-center"
-                                            value={row.marks[criterion.id] ?? 0}
+                                            value={row.marks?.[criterion.id] ?? 0}
                                             disabled={isLocked || (access.mode === 'OWNER' && row.batch && row.batch !== 'A')}
                                             onChange={(e) => handleMarkChange(8, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
                                           />
@@ -1503,7 +1519,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   {/* Item 9: Continuous Evaluation Rubrics */}
                   {item.index === 9 && (() => {
                     const subs = getSubItems(9) || {};
-                    const criteria = subs.criteria || [];
+                    const criteria = normalizeCriteria(subs.criteria);
                     const rows = syncStudentRows(subs.students, criteria);
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
@@ -1548,7 +1564,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                                 </tr>
                               ) : (
                                 rows.map((row: any) => {
-                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0);
+                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0);
                                   return (
                                     <tr key={row.studentId}>
                                       <td className="text-start fw-semibold">
@@ -1588,7 +1604,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                                             max={criterion.max}
                                             size="sm"
                                             className="text-center"
-                                            value={row.marks[criterion.id] ?? 0}
+                                            value={row.marks?.[criterion.id] ?? 0}
                                             disabled={isLocked}
                                             onChange={(e) => handleMarkChange(9, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
                                           />
@@ -1798,9 +1814,9 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 {/* Items 11 & 12: live Mark Statement and Result Analysis from Item 9 */}
                 {isIA && !isRestricted && (() => {
                   const continuous = getSubItems(9) || {};
-                  const criteria = continuous.criteria || [];
+                  const criteria = normalizeCriteria(continuous.criteria);
                   const rows = syncStudentRows(continuous.students, criteria);
-                  const totals = rows.map((row: any) => criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0));
+                  const totals = rows.map((row: any) => criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0));
                   const markBands = ['below 12', '13–15', '16–18', '19–21', '22–24', '25–27', '28–30'];
                   const markCounts = markBands.map((band) => totals.filter((value: number) => band === 'below 12' ? value < 12 : band === '13–15' ? value >= 13 && value <= 15 : band === '16–18' ? value >= 16 && value <= 18 : band === '19–21' ? value >= 19 && value <= 21 : band === '22–24' ? value >= 22 && value <= 24 : band === '25–27' ? value >= 25 && value <= 27 : value >= 28 && value <= 30).length);
                   const percentageBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
@@ -2010,7 +2026,8 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   const subs = getSubItems(15) || { gradeSheet: null, students: [], hasSeparatePracticalGrade: false };
                   // Grade Sheet is rendered in the restored (b) card above; this block is (c) only.
                   subs.gradeSheet = null;
-                  const rows = getStudentList().map((student: any) => ({ ...((subs.students || []).find((entry: any) => entry.studentId === student.id) || {}), ...student }));
+                  const storedStudents = Array.isArray(subs.students) ? subs.students.filter(Boolean) : [];
+                  const rows = getStudentList().map((student: any) => ({ ...(storedStudents.find((entry: any) => entry.studentId === student.id) || {}), ...student }));
                   const grades = ['F', 'P', 'C', 'B', 'B+', 'A', 'A+', 'O'];
                   const theoryCounts = grades.map((grade) => rows.filter((row: any) => row.theoryGrade === grade).length);
                   const practicalCounts = grades.map((grade) => rows.filter((row: any) => row.practicalGrade === grade).length);
@@ -2213,7 +2230,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
               </thead>
               <tbody>
                 {rubricStudents.map((st, idx) => {
-                  const sum = practicalCols.reduce((acc, p) => acc + (st.scores[p] || 0), 0);
+                  const sum = practicalCols.reduce((acc, p) => acc + (Number(st?.scores?.[p]) || 0), 0);
                   const avg = practicalCols.length > 0 ? Math.round(sum / practicalCols.length) : 0;
                   return (
                     <tr key={idx}>
@@ -2232,7 +2249,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                             max={20}
                             size="sm"
                             className="text-center font-mono-ppsu px-1"
-                            value={st.scores[pCol] ?? 0}
+                            value={st.scores?.[pCol] ?? 0}
                             onChange={(e) => {
                               const copy = [...rubricStudents];
                               copy[idx].scores = { ...copy[idx].scores, [pCol]: parseInt(e.target.value) || 0 };

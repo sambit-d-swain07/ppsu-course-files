@@ -14,6 +14,9 @@ import {
   addNotification
 } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
+import { noStoreJson } from '@/lib/api-response';
+
+export const dynamic = 'force-dynamic';
 
 // ── DOCX generation helper ─────────────────────────────────────────────────
 async function generateEvaluationReport(courseFileId: string): Promise<string | null> {
@@ -157,14 +160,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   try {
     const { id } = await props.params;
     const token = req.cookies.get('ppsu_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await verifyToken(token);
-    if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const courseFile = await getCourseFileById(id);
     if (!courseFile) {
-      return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
+      return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     }
 
     const faculty = await getUserById(courseFile.facultyId);
@@ -175,15 +178,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
-        return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
+        return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId && !labBatch && !isSubjectCoordinator) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
     let checklist: any[];
     if (labBatch) {
-      const restrictedItems = await Promise.all([2, 4, 8, 14, 20].map(async (itemIndex) => {
+      const restrictedItems = await Promise.all([2, 4, 7, 8, 20].map(async (itemIndex) => {
         const submission = await getLabSubmission(id, labBatch, itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
@@ -194,7 +197,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       checklist = await getMergedChecklistItems(id);
     }
 
-    return NextResponse.json({
+    return noStoreJson({
       courseFile: {
         ...courseFile,
         faculty: faculty
@@ -215,12 +218,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 14, 20] } : { mode: 'OWNER' }
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8, 20] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
@@ -228,14 +231,14 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   try {
     const { id } = await props.params;
     const token = req.cookies.get('ppsu_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await verifyToken(token);
-    if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
     const courseFile = await getCourseFileById(id);
     if (!courseFile) {
-      return NextResponse.json({ error: 'Course file not found' }, { status: 404 });
+      return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     }
 
     const faculty = await getUserById(courseFile.facultyId);
@@ -243,20 +246,20 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
 
     if (!isCoordinator && courseFile.status === 'APPROVED') {
-      return NextResponse.json({ error: 'This approved course file is permanently locked.' }, { status: 409 });
+      return noStoreJson({ error: 'This approved course file is permanently locked.' }, { status: 409 });
     }
 
     if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
-      return NextResponse.json({ error: 'This review is already closed. The course file must be resubmitted before it can be reviewed again.' }, { status: 409 });
+      return noStoreJson({ error: 'This review is already closed. The course file must be resubmitted before it can be reviewed again.' }, { status: 409 });
     }
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
-        return NextResponse.json({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
+        return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -282,7 +285,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     } = body;
 
     if (!isCoordinator && status !== 'SUBMITTED' && status !== undefined) {
-      return NextResponse.json({ error: 'Faculty may only submit a completed course file.' }, { status: 403 });
+      return noStoreJson({ error: 'Faculty may only submit a completed course file.' }, { status: 403 });
     }
 
     const updates: any = {};
@@ -344,8 +347,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const updated = await getCourseFileById(id);
-    return NextResponse.json({ success: true, courseFile: updated });
+    return noStoreJson({ success: true, courseFile: updated });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return noStoreJson({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
