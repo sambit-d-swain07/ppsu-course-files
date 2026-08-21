@@ -59,6 +59,7 @@ export async function getCourseFileById(id: string) {
 }
 
 export async function getCourseFilesByFacultyId(facultyId: string) {
+  // Step 1: find all subjects this faculty is involved with — 1 query
   const subjects = await prisma.subject.findMany({
     where: {
       OR: [
@@ -71,18 +72,39 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
     }
   });
 
-  for (const subject of subjects) {
-    const existing = await prisma.courseFile.findFirst({ where: { subjectId: subject.id } });
-    if (!existing && subject.courseTeacherId) {
-      const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
-      if (teacher) {
-        await prisma.$transaction(async (tx) => {
-          await createSubjectCourseFile(tx, subject, teacher);
-        });
-      }
+  if (subjects.length > 0) {
+    // Step 2: batch-fetch which of those subjects already have a course file — 1 query (no N+1 loop)
+    const subjectIds = subjects.map((s) => s.id);
+    const existingFiles = await prisma.courseFile.findMany({
+      where: { subjectId: { in: subjectIds } },
+      select: { subjectId: true }
+    });
+    const existingSubjectIds = new Set(existingFiles.map((f) => f.subjectId));
+
+    // Step 3: only create missing ones — batch teacher lookup, then parallel creation
+    const missingSubjects = subjects.filter(
+      (s) => s.courseTeacherId && !existingSubjectIds.has(s.id)
+    );
+
+    if (missingSubjects.length > 0) {
+      const teacherIds = [...new Set(missingSubjects.map((s) => s.courseTeacherId!))];
+      const teachers = await prisma.user.findMany({
+        where: { id: { in: teacherIds } }
+      });
+      const teacherMap = new Map(teachers.map((t) => [t.id, t]));
+
+      // Create all missing course files in parallel transactions
+      await Promise.all(
+        missingSubjects.map((subject) => {
+          const teacher = teacherMap.get(subject.courseTeacherId!);
+          if (!teacher) return Promise.resolve();
+          return prisma.$transaction((tx) => createSubjectCourseFile(tx, subject, teacher));
+        })
+      );
     }
   }
 
+  // Step 4: final fetch with all includes — 1 query
   return prisma.courseFile.findMany({
     where: {
       OR: [
@@ -352,54 +374,36 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
 }
 
 export async function getCourseFileDetailWithChecklist(id: string) {
-  let file: any = await prisma.courseFile.findUnique({
-    where: { id },
-    include: {
-      faculty: true,
-      subject: {
-        include: subjectInclude
-      },
-      checklistItems: {
-        orderBy: { itemIndex: 'asc' }
-      },
-      labSubmissions: {
-        orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }]
-      }
-    }
-  });
+  const detailInclude = {
+    faculty: true,
+    subject: { include: subjectInclude },
+    checklistItems: { orderBy: { itemIndex: 'asc' as const } },
+    labSubmissions: { orderBy: [{ itemIndex: 'asc' as const }, { batch: 'asc' as const }] }
+  };
+
+  // Run both lookups (by courseFile.id AND by subjectId) in parallel — 1 network round-trip
+  const [byId, bySubjectId] = await Promise.all([
+    prisma.courseFile.findUnique({ where: { id }, include: detailInclude }),
+    prisma.courseFile.findFirst({ where: { subjectId: id }, include: detailInclude })
+  ]);
+
+  let file: any = byId ?? bySubjectId;
 
   if (!file) {
-    file = await prisma.courseFile.findFirst({
-      where: { subjectId: id },
-      include: {
-        faculty: true,
-        subject: {
-          include: subjectInclude
-        },
-        checklistItems: {
-          orderBy: { itemIndex: 'asc' }
-        },
-        labSubmissions: {
-          orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }]
-        }
-      }
-    });
-  }
-
-  if (!file) {
+    // Only fall back to subject-based auto-creation when neither lookup hit.
+    // Look up subject (which is 1 query — subject.id = id)
     const subject = await prisma.subject.findUnique({ where: { id } });
-    if (subject && subject.courseTeacherId) {
+    if (subject?.courseTeacherId) {
       const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
       if (teacher) {
-        await prisma.$transaction(async (tx) => {
-          return createSubjectCourseFile(tx, subject, teacher);
-        });
-        return getCourseFileDetailWithChecklist(id);
+        await prisma.$transaction((tx) => createSubjectCourseFile(tx, subject, teacher));
+        // After creation, fetch with full includes — exactly 1 more round-trip
+        file = await prisma.courseFile.findFirst({ where: { subjectId: id }, include: detailInclude });
       }
     }
   }
 
-  return file;
+  return file ?? null;
 }
 
 export async function getMergedChecklistItems(courseFileId: string) {

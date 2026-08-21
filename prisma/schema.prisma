@@ -99,6 +99,10 @@ model CourseFile {
 
   checklistItems ChecklistItem[]
   labSubmissions LabChecklistSubmission[]
+
+  @@index([facultyId])
+  @@index([status])
+  @@index([subjectId])
 }
 
 model ChecklistItem {
@@ -150,4 +154,7 @@ model Notification {
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, read])
 }
