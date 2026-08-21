@@ -249,6 +249,26 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (courseFileId) fetchData(); }, [courseFileId]);
 
+  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status);
+
+  const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
+    if (isLocked) return;
+    const clamped = Math.max(0, value || 0);
+    if (itemIndex === 8) {
+      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+    } else if (itemIndex === 9) {
+      setItem9Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+    }
+    const saveRows = itemIndex === 8 ? item8Rows : item9Rows;
+    const updatedRows = saveRows.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r);
+    if (saveTimeoutsRef.current[itemIndex]) clearTimeout(saveTimeoutsRef.current[itemIndex]);
+    saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
+      const subs = getSubItems(itemIndex) || {};
+      subs.students = updatedRows;
+      saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    }, 600);
+  }, [isLocked, item8Rows, item9Rows, checklist]);
+
   if (loading) return (
     <div className="d-flex justify-content-center py-5">
       <Spinner animation="border" style={{ color: 'var(--ppsu-primary)' }} />
@@ -256,8 +276,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   );
 
   if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
-
-  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status);
 
   const getSubItems = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
@@ -598,25 +616,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     fetchData();
   };
 
-  const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
-    if (isLocked) return;
-    const clamped = Math.max(0, value || 0);
-    // Update only the specific row in lifted state — O(1), no re-render of other rows
-    if (itemIndex === 8) {
-      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
-    } else if (itemIndex === 9) {
-      setItem9Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
-    }
-    // Debounce the API save — build updated subs from the existing stored subItemsJson
-    const saveRows = itemIndex === 8 ? item8Rows : item9Rows;
-    const updatedRows = saveRows.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r);
-    if (saveTimeoutsRef.current[itemIndex]) clearTimeout(saveTimeoutsRef.current[itemIndex]);
-    saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
-      const subs = getSubItems(itemIndex) || {};
-      subs.students = updatedRows;
-      saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    }, 600);
-  }, [isLocked, item8Rows, item9Rows, checklist]);
 
   const handleLabTeacherSubmit = async () => {
     if (isLocked || submitLoading) return;
