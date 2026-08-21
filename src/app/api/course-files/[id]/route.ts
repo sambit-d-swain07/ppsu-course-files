@@ -183,7 +183,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     let checklist: any[];
     if (labBatch) {
-      const restrictedItems = await Promise.all([2, 4, 7, 8].map(async (itemIndex) => {
+      const restrictedItems = await Promise.all([2, 4, 7, 8, 20].map(async (itemIndex) => {
         const submission = await getLabSubmission(id, labBatch, itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
@@ -215,7 +215,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8] } : { mode: 'OWNER' }
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8, 20] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });

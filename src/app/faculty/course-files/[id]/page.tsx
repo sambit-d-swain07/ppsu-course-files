@@ -28,6 +28,7 @@ const CHECKLIST_ITEMS = [
   { index: 19, name: 'Lecture notes', maxScore: 20 },
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
+const LAB_TEACHER_ITEM_INDICES = [2, 4, 7, 8, 20];
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -375,8 +376,13 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     setChecklist((prev) => prev.map((item) => item.itemIndex === 15 ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
   };
 
-  const completedCount = CHECKLIST_ITEMS.filter((item) => isItemComplete(item.index)).length;
-  const percent = Math.round((completedCount / 20) * 100);
+  const isLabTeacher = access.mode === 'LAB_BATCH';
+  const scopedChecklistItems = isLabTeacher
+    ? CHECKLIST_ITEMS.filter((item) => LAB_TEACHER_ITEM_INDICES.includes(item.index))
+    : CHECKLIST_ITEMS;
+  const checklistTotal = scopedChecklistItems.length;
+  const completedCount = scopedChecklistItems.filter((item) => isItemComplete(item.index)).length;
+  const percent = Math.round((completedCount / checklistTotal) * 100);
 
   const handleSaveHeader = async () => {
     if (isLocked) return;
@@ -988,7 +994,9 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   };
 
   const studentListUploaded = access.mode === 'OWNER' ? true : isItemComplete(4);
-  const visibleChecklistItems = access.mode === 'LAB_BATCH' ? CHECKLIST_ITEMS.filter((item) => access.allowedItems?.includes(item.index)) : CHECKLIST_ITEMS;
+  const visibleChecklistItems = access.mode === 'LAB_BATCH'
+    ? scopedChecklistItems.filter((item) => access.allowedItems?.includes(item.index))
+    : scopedChecklistItems;
 
   return (
     <div>
@@ -1119,7 +1127,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       {/* Course File Checklist Table */}
       <div className="card-custom p-0 overflow-hidden mb-4">
         <div className="px-4 py-3 d-flex justify-content-between align-items-center" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
-          <span className="fw-bold">Course File Checklist — 20 Particulars</span>
+          <span className="fw-bold">Course File Checklist — {checklistTotal} Particulars</span>
           <span style={{ fontSize: 12, opacity: 0.7 }}>Matched to Official PPSU Form</span>
         </div>
         <div className="px-4 py-2 small text-secondary bg-light border-bottom">* indicates a required item</div>
@@ -1697,7 +1705,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       </div>
 
       {/* SECTION 7: Faculty Submission Gate & Declaration */}
-      {!isLocked && (
+      {!isLocked && !isLabTeacher && (
         <Card className="card-custom border-0 shadow-sm mb-4">
           <Card.Header className="bg-white py-3 border-bottom">
             <h5 className="fw-bold text-navy-900 mb-0">Faculty Declaration & Submission Gate</h5>

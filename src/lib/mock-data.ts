@@ -135,7 +135,7 @@ export async function getSubjectForCourseFile(courseFileId: string) {
 }
 
 export function getLabBatchForUser(subject: any, userId: string) {
-  if (!subject || subject.courseTeacherId === userId) return null;
+  if (!subject || subject.courseTeacherId === userId || subject.courseCoordinatorId === userId) return null;
   if (subject.labTeacherAId === userId) return 'A';
   if (subject.labTeacherBId === userId) return 'B';
   if (subject.labTeacherCId === userId) return 'C';
