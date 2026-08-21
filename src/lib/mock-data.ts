@@ -30,10 +30,48 @@ export async function getUserById(id: string) {
 }
 export async function getCourseFiles() { return (await prisma.courseFile.findMany()).map(toCourseFile); }
 export async function getCourseFileById(id: string) {
-  const file = await prisma.courseFile.findUnique({ where: { id } });
+  let file = await prisma.courseFile.findUnique({ where: { id } });
+  if (!file) {
+    file = await prisma.courseFile.findFirst({ where: { subjectId: id } });
+  }
+  if (!file) {
+    const subject = await prisma.subject.findUnique({ where: { id } });
+    if (subject && subject.courseTeacherId) {
+      const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
+      if (teacher) {
+        file = await prisma.$transaction(async (tx) => {
+          return createSubjectCourseFile(tx, subject, teacher);
+        });
+      }
+    }
+  }
   return file ? toCourseFile(file) : undefined;
 }
 export async function getCourseFilesByFacultyId(facultyId: string) {
+  const subjects = await prisma.subject.findMany({
+    where: {
+      OR: [
+        { courseTeacherId: facultyId },
+        { courseCoordinatorId: facultyId },
+        { labTeacherAId: facultyId },
+        { labTeacherBId: facultyId },
+        { labTeacherCId: facultyId }
+      ]
+    }
+  });
+
+  for (const subject of subjects) {
+    const existing = await prisma.courseFile.findFirst({ where: { subjectId: subject.id } });
+    if (!existing && subject.courseTeacherId) {
+      const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
+      if (teacher) {
+        await prisma.$transaction(async (tx) => {
+          await createSubjectCourseFile(tx, subject, teacher);
+        });
+      }
+    }
+  }
+
   return (await prisma.courseFile.findMany({ where: {
     OR: [
       { facultyId },

@@ -1224,7 +1224,16 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {actionError && <Alert variant="danger" dismissible onClose={() => setActionError('')}>{actionError}</Alert>}
+      {actionError && (
+        <Alert variant="danger" dismissible onClose={() => setActionError('')} className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div>{actionError}</div>
+          {actionError.toLowerCase().includes('not found') && (
+            <Link href="/faculty/my-courses" className="btn btn-outline-danger btn-sm fw-bold">
+              ← Return to My Courses
+            </Link>
+          )}
+        </Alert>
+      )}
       {actionSuccess && <Alert variant="success" dismissible onClose={() => setActionSuccess('')}>{actionSuccess}</Alert>}
 
       {access.mode === 'LAB_BATCH' && (
