@@ -328,7 +328,6 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       const criteria = normalizeCriteria(Array.from(new Map(criterionPairs).values()));
       return { ...base, criteria, students: submissions.flatMap((entry: any) => (Array.isArray(entry.students) ? entry.students : []).filter(Boolean).map((student: any) => ({ ...student, batch: entry.batch }))), batches: submissions };
     }
-    if (itemIndex === 2 || itemIndex === 7) return { batches: submissions };
     return base;
   };
 
@@ -691,12 +690,13 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   // Standard upload handler (converts file to real Data URL)
   const handleUpload = async (itemIndex: number, itemName: string, selectedFile?: File) => {
     if (isLocked) return;
+    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(itemIndex)) return;
     setActionError(''); setActionSuccess('');
     if (!selectedFile) return;
 
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
-      const isSig = itemIndex === 20;
+      const isSig = itemIndex === 20 && access.mode !== 'LAB_BATCH';
       let studentListJson: string | undefined;
       if (itemIndex === 4 && /\.(csv|txt)$/i.test(selectedFile.name)) {
         const lines = (await selectedFile.text()).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -737,6 +737,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
   const handleRemove = async (itemIndex: number) => {
     if (isLocked) return;
+    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(itemIndex)) return;
     setActionError(''); setActionSuccess('');
     try {
       const res = await fetch(`/api/checklist/${courseFileId}`, {
@@ -1499,10 +1500,6 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                         </div>
                       )}
 
-                      {(item.index === 2 || item.index === 7) && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
-                        const batches = getMergedSubItems(item.index)?.batches || [];
-                        return batches.length > 1 ? <div className="mt-2 small"><strong>Batch-wise submissions</strong>{batches.map((batch: any) => <div key={batch.batch} className="border rounded p-2 mt-1"><span className="fw-semibold">Batch {batch.batch}</span> — {batch.students?.length || batch.file?.fileName || batch.fileName ? 'Submitted' : 'Pending'}</div>)}</div> : null;
-                      })()}
 
                       {/* Single upload complete indicator */}
                       {!isItem1 && !isItem8 && !isIA && !isUniv && complete && !isRestricted && (
