@@ -176,14 +176,23 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     const faculty = courseFile.faculty;
     const subject = courseFile.subject;
     const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
+    const isOwner = courseFile.facultyId === payload.userId;
+    const isCourseTeacher = subject?.courseTeacherId === payload.userId;
     const isSubjectCoordinator = payload.role === 'FACULTY' && subject?.courseCoordinatorId === payload.userId;
+    const isLabTeacher = Boolean(
+      subject && (
+        subject.labTeacherAId === payload.userId ||
+        subject.labTeacherBId === payload.userId ||
+        subject.labTeacherCId === payload.userId
+      )
+    );
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
-    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId && !labBatch && !isSubjectCoordinator) {
+    } else if (payload.role === 'FACULTY' && !isOwner && !isCourseTeacher && !isSubjectCoordinator && !isLabTeacher) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -286,12 +295,23 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'This course file has already been approved and is locked.' }, { status: 409 });
     }
 
+    const isOwner = courseFile.facultyId === payload.userId;
+    const isCourseTeacher = subject?.courseTeacherId === payload.userId;
+    const isCourseCoordinator = subject?.courseCoordinatorId === payload.userId;
+    const isLabTeacher = Boolean(
+      subject && (
+        subject.labTeacherAId === payload.userId ||
+        subject.labTeacherBId === payload.userId ||
+        subject.labTeacherCId === payload.userId
+      )
+    );
+
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
-    } else if (payload.role === 'FACULTY' && courseFile.facultyId !== payload.userId) {
+    } else if (payload.role === 'FACULTY' && !isOwner && !isCourseTeacher && !isCourseCoordinator && !isLabTeacher) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
