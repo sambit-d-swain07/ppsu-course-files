@@ -339,26 +339,30 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
       const subs = getSubItems(1);
       return !!(subs?.vision?.fileName && subs?.mission?.fileName && subs?.peo?.fileName && subs?.pso?.fileName && subs?.po?.fileName);
     }
+    if (itemIndex === 4) {
+      const subs = getSubItems(4);
+      return Boolean(subs?.students?.length || dbItem.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
+    }
     if (itemIndex === 8) {
       const subs = getSubItems(8);
-      return Boolean(subs?.students?.length && subs?.criteria?.length);
+      return Boolean(subs?.students?.length && subs?.criteria?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 9) {
       const subs = getSubItems(9);
-      return Boolean(subs?.students?.length && subs?.criteria?.length);
+      return Boolean(subs?.students?.length && subs?.criteria?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 11 || itemIndex === 12) {
-      return Boolean(getSubItems(9)?.students?.length || getSubItems(itemIndex)?.file?.fileName);
+      return Boolean(getSubItems(9)?.students?.length || getSubItems(itemIndex)?.file?.fileName) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 13) {
       const subs = getSubItems(13);
-      return Boolean(subs?.assignmentTopics?.length && (subs?.sampleAssignment?.fileName || subs?.marks?.length || subs?.marksFile?.fileName));
+      return Boolean(subs?.assignmentTopics?.length && (subs?.sampleAssignment?.fileName || subs?.marks?.length || subs?.marksFile?.fileName)) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 15) {
       const subs = getSubItems(15);
-      return Boolean(subs?.gradeSheet?.fileName && subs?.students?.length);
+      return Boolean(subs?.gradeSheet?.fileName && subs?.students?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
-    return dbItem.status === 'UPLOADED';
+    return dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || Boolean(dbItem.fileName);
   };
 
   const getStudentList = () => {
@@ -2376,6 +2380,36 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 {submitLoading
                   ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
                   : courseFile.status === 'NEEDS_REVISION' ? 'Resubmit for Review' : 'Submit for Review'}
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* Lab Teacher Submission Gate */}
+      {!isLocked && isLabTeacher && (
+        <Card className="card-custom border-0 shadow-sm mb-4" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
+          <Card.Header className="bg-transparent py-3 border-bottom">
+            <h5 className="fw-bold text-success mb-0">Batch {access.batch} Lab Teacher Submission Gate</h5>
+          </Card.Header>
+          <Card.Body>
+            <p className="text-secondary small mb-3">
+              Submit your Batch {access.batch} lab data (Items 2, 4, 8, 9, 14). This will automatically merge your student list and rubric marks into the Course Teacher and Coordinator views.
+            </p>
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
+              <div className="small text-secondary">
+                <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/5</span> assigned lab items completed.
+              </div>
+              <Button
+                id="btn-submit-lab-batch-bottom"
+                variant="success"
+                className="px-4 py-2 fw-bold"
+                disabled={submitLoading}
+                onClick={handleLabTeacherSubmit}
+              >
+                {submitLoading
+                  ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
+                  : `✓ Submit Batch ${access.batch} Data`}
               </Button>
             </div>
           </Card.Body>
