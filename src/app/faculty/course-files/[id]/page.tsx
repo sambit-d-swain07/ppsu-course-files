@@ -1417,7 +1417,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                         </div>
                       )}
 
-                      {(item.index === 2 || item.index === 4 || item.index === 7) && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
+                      {(item.index === 2 || item.index === 7) && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
                         const batches = getMergedSubItems(item.index)?.batches || [];
                         return batches.length > 1 ? <div className="mt-2 small"><strong>Batch-wise submissions</strong>{batches.map((batch: any) => <div key={batch.batch} className="border rounded p-2 mt-1"><span className="fw-semibold">Batch {batch.batch}</span> — {batch.students?.length || batch.file?.fileName || batch.fileName ? 'Submitted' : 'Pending'}</div>)}</div> : null;
                       })()}
@@ -1792,8 +1792,79 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                     );
                   })()}
 
+                  {/* Item 4: Merged / unified student list for Course Teacher & Coordinator */}
+                  {item.index === 4 && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
+                    const mergedStudents = getStudentList();
+                    const item4Db = checklist.find((c: any) => c.itemIndex === 4);
+                    const uploadedFile = item4Db?.fileName;
+                    const uploadedFileUrl = item4Db?.fileUrl;
+                    return (
+                      <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="small text-secondary fw-semibold">
+                            Combined Class List
+                            {mergedStudents.length > 0 && (
+                              <span className="ms-2 badge bg-primary text-white" style={{ fontSize: 11 }}>
+                                {mergedStudents.length} students
+                              </span>
+                            )}
+                          </span>
+                          {!isLocked && (
+                            <label className="btn btn-outline-secondary btn-sm" style={{ fontSize: 11 }}>
+                              {uploadedFile ? 'Replace CSV' : '↑ Upload CSV / PDF'}
+                              <input type="file" className="d-none" accept=".csv,.txt,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(4, 'Student Name List', f); e.currentTarget.value = ''; }} />
+                            </label>
+                          )}
+                        </div>
+
+                        {uploadedFile && (
+                          <div className="d-flex align-items-center gap-2 small mb-2">
+                            <span className="text-success fw-semibold">✓ {uploadedFile}</span>
+                            <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }}
+                              onClick={() => setViewingDoc({ title: 'Student Name List', fileName: uploadedFile, fileUrl: uploadedFileUrl })}>
+                              View
+                            </Button>
+                            {!isLocked && (
+                              <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                onClick={() => handleRemove(4)}>
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        {mergedStudents.length > 0 ? (
+                          <div className="table-responsive border rounded">
+                            <Table bordered size="sm" className="small align-middle mb-0" style={{ minWidth: 420 }}>
+                              <thead className="bg-light">
+                                <tr>
+                                  <th style={{ width: 36 }}>#</th>
+                                  <th>Student Name</th>
+                                  <th>Enrolment Number</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {mergedStudents.map((student: any, idx: number) => (
+                                  <tr key={student.id}>
+                                    <td className="text-muted font-mono-ppsu">{idx + 1}</td>
+                                    <td className="fw-semibold">{student.name}</td>
+                                    <td className="font-mono-ppsu">{student.enrolmentNumber}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <div className="alert alert-light small py-2 mb-0">
+                            No students yet. Upload a CSV file above, or Lab Teachers can submit their batch lists to auto-populate this list.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && (
+                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 9 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {false && item.index === 9 && (
                         <Button
