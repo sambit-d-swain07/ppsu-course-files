@@ -1377,6 +1377,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                           <Col xs={12} md={4} key={sub.key}>
                             <div className="p-2 bg-light rounded border">
                               <div className="fw-bold mb-1">{sub.label}</div>
+                              {sub.key === 'gradeSheet' && <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />}
                               {subData?.fileName ? (
                                 <div>
                                   <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
@@ -1412,14 +1413,13 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 )}
 
                 {/* SECTION 26: IA 1 & 2 */}
-                {false && isIA && (
+                {isIA && (
                   <div className="mt-3 ps-4 border-start border-2 border-primary ms-2">
                     <Row className="g-2 small">
                       {[
                         { key: 'timetable', label: '(a) Timetable *' },
                         { key: 'questionPaper', label: '(b) Question Paper *' },
                         { key: 'sampleAnswerSheet', label: '(c) Sample Answer Sheet *' },
-                        { key: 'markStatement', label: '(d) Mark Statement & Result Analysis *' }
                       ].map((sub) => {
                         const subData = getSubItems(item.index)?.[sub.key];
                         return (
@@ -1625,20 +1625,20 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 })()}
 
                 {/* SECTION 2 & 16: University Exam Sub-uploads */}
-                {false && isUniv && (
+                {isUniv && (
                   <div className="mt-3 ps-4 border-start border-2 border-warning ms-2">
                     <div className="small text-secondary mb-2 fw-semibold">3 Compulsory Sub-uploads Required:</div>
                     <Row className="g-2 small">
                       {[
                         { key: 'questionPaper', label: '(a) Question Paper' },
                         { key: 'gradeSheet', label: '(b) Grade Sheet' },
-                        { key: 'resultAnalysis', label: '(c) Result Analysis' }
                       ].map((sub) => {
                         const subData = getSubItems(15)?.[sub.key];
                         return (
                           <Col xs={12} md={4} key={sub.key}>
                             <div className="p-2 bg-light rounded border">
                               <div className="fw-bold mb-1">{sub.label}</div>
+                              {sub.key === 'gradeSheet' && <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />}
                               {subData?.fileName ? (
                                 <div>
                                   <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
@@ -1673,9 +1673,11 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   </div>
                 )}
 
-                {/* Item 15: University Exam Grade Sheet and Grade Distribution */}
+                {/* Item 15(c): University Exam Result Analysis — the existing auto-derived block follows. */}
                 {isUniv && (() => {
                   const subs = getSubItems(15) || { gradeSheet: null, students: [], hasSeparatePracticalGrade: false };
+                  // Grade Sheet is rendered in the restored (b) card above; this block is (c) only.
+                  subs.gradeSheet = null;
                   const rows = getStudentList().map((student: any) => ({ ...((subs.students || []).find((entry: any) => entry.studentId === student.id) || {}), ...student }));
                   const grades = ['F', 'P', 'C', 'B', 'B+', 'A', 'A+', 'O'];
                   const theoryCounts = grades.map((grade) => rows.filter((row: any) => row.theoryGrade === grade).length);
