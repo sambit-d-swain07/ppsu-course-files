@@ -205,6 +205,7 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={false}
                 className={`sidebar-nav-link ${isActive ? 'active' : ''}`}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -273,19 +274,19 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
                       </div>
                     </div>
 
-                    <Link href="/coordinator/profile" className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
+                    <Link href="/coordinator/profile" prefetch={false} className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                       My Profile
                     </Link>
-                    <Link href="/coordinator/my-faculty" className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
+                    <Link href="/coordinator/my-faculty" prefetch={false} className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                       Assigned Faculty
                     </Link>
-                    <Link href="/coordinator/reports" className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
+                    <Link href="/coordinator/reports" prefetch={false} className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>

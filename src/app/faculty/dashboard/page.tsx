@@ -236,6 +236,7 @@ export default function FacultyDashboard() {
                     <div className="d-flex gap-2">
                       <Link
                         href={`/faculty/course-files/${course.id}`}
+                        prefetch={false}
                         className="btn btn-ppsu-navy btn-sm flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 py-2"
                       >
                         <span>Checklist Form</span>
@@ -245,6 +246,7 @@ export default function FacultyDashboard() {
                       </Link>
                       <Link
                         href={`/report/${course.id}`}
+                        prefetch={false}
                         className="btn btn-outline-secondary btn-sm py-2 px-2.5"
                         title="Print / View Report"
                       >

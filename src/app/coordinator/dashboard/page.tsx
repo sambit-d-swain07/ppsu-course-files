@@ -233,6 +233,7 @@ export default function CoordinatorDashboard() {
             <Col xs={12} md={4} className="text-md-end d-flex flex-column align-items-md-end gap-2">
               <Link
                 href={`/coordinator/review/${selectedCourse.id}`}
+                prefetch={false}
                 className="btn btn-ppsu-navy py-2 px-4 text-decoration-none"
               >
                 Open Evaluation →
@@ -258,7 +259,7 @@ export default function CoordinatorDashboard() {
             <h5 className="fw-bold text-navy-900 mb-0">My Assigned Faculty</h5>
             <p className="text-secondary small mb-0 mt-0.5">Faculty members allocated to you for academic review.</p>
           </div>
-          <Link href="/coordinator/my-faculty" className="btn btn-sm btn-outline-primary fw-semibold">View Directory</Link>
+          <Link href="/coordinator/my-faculty" prefetch={false} className="btn btn-sm btn-outline-primary fw-semibold">View Directory</Link>
         </div>
         <div className="p-0"><AssignedFacultyList faculty={assignedFaculty} /></div>
       </div>
@@ -304,6 +305,7 @@ export default function CoordinatorDashboard() {
                 </div>
                 <Link
                   href={`/coordinator/review/${cf.id}`}
+                  prefetch={false}
                   className="btn btn-ppsu-accent btn-sm px-3 py-1.5 fw-semibold"
                 >
                   Review →

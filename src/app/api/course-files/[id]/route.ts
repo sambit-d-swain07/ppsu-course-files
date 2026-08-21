@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import {
   getCourseFileById,
+  getCourseFileDetailWithChecklist,
+  mergeChecklistItemsInMemory,
   getChecklistItemsByCourseFileId,
   getUserById,
   getSubjectById,
@@ -165,13 +167,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     const payload = await verifyToken(token);
     if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
-    const courseFile = await getCourseFileById(id);
+    // Ultra-fast single database round-trip fetching courseFile, faculty, subject, checklistItems, and labSubmissions
+    const courseFile = await getCourseFileDetailWithChecklist(id);
     if (!courseFile) {
       return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     }
 
-    const faculty = await getUserById(courseFile.facultyId);
-    const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
+    const faculty = courseFile.faculty;
+    const subject = courseFile.subject;
     const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
     const isSubjectCoordinator = payload.role === 'FACULTY' && subject?.courseCoordinatorId === payload.userId;
 
@@ -186,20 +189,50 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     let checklist: any[];
     if (labBatch) {
-      const restrictedItems = await Promise.all([2, 4, 8, 9, 14].map(async (itemIndex) => {
-        const submission = await getLabSubmission(id, labBatch, itemIndex);
+      const submissions = courseFile.labSubmissions || [];
+      checklist = [2, 4, 8, 9, 14].map((itemIndex) => {
+        const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
           : { itemIndex, status: 'EMPTY', batch: labBatch, subItemsJson: JSON.stringify({ batch: labBatch }) };
-      }));
-      checklist = restrictedItems;
+      });
     } else {
-      checklist = await getMergedChecklistItems(id);
+      checklist = mergeChecklistItemsInMemory(
+        courseFile.checklistItems || [],
+        courseFile.labSubmissions || [],
+        subject
+      );
     }
 
     return noStoreJson({
       courseFile: {
-        ...courseFile,
+        id: courseFile.id,
+        courseCode: courseFile.courseCode,
+        courseTitle: courseFile.courseTitle,
+        semester: courseFile.semester,
+        academicYear: courseFile.academicYear,
+        progress: courseFile.progress,
+        status: courseFile.status,
+        facultyId: courseFile.facultyId,
+        facultyName: courseFile.facultyName,
+        department: courseFile.department,
+        school: courseFile.school,
+        division: courseFile.division,
+        subjectId: courseFile.subjectId,
+        createdAt: courseFile.createdAt?.toISOString ? courseFile.createdAt.toISOString() : courseFile.createdAt,
+        lastUpdated: courseFile.lastUpdated?.toISOString ? courseFile.lastUpdated.toISOString() : courseFile.lastUpdated,
+        facultySignatureName: courseFile.facultySignatureName,
+        facultySignatureUrl: courseFile.facultySignatureUrl,
+        facultySignedAt: courseFile.facultySignedAt?.toISOString ? courseFile.facultySignedAt.toISOString() : courseFile.facultySignedAt,
+        facultyConfirmed: courseFile.facultyConfirmed,
+        reviewerSignatureName: courseFile.reviewerSignatureName,
+        reviewerSignatureUrl: courseFile.reviewerSignatureUrl,
+        reviewerSignedAt: courseFile.reviewerSignedAt?.toISOString ? courseFile.reviewerSignedAt.toISOString() : courseFile.reviewerSignedAt,
+        reviewerConfirmed: courseFile.reviewerConfirmed,
+        totalScore: courseFile.totalScore,
+        rating: courseFile.rating,
+        coordinatorRemarks: courseFile.coordinatorRemarks,
+        generatedReportPath: courseFile.generatedReportPath,
         faculty: faculty
           ? {
               id: faculty.id,

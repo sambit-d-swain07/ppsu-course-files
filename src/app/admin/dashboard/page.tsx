@@ -257,7 +257,7 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="text-end px-4">
-                            <Link href={`/report/${cf.id}`} className="btn btn-outline-primary btn-sm">
+                            <Link href={`/report/${cf.id}`} prefetch={false} className="btn btn-outline-primary btn-sm">
                               Print Report
                             </Link>
                           </td>

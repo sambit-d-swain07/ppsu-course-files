@@ -114,6 +114,7 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
                           </span>
                           <Link
                             href={`/coordinator/review/${file.id}`}
+                            prefetch={false}
                             className="btn btn-sm py-0.5 px-2 fw-semibold"
                             style={{
                               background: 'var(--ppsu-accent)',

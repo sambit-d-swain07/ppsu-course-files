@@ -28,7 +28,17 @@ export async function getUserById(id: string) {
   const user = await prisma.user.findUnique({ where: { id } });
   return user ? toUser(user) : undefined;
 }
-export async function getCourseFiles() { return (await prisma.courseFile.findMany()).map(toCourseFile); }
+
+export async function getCourseFiles() {
+  return prisma.courseFile.findMany({
+    include: {
+      faculty: true,
+      subject: { include: subjectInclude }
+    },
+    orderBy: { lastUpdated: 'desc' }
+  });
+}
+
 export async function getCourseFileById(id: string) {
   let file = await prisma.courseFile.findUnique({ where: { id } });
   if (!file) {
@@ -47,6 +57,7 @@ export async function getCourseFileById(id: string) {
   }
   return file ? toCourseFile(file) : undefined;
 }
+
 export async function getCourseFilesByFacultyId(facultyId: string) {
   const subjects = await prisma.subject.findMany({
     where: {
@@ -72,13 +83,21 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
     }
   }
 
-  return (await prisma.courseFile.findMany({ where: {
-    OR: [
-      { facultyId },
-      { subject: { OR: [{ courseCoordinatorId: facultyId }, { labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
-    ]
-  } })).map(toCourseFile);
+  return prisma.courseFile.findMany({
+    where: {
+      OR: [
+        { facultyId },
+        { subject: { OR: [{ courseCoordinatorId: facultyId }, { labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
+      ]
+    },
+    include: {
+      faculty: true,
+      subject: { include: subjectInclude }
+    },
+    orderBy: { lastUpdated: 'desc' }
+  });
 }
+
 export async function getCourseFileStatusCountsByFaculty() {
   const grouped = await prisma.courseFile.groupBy({
     by: ['facultyId', 'status'],
@@ -93,15 +112,21 @@ export async function getCourseFileStatusCountsByFaculty() {
     return counts;
   }, {});
 }
+
 export async function getCourseFilesForCoordinator(coordinatorId: string) {
-  return (await prisma.courseFile.findMany({
+  return prisma.courseFile.findMany({
     where: {
       OR: [
         { subject: { evaluatorId: coordinatorId } },
         { subjectId: null, faculty: { assignedCoordinatorId: coordinatorId } }
       ]
-    }
-  })).map(toCourseFile);
+    },
+    include: {
+      faculty: true,
+      subject: { include: subjectInclude }
+    },
+    orderBy: { lastUpdated: 'desc' }
+  });
 }
 
 export async function getAssignedFacultySummary(coordinatorId: string) {
@@ -256,6 +281,125 @@ function withBatchJson(item: any, batch: string, facultyName?: string) {
   let parsed: any = {};
   try { parsed = item?.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
   return { ...item, batch, facultyName, subItemsJson: JSON.stringify({ ...parsed, batch }) };
+}
+
+export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any) {
+  const facultyNames = new Map<string, string>();
+  if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
+  if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
+  if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
+  return items.map((item: any) => {
+    if (![4, 8, 9].includes(item.itemIndex)) return item;
+    const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
+    const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
+    const existingBatches = new Set(related.map((submission: any) => submission.batch));
+    const pending = assignedBatches.filter((batch) => !existingBatches.has(batch)).map((batch) => ({ batch, status: 'PENDING', subItemsJson: JSON.stringify({ batch, pending: true }), facultyName: facultyNames.get(batch) }));
+    
+    const batchSubmissions = [
+      withBatchJson(item, 'A', facultyNames.get('A')),
+      ...related.map((submission: any) => withBatchJson(submission, submission.batch, facultyNames.get(submission.batch))),
+      ...pending
+    ];
+
+    // For Item 4, auto-merge all batch student lists into one combined list in subItemsJson
+    let subItemsJson = item.subItemsJson;
+    if (item.itemIndex === 4) {
+      let combinedStudents: any[] = [];
+      const seenIds = new Set();
+
+      const parseStudents = (jsonStr?: string) => {
+        if (!jsonStr) return [];
+        try {
+          const parsed = JSON.parse(jsonStr);
+          return Array.isArray(parsed.students) ? parsed.students : [];
+        } catch (e) {
+          return [];
+        }
+      };
+
+      // Add main/Course Teacher item students first
+      parseStudents(item.subItemsJson).forEach((st: any) => {
+        const id = st.id || st.enrolmentNumber;
+        if (id && !seenIds.has(id)) {
+          seenIds.add(id);
+          combinedStudents.push(st);
+        }
+      });
+
+      // Add lab batch submissions students
+      related.forEach((sub: any) => {
+        parseStudents(sub.subItemsJson).forEach((st: any) => {
+          const id = st.id || st.enrolmentNumber;
+          if (id && !seenIds.has(id)) {
+            seenIds.add(id);
+            combinedStudents.push(st);
+          }
+        });
+      });
+
+      let existingSubItems: any = {};
+      try { existingSubItems = item.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) {}
+      subItemsJson = JSON.stringify({ ...existingSubItems, students: combinedStudents });
+    }
+
+    return {
+      ...item,
+      subItemsJson,
+      batchSubmissions,
+      merged: true
+    };
+  });
+}
+
+export async function getCourseFileDetailWithChecklist(id: string) {
+  let file: any = await prisma.courseFile.findUnique({
+    where: { id },
+    include: {
+      faculty: true,
+      subject: {
+        include: subjectInclude
+      },
+      checklistItems: {
+        orderBy: { itemIndex: 'asc' }
+      },
+      labSubmissions: {
+        orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }]
+      }
+    }
+  });
+
+  if (!file) {
+    file = await prisma.courseFile.findFirst({
+      where: { subjectId: id },
+      include: {
+        faculty: true,
+        subject: {
+          include: subjectInclude
+        },
+        checklistItems: {
+          orderBy: { itemIndex: 'asc' }
+        },
+        labSubmissions: {
+          orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }]
+        }
+      }
+    });
+  }
+
+  if (!file) {
+    const subject = await prisma.subject.findUnique({ where: { id } });
+    if (subject && subject.courseTeacherId) {
+      const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
+      if (teacher) {
+        await prisma.$transaction(async (tx) => {
+          return createSubjectCourseFile(tx, subject, teacher);
+        });
+        return getCourseFileDetailWithChecklist(id);
+      }
+    }
+  }
+
+  return file;
 }
 
 export async function getMergedChecklistItems(courseFileId: string) {
