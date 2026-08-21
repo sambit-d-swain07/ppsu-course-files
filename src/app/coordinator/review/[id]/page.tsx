@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { Row, Col, Spinner, Alert, Form, ProgressBar, Table, Card, Button, Badge, Modal } from 'react-bootstrap';
 import Link from 'next/link';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
@@ -75,9 +75,10 @@ function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
-export default function CoordinatorReview({ params }: { params: Promise<{ id: string }> }) {
-  const { id: courseFileId } = use(params);
+export default function CoordinatorReview() {
   const router = useRouter();
+  const urlParams = useParams();
+  const courseFileId = Array.isArray(urlParams?.id) ? urlParams.id[0] : (urlParams?.id as string);
 
   const [courseFile, setCourseFile] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);

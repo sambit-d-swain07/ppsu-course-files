@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, use, memo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
@@ -66,9 +66,10 @@ const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : []
     max: Number(criterion.max) || 0
   }));
 
-export default function FacultyCourseFileDetail({ params }: { params: Promise<{ id: string }> }) {
+export default function FacultyCourseFileDetail() {
   const router = useRouter();
-  const { id: courseFileId } = use(params);
+  const urlParams = useParams();
+  const courseFileId = Array.isArray(urlParams?.id) ? urlParams.id[0] : (urlParams?.id as string);
   const [courseFile, setCourseFile] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
