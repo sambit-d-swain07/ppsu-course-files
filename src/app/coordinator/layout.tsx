@@ -60,6 +60,8 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
     pageTitle = 'Pending Reviews';
   } else if (pathname.includes('/completed-reviews')) {
     pageTitle = 'Completed Reviews';
+  } else if (pathname.includes('/my-faculty')) {
+    pageTitle = 'My Assigned Faculty';
   } else if (pathname.includes('/reports')) {
     pageTitle = 'Evaluation Reports';
   } else if (pathname.includes('/notifications')) {

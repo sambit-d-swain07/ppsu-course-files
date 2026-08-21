@@ -67,10 +67,24 @@ export async function getCourseFilesForCoordinator(coordinatorId: string) {
 }
 
 export async function getAssignedFacultySummary(coordinatorId: string) {
+  const subjects = await prisma.subject.findMany({
+    where: { evaluatorId: coordinatorId }
+  });
+  const subjectFacultyIds = subjects
+    .map((s) => s.courseCoordinatorId)
+    .filter((id): id is string => Boolean(id));
+
   const faculty = await prisma.user.findMany({
-    where: { role: 'FACULTY', assignedCoordinatorId: coordinatorId },
+    where: {
+      role: 'FACULTY',
+      OR: [
+        { assignedCoordinatorId: coordinatorId },
+        ...(subjectFacultyIds.length ? [{ id: { in: subjectFacultyIds } }] : [])
+      ]
+    },
     orderBy: { name: 'asc' }
   });
+
   const courseFiles = faculty.length
     ? await prisma.courseFile.findMany({
         where: { facultyId: { in: faculty.map((member) => member.id) } },
@@ -91,12 +105,16 @@ export async function getAssignedFacultySummary(coordinatorId: string) {
       name: member.name,
       employeeId: member.employeeId,
       department: member.department,
+      school: member.school,
+      designation: member.designation,
       totalCourseFiles: files.length,
       statusCounts,
       courseFiles: files.map((file) => ({
         id: file.id,
         courseCode: file.courseCode,
         courseTitle: file.courseTitle,
+        semester: file.semester,
+        academicYear: file.academicYear,
         status: file.status,
         lastUpdated: file.lastUpdated
       }))

@@ -21,8 +21,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const subject = await getSubjectForCourseFile(courseFileId);
     const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
 
-    if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
-      return noStoreJson({ error: 'This review is already closed.' }, { status: 409 });
+    if (payload.role === 'COORDINATOR' && courseFile.status === 'APPROVED') {
+      return noStoreJson({ error: 'This course file has already been approved and is locked.' }, { status: 409 });
     }
 
     const body = await req.json();
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
       return noStoreJson({ error: 'This course file is locked after submission.' }, { status: 409 });
     }
     if (labBatch && ![2, 4, 8, 14, 20].includes(Number(itemIndex))) {
-      return noStoreJson({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, 7, 8, and 20.` }, { status: 403 });
+      return noStoreJson({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, 8, 14, and 20.` }, { status: 403 });
     }
     if (!isCoordinator && (score !== undefined || remarks !== undefined)) {
       return noStoreJson({ error: 'Only coordinators can score checklist items.' }, { status: 403 });

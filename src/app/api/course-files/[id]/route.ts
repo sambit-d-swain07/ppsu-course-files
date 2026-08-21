@@ -186,7 +186,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     let checklist: any[];
     if (labBatch) {
-      const restrictedItems = await Promise.all([2, 4, 7, 8, 20].map(async (itemIndex) => {
+      const restrictedItems = await Promise.all([2, 4, 8, 14, 20].map(async (itemIndex) => {
         const submission = await getLabSubmission(id, labBatch, itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
@@ -218,7 +218,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8, 20] } : { mode: 'OWNER' }
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 14, 20] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });
@@ -249,8 +249,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'This approved course file is permanently locked.' }, { status: 409 });
     }
 
-    if (payload.role === 'COORDINATOR' && courseFile.status !== 'SUBMITTED') {
-      return noStoreJson({ error: 'This review is already closed. The course file must be resubmitted before it can be reviewed again.' }, { status: 409 });
+    if (payload.role === 'COORDINATOR' && courseFile.status === 'APPROVED') {
+      return noStoreJson({ error: 'This course file has already been approved and is locked.' }, { status: 409 });
     }
 
     // Coordinator assignment guard

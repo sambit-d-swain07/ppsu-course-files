@@ -151,7 +151,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
     .reduce((sum, [, s]) => sum + (Number(s) || 0), 0);
   const rating = getRating(totalScore);
   const scorePercent = Math.round((totalScore / MAX_TOTAL) * 100);
-  const reviewLocked = ['APPROVED', 'NEEDS_REVISION', 'UNDER_REVIEW'].includes(courseFile.status);
+  const reviewLocked = courseFile.status === 'APPROVED';
 
   const readFileAsDataUrl = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -367,7 +367,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                           {item.name}
                         </div>
 
-                        {/* SECTION 23: Item 1 Sub-items display with Clean Status + View */}
+                        {/* SECTION 23: Sub-items display with Clean Status + View */}
                         {item.index === 1 ? (
                           <div className="mt-2 small text-secondary">
                             {[
@@ -389,40 +389,127 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                                       </Button>
                                     </div>
                                   ) : (
-                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Missing</span>
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
                                   )}
                                 </div>
                               );
                             })}
                           </div>
-                        ) : item.index === 2 || item.index === 4 || item.index === 7 ? (
-                          <div className="mt-2 small text-secondary">{(dbItem.batchSubmissions || []).map((batch: any, bIdx: number) => <div key={batch.batch || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border"><span className="fw-semibold">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : ''}</span>{batch.status === 'PENDING' ? <span className="text-warning fw-bold">Pending</span> : <span className="text-success fw-bold">✓ Submitted</span>}</div>)}</div>
-                        ) : item.index === 8 ? (
-                          /* SECTION 33: Item 8 Laboratory Rubrics Batches display */
+                        ) : item.index === 4 ? (
                           <div className="mt-2 small text-secondary">
-                            {(dbItem.batchSubmissions || subItems?.batches || [
-                              { id: 'batch-a', name: 'Batch A' },
-                              { id: 'batch-b', name: 'Batch B' }
-                            ]).map((batch: any, bIdx: number) => (
-                              <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
-                                <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
-                                {batch?.status === 'PENDING' ? (
-                                  <span className="text-warning fw-bold" style={{ fontSize: 11 }}>Pending</span>
-                                ) : batch?.fileName || batch?.subItemsJson ? (
-                                  <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                    <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                    <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>
-                                      👁️ View
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span className="text-muted" style={{ fontSize: 11 }}>✗ Missing</span>
+                            {subItems?.students?.length ? (
+                              <div className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold text-success">✓ {subItems.students.length} Students Listed</span>
+                                {subItems.file?.fileName && (
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Student Name List', fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
+                                    👁️ View Document
+                                  </Button>
                                 )}
                               </div>
-                            ))}
+                            ) : uploaded ? (
+                              <div className="d-flex align-items-center gap-2 mt-1">
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
+                                  👁️ View
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                ✗ Not uploaded yet (0 students listed)
+                              </div>
+                            )}
+                          </div>
+                        ) : item.index === 8 ? (
+                          <div className="mt-2 small text-secondary">
+                            {subItems?.students?.length ? (
+                              <div className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold text-success">✓ Laboratory Rubrics ({subItems.students.length} students assessed)</span>
+                                {subItems.file?.fileName && (
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Laboratory Rubrics', fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
+                                    👁️ View Document
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (dbItem.batchSubmissions || subItems?.batches)?.length ? (
+                              (dbItem.batchSubmissions || subItems?.batches).map((batch: any, bIdx: number) => (
+                                <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                  <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
+                                  {batch?.fileName || batch?.subItemsJson ? (
+                                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name || batch.batch}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>
+                                        👁️ View
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                  )}
+                                </div>
+                              ))
+                            ) : uploaded ? (
+                              <div className="d-flex align-items-center gap-2 mt-1">
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
+                                  👁️ View
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                ✗ Not uploaded yet
+                              </div>
+                            )}
+                          </div>
+                        ) : item.index === 9 ? (
+                          <div className="mt-2 small text-secondary">
+                            {subItems?.students?.length ? (
+                              <div className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold text-success">✓ Continuous Evaluation Rubrics ({subItems.students.length} students assessed)</span>
+                                {subItems.file?.fileName && (
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Continuous Evaluation Rubrics', fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
+                                    👁️ View Document
+                                  </Button>
+                                )}
+                              </div>
+                            ) : uploaded ? (
+                              <div className="d-flex align-items-center gap-2 mt-1">
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
+                                  👁️ View
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                ✗ Not uploaded yet
+                              </div>
+                            )}
+                          </div>
+                        ) : item.index === 2 || item.index === 7 ? (
+                          <div className="mt-2 small text-secondary">
+                            {(dbItem.batchSubmissions || []).length > 0 ? (
+                              (dbItem.batchSubmissions || []).map((batch: any, bIdx: number) => (
+                                <div key={batch.batch || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                  <span className="fw-semibold">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : ''}</span>
+                                  {batch.status === 'PENDING' ? (
+                                    <span className="text-muted fw-semibold" style={{ fontSize: 11 }}>Pending</span>
+                                  ) : (
+                                    <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Submitted</span>
+                                  )}
+                                </div>
+                              ))
+                            ) : uploaded ? (
+                              <div className="d-flex align-items-center gap-2 mt-1">
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
+                                  👁️ View
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                ✗ Not uploaded yet
+                              </div>
+                            )}
                           </div>
                         ) : item.index === 11 || item.index === 12 ? (
-                          /* SECTION 23: Items 11 & 12 Sub-items display */
                           <div className="mt-2 small text-secondary">
                             {[
                               { k: 'timetable', l: '(a) Timetable' },
@@ -441,7 +528,7 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                                       </Button>
                                     </div>
                                   ) : (
-                                    <span className="text-danger" style={{ fontSize: 11 }}>✗ Missing</span>
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
                                   )}
                                 </div>
                               );
@@ -458,8 +545,46 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                               </div>
                             )}
                           </div>
+                        ) : item.index === 13 ? (
+                          <div className="mt-2 small text-secondary">
+                            <div className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                              <span className="fw-semibold text-truncate">(a) Assignment Topics</span>
+                              {subItems?.assignmentTopics?.length ? (
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ {subItems.assignmentTopics.length} Topics Added</span>
+                              ) : (
+                                <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                              )}
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                              <span className="fw-semibold text-truncate">(b) Sample Assignment</span>
+                              {subItems?.sampleAssignment?.fileName ? (
+                                <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                  <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Sample Assignment', fileName: subItems.sampleAssignment.fileName, fileUrl: subItems.sampleAssignment.fileUrl })}>
+                                    👁️ View
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                              )}
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                              <span className="fw-semibold text-truncate">(c) Marks Statement</span>
+                              {subItems?.marks?.length ? (
+                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ {subItems.marks.length} Students Scored</span>
+                              ) : subItems?.marksFile?.fileName ? (
+                                <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                  <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Assignment Marks Statement', fileName: subItems.marksFile.fileName, fileUrl: subItems.marksFile.fileUrl })}>
+                                    👁️ View
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                              )}
+                            </div>
+                          </div>
                         ) : item.index === 15 ? (
-                          /* SECTION 23: Item 15 Univ Exam Sub-items display */
                           <div className="mt-2 small text-secondary">
                             {[
                               { k: 'questionPaper', l: '(a) Question Paper' },
@@ -478,14 +603,13 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                                       </Button>
                                     </div>
                                   ) : (
-                                    <span className="text-danger" style={{ fontSize: 11 }}>✗ Missing</span>
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
                                   )}
                                 </div>
                               );
                             })}
                           </div>
                         ) : uploaded ? (
-                          /* SECTION 23: Standard Uploaded Item — NO raw filename printed, clean ✓ Uploaded + View */
                           <div className="d-flex align-items-center gap-2 mt-2" style={{ fontSize: 12 }}>
                             <span className="text-success fw-bold">✓ Uploaded</span>
                             <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
@@ -493,8 +617,8 @@ export default function CoordinatorReview({ params }: { params: Promise<{ id: st
                             </Button>
                           </div>
                         ) : (
-                          <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
-                            ✗ No file uploaded
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                            ✗ Not uploaded yet
                           </div>
                         )}
                       </div>

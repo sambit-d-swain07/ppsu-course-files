@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       const isSubjectCoordinator = payload.role === 'FACULTY' && subject?.courseCoordinatorId === payload.userId;
       return {
         ...cf,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8, 20] } : { mode: 'OWNER' },
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 14, 20] } : { mode: 'OWNER' },
         faculty: faculty
           ? {
               id: faculty.id,
