@@ -6,24 +6,14 @@ import { Form, Button, Alert, Spinner, Modal } from 'react-bootstrap';
 
 const CAMPUS_IMAGES = [
   {
-    src: '/images/campus/campus_1.jpg',
+    src: '/images/campus/ppsu_campus_1.jpg',
     title: 'P P Savani University',
-    subtitle: 'NAAC A+ Accredited · State-of-the-Art Academic Infrastructure'
+    subtitle: 'NAAC A+ Accredited · Excellence in Higher Education & Research'
   },
   {
-    src: '/images/campus/campus_2.jpg',
-    title: 'World-Class Innovation Hub',
-    subtitle: 'Modern Engineering & Research Facilities'
-  },
-  {
-    src: '/images/campus/campus_3.jpg',
-    title: 'Academic Excellence',
-    subtitle: 'Empowering Future Leaders & Researchers'
-  },
-  {
-    src: '/images/campus/campus_4.jpg',
+    src: '/images/campus/ppsu_campus_2.jpg',
     title: 'Vibrant Green Campus',
-    subtitle: 'Holistic Student-Centric Learning Environment'
+    subtitle: 'State-of-the-Art Academic Infrastructure & Growth'
   }
 ];
 
