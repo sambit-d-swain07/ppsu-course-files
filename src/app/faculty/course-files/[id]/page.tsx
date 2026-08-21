@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, use } from 'react';
+import { useEffect, useState, useRef, useCallback, use, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab } from 'react-bootstrap';
@@ -100,6 +100,12 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   const [continuousCriteria, setContinuousCriteria] = useState<any[]>([]);
   const [hasSeparatePracticalGrade, setHasSeparatePracticalGrade] = useState(false);
 
+  // Lifted state for Items 8 & 9 — populated once in fetchData, updated surgically on mark changes
+  const [item8Rows, setItem8Rows] = useState<any[]>([]);
+  const [item8Criteria, setItem8Criteria] = useState<any[]>([]);
+  const [item9Rows, setItem9Rows] = useState<any[]>([]);
+  const [item9Criteria, setItem9Criteria] = useState<any[]>([]);
+
   const fetchData = async () => {
     if (!courseFileId) return;
     try {
@@ -128,6 +134,81 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
 
       setFacultySignatureName(data.courseFile.facultySignatureName || data.courseFile.faculty?.name || '');
       setFacultyConfirmed(!!data.courseFile.facultyConfirmed);
+
+      // Build merged student list from Item 4 (main + all batch submissions)
+      const buildStudentList = (items: any[]) => {
+        const db4 = items.find((c: any) => c.itemIndex === 4);
+        let raw4: any = {};
+        try { if (db4?.subItemsJson) raw4 = JSON.parse(db4.subItemsJson); } catch {}
+        const seenIds = new Set<string>();
+        const all: any[] = [];
+        const add = (student: any, idx: number) => {
+          const id = student.id || student.studentId || student.enrolmentNumber || student.rollNo || `s-${idx}`;
+          if (id && !seenIds.has(id)) {
+            seenIds.add(id);
+            all.push({ id, name: student.name || student.studentName || '', enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '', batch: student.batch });
+          }
+        };
+        (Array.isArray(raw4?.students) ? raw4.students : []).filter(Boolean).forEach(add);
+        if (Array.isArray(db4?.batchSubmissions)) {
+          db4.batchSubmissions.forEach((bSub: any) => {
+            let bs: any[] = Array.isArray(bSub.students) ? bSub.students : [];
+            if (!bs.length && bSub.subItemsJson) { try { const p = JSON.parse(bSub.subItemsJson); if (Array.isArray(p.students)) bs = p.students; } catch {} }
+            bs.filter(Boolean).forEach(add);
+          });
+        }
+        return all;
+      };
+
+      const buildRows = (items: any[], itemIndex: number, studentList: any[]) => {
+        const dbItem = items.find((c: any) => c.itemIndex === itemIndex);
+        let rawSubs: any = {};
+        try { if (dbItem?.subItemsJson) rawSubs = JSON.parse(dbItem.subItemsJson); } catch {}
+        const defaultCriteria = itemIndex === 8
+          ? [{ id: 'term-work', label: 'Term Work', max: 20, fixed: true }, { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }]
+          : [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+        const criteria = (Array.isArray(rawSubs.criteria) && rawSubs.criteria.length ? rawSubs.criteria : defaultCriteria)
+          .filter((c: any) => c && String(c.id || '').trim())
+          .map((c: any) => ({ ...c, id: String(c.id), label: String(c.label || 'Criterion'), max: Number(c.max) || 0 }));
+
+        const storedById = new Map<string, any>(
+          (Array.isArray(rawSubs.students) ? rawSubs.students : []).filter(Boolean).map((r: any) => [r.studentId || r.enrolmentNumber, r])
+        );
+        // Merge Lab Teacher marks by student ID
+        const labMarks = new Map<string, Record<string, number>>();
+        if (Array.isArray(dbItem?.batchSubmissions)) {
+          dbItem.batchSubmissions.forEach((bSub: any) => {
+            let bs: any[] = Array.isArray(bSub.students) ? bSub.students : [];
+            if (!bs.length && bSub.subItemsJson) { try { const p = JSON.parse(bSub.subItemsJson); if (Array.isArray(p.students)) bs = p.students; } catch {} }
+            bs.forEach((st: any) => {
+              const id = st.studentId || st.id || st.enrolmentNumber;
+              if (id && st.marks) labMarks.set(id, { ...(labMarks.get(id) || {}), ...st.marks });
+            });
+          });
+        }
+
+        const autoRows = studentList.map((s: any) => {
+          const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
+          const lm = labMarks.get(s.id) || labMarks.get(s.enrolmentNumber) || {};
+          const marks: Record<string, number> = {};
+          criteria.forEach((c: any) => { const v = prev.marks?.[c.id] ?? lm[c.id]; marks[c.id] = v !== undefined ? Number(v) : 0; });
+          return { studentId: s.id, name: s.name, enrolmentNumber: s.enrolmentNumber, marks, batch: s.batch };
+        });
+        const manualRows = (Array.isArray(rawSubs.students) ? rawSubs.students : [])
+          .filter((r: any) => r?.isManual)
+          .map((r: any) => {
+            const marks = { ...(r.marks || {}) };
+            criteria.forEach((c: any) => { if (marks[c.id] === undefined) marks[c.id] = 0; });
+            return { studentId: r.studentId, name: r.name, enrolmentNumber: r.enrolmentNumber, marks, isManual: true, batch: r.batch };
+          });
+        return { rows: [...autoRows, ...manualRows], criteria };
+      };
+
+      const mergedStudentList = buildStudentList(checklistItems);
+      const { rows: r8, criteria: c8 } = buildRows(checklistItems, 8, mergedStudentList);
+      const { rows: r9, criteria: c9 } = buildRows(checklistItems, 9, mergedStudentList);
+      setItem8Rows(r8); setItem8Criteria(c8);
+      setItem9Rows(r9); setItem9Criteria(c9);
 
       const item8 = checklistItems.find((cli: any) => cli.itemIndex === 8);
       if (item8?.subItemsJson) {
@@ -409,34 +490,18 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
-    if (!Array.isArray(subs.criteria) || subs.criteria.length === 0) {
-      if (itemIndex === 8) {
-        subs.criteria = [
-          { id: 'term-work', label: 'Term Work', max: 20, fixed: true },
-          { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }
-        ];
-      } else if (itemIndex === 9) {
-        subs.criteria = [
-          { id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true },
-          { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }
-        ];
-      }
-    }
+    const defaultCriteria = itemIndex === 8
+      ? [{ id: 'term-work', label: 'Term Work', max: 20, fixed: true }, { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }]
+      : [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+    if (!Array.isArray(subs.criteria) || subs.criteria.length === 0) subs.criteria = defaultCriteria;
     const newStudentId = `manual-${Date.now()}`;
-    const newStudent = {
-      studentId: newStudentId,
-      name: '',
-      enrolmentNumber: '',
-      marks: {} as Record<string, number>,
-      isManual: true,
-      batch: access.batch || 'A'
-    };
-    normalizeCriteria(subs.criteria).forEach((criterion: any) => {
-      newStudent.marks[criterion.id] = 0;
-    });
+    const newStudent: any = { studentId: newStudentId, name: '', enrolmentNumber: '', marks: {}, isManual: true, batch: access.batch || 'A' };
+    normalizeCriteria(subs.criteria).forEach((criterion: any) => { newStudent.marks[criterion.id] = 0; });
     subs.students.push(newStudent);
     await saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    fetchData();
+    // Add to lifted state immediately so table updates without fetchData round-trip
+    if (itemIndex === 8) setItem8Rows(prev => [...prev, newStudent]);
+    else if (itemIndex === 9) setItem9Rows(prev => [...prev, newStudent]);
   };
 
   const debouncedSaveStructuredItem = (itemIndex: number, subs: any, status = 'UPLOADED') => {
@@ -514,20 +579,37 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
     subs.criteria = remove ? (subs.criteria || []).filter((entry: any) => entry.id !== criterion.id) : [...(subs.criteria || []), criterion];
     subs.students = syncStudentRows(itemIndex, subs.students, subs.criteria);
     await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    // Refresh lifted row state after criterion change
+    const newCriteria = normalizeCriteria(subs.criteria);
+    if (itemIndex === 8) {
+      setItem8Criteria(newCriteria);
+      setItem8Rows(prev => prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }));
+    } else {
+      setItem9Criteria(newCriteria);
+      setItem9Rows(prev => prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }));
+    }
     fetchData();
   };
 
-  const handleMarkChange = (itemIndex: number, studentId: string, criterionId: string, value: number) => {
+  const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
-    const subs = getSubItems(itemIndex) || {};
-    subs.students = syncStudentRows(itemIndex, subs.students, subs.criteria || []);
-    const student = subs.students.find((row: any) => row.studentId === studentId);
-    if (student) {
-      student.marks[criterionId] = Math.max(0, value || 0);
-      setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
-      debouncedSaveStructuredItem(itemIndex, subs, 'UPLOADED');
+    const clamped = Math.max(0, value || 0);
+    // Update only the specific row in lifted state — O(1), no re-render of other rows
+    if (itemIndex === 8) {
+      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+    } else if (itemIndex === 9) {
+      setItem9Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
     }
-  };
+    // Debounce the API save — build updated subs from the existing stored subItemsJson
+    const saveRows = itemIndex === 8 ? item8Rows : item9Rows;
+    const updatedRows = saveRows.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r);
+    if (saveTimeoutsRef.current[itemIndex]) clearTimeout(saveTimeoutsRef.current[itemIndex]);
+    saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
+      const subs = getSubItems(itemIndex) || {};
+      subs.students = updatedRows;
+      saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    }, 600);
+  }, [isLocked, item8Rows, item9Rows, checklist]);
 
   const handleLabTeacherSubmit = async () => {
     if (isLocked || submitLoading) return;
@@ -1527,8 +1609,8 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   {/* Item 8: per-student Laboratory Rubrics */}
                   {isItem8 && (() => {
                     const subs = getMergedSubItems(8) || {};
-                    const criteria = normalizeCriteria(subs.criteria);
-                    const rows = syncStudentRows(subs.students, criteria);
+                    const criteria = item8Criteria;
+                    const rows = item8Rows;
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
                         <div className="d-flex justify-content-between align-items-center mb-2">
@@ -1662,8 +1744,8 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   {/* Item 9: Continuous Evaluation Rubrics */}
                   {item.index === 9 && (() => {
                     const subs = getSubItems(9) || {};
-                    const criteria = normalizeCriteria(subs.criteria);
-                    const rows = syncStudentRows(subs.students, criteria);
+                    const criteria = item9Criteria;
+                    const rows = item9Rows;
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
                         <div className="d-flex justify-content-between align-items-center mb-2">
