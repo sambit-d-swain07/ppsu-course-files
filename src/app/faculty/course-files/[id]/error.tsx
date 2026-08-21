@@ -19,7 +19,7 @@ export default function CourseFileError({
       <div
         className="card shadow-sm p-4 mx-auto"
         style={{
-          maxWidth: '520px',
+          maxWidth: '560px',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
           background: '#ffffff'
@@ -41,9 +41,18 @@ export default function CourseFileError({
         </div>
 
         <h4 className="fw-bold mb-2 text-dark">Course File Unavailable</h4>
-        <p className="text-secondary mb-4" style={{ fontSize: '14px' }}>
-          We could not load the requested course file. The database server may be busy or the file may be updating.
+        <p className="text-secondary mb-3" style={{ fontSize: '14px' }}>
+          We could not load the requested course file.
         </p>
+
+        {error?.message && (
+          <div
+            className="p-2.5 mb-4 text-start font-mono-ppsu bg-light rounded text-danger border"
+            style={{ fontSize: '12px', wordBreak: 'break-all' }}
+          >
+            <strong>Error details:</strong> {error.message}
+          </div>
+        )}
 
         <div className="d-flex justify-content-center gap-3">
           <button
