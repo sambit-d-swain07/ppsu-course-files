@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -9,9 +9,10 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Get user details
     fetch('/api/auth/me')
       .then((res) => {
         if (!res.ok) {
@@ -26,7 +27,18 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
         }
       })
       .catch(() => router.push('/login'));
-  }, [router, pathname]); // refresh on route changes
+  }, [router, pathname]);
+
+  // Click outside to close profile dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -38,7 +50,6 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
     }
   };
 
-  // Get active page title
   let pageTitle = 'Faculty Dashboard';
   if (pathname.includes('/my-courses')) {
     pageTitle = 'My Courses';
@@ -53,7 +64,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   }
 
   const getInitials = (name: string) => {
-    if (!name) return 'U';
+    if (!name) return 'F';
     return name
       .split(' ')
       .map((n) => n[0])
@@ -67,8 +78,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       href: '/faculty/dashboard',
       label: 'Dashboard',
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-grid-fill" viewBox="0 0 16 16">
-          <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h-3A1.5 1.5 0 0 1 1 10.5v3A1.5 1.5 0 0 1 2.5 15h3A1.5 1.5 0 0 1 7 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
         </svg>
       )
     },
@@ -76,8 +87,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       href: '/faculty/my-courses',
       label: 'My Courses',
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-book-fill" viewBox="0 0 16 16">
-          <path d="M8 1.783C7.015.746 5.617 0 4 0 2.361 0 1.28.875 1.28 2.22h2.72v11.56C4 13.78 4.985 14 6 14c1.617 0 3.015-.746 4-1.783c.985 1.037 2.383 1.783 4 1.783c1.015 0 2-.22 2.72-.72V2.22h-2.72c-.72-.495-1.705-.72-2.72-.72c-1.617 0-3.015.746-4 1.783z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
       )
     },
@@ -85,8 +96,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       href: '/faculty/course-files',
       label: 'Course Files',
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-folder-fill" viewBox="0 0 16 16">
-          <path d="M9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a1.99 1.99 0 0 1 .342-1.31L.542 5.084A1 1 0 0 0 0 6v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a1 1 0 0 0-.542-.894l-1.104-.55A2 2 0 0 0 12.828 4H9.828l-2-2H2a2 2 0 0 0-2 2v1h1.586l2-2h4.242z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       )
     },
@@ -94,8 +105,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       href: '/faculty/submissions',
       label: 'Submissions',
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-send-fill" viewBox="0 0 16 16">
-          <path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       )
     },
@@ -103,8 +114,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       href: '/faculty/profile',
       label: 'Profile',
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-person-fill" viewBox="0 0 16 16">
-          <path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
       )
     }
@@ -113,11 +124,17 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   return (
     <div className="layout-wrapper">
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+      
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
-        <div className="sidebar-brand text-center py-3 bg-white" style={{ borderBottom: '1px solid var(--ppsu-border)' }}>
-          <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '55px', objectFit: 'contain' }} />
-          <div className="mt-1 fw-bold text-dark font-mono-ppsu" style={{ fontSize: '0.8rem' }}>Course Files Portal</div>
+        <div className="sidebar-brand">
+          <div className="bg-white p-2 rounded-3 shadow-sm mb-2 d-inline-block">
+            <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '44px', objectFit: 'contain' }} />
+          </div>
+          <div className="fw-bold text-white text-center" style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}>Course Files Portal</div>
+          <div className="badge rounded-pill mt-1" style={{ background: 'rgba(232, 84, 30, 0.25)', color: '#FFA07A', fontSize: '0.68rem', fontWeight: 600 }}>
+            Faculty Portal
+          </div>
         </div>
 
         <nav className="sidebar-menu">
@@ -138,45 +155,87 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
         </nav>
 
         <div className="sidebar-footer">
-          <div className="mb-2">
-            <button
-              onClick={handleLogout}
-              className="btn btn-sm btn-outline-light border-0 w-100 d-flex align-items-center justify-content-center gap-2 py-2"
-              style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', fontSize: '0.8rem' }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" className="bi bi-box-arrow-right" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
-                <path fillRule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
-              </svg>
-              Sign Out
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-2 text-white border-0"
+            style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)', fontSize: '0.825rem', fontWeight: 500 }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </button>
         </div>
       </aside>
 
       {/* Main Container */}
       <div className="main-content-wrapper">
         <header className="top-header">
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-3">
             <button className="mobile-menu-toggle" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}>
               <span /><span /><span />
             </button>
             <div className="header-title-section">
-            <h2 className="header-page-title">{pageTitle}</h2>
+              <h2 className="header-page-title mb-0">{pageTitle}</h2>
             </div>
           </div>
 
-          <div className="header-user-profile">
+          {/* User Profile Dropdown */}
+          <div className="profile-dropdown-wrapper" ref={dropdownRef}>
             {user && (
-              <div className="d-flex align-items-center gap-2">
-                <div className="user-avatar-circle">
-                  {getInitials(user.name)}
-                </div>
-                <div className="user-info-text d-none d-md-flex">
-                  <span className="user-info-name">{user.name}</span>
-                  <span className="user-info-role">{user.designation || 'Faculty'}</span>
-                </div>
-              </div>
+              <>
+                <button
+                  type="button"
+                  className="profile-trigger-btn"
+                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                  aria-expanded={profileDropdownOpen}
+                >
+                  <div className="user-avatar-badge user-avatar-faculty">
+                    {getInitials(user.name)}
+                  </div>
+                  <div className="user-info-text d-none d-md-flex text-start">
+                    <span className="user-info-name">{user.name}</span>
+                    <span className="user-info-role">{user.designation || 'Faculty'}</span>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-secondary ms-1">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {profileDropdownOpen && (
+                  <div className="profile-menu-popover shadow-lg">
+                    <div className="px-3 py-2 border-bottom mb-1">
+                      <div className="fw-bold text-navy-900 small">{user.name}</div>
+                      <div className="text-muted font-mono-ppsu" style={{ fontSize: '0.725rem' }}>{user.email}</div>
+                      <div className="mt-1">
+                        <span className="badge-custom badge-custom-approved" style={{ fontSize: '0.65rem' }}>Faculty</span>
+                      </div>
+                    </div>
+
+                    <Link href="/faculty/profile" className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Profile
+                    </Link>
+                    <Link href="/faculty/my-courses" className="profile-menu-item" onClick={() => setProfileDropdownOpen(false)}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253" />
+                      </svg>
+                      My Courses
+                    </Link>
+
+                    <div className="border-top my-1" />
+
+                    <button type="button" className="profile-menu-item logout text-danger" onClick={handleLogout}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </header>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Row, Col, Spinner } from 'react-bootstrap';
+import { Row, Col } from 'react-bootstrap';
 import SearchPanel from '../SearchPanel';
 import AssignedFacultyList from '../AssignedFacultyList';
 
@@ -63,14 +63,6 @@ export default function CoordinatorDashboard() {
     setSelectedCourse(match || null);
   };
 
-  if (loading) {
-    return (
-      <div className="d-flex justify-content-center py-5">
-        <Spinner animation="border" style={{ color: 'var(--ppsu-primary)' }} />
-      </div>
-    );
-  }
-
   const uniqueFaculty   = assignedFaculty.length;
   const pendingCount    = courses.filter((c) => c.status === 'SUBMITTED' || c.status === 'UNDER_REVIEW').length;
   const approvedCount   = courses.filter((c) => c.status === 'APPROVED').length;
@@ -85,29 +77,116 @@ export default function CoordinatorDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-4">
-        <h4 className="fw-bold text-navy-900 mb-0">Evaluator Dashboard</h4>
-        <p className="text-secondary small mb-0">Manage faculty course file submissions and evaluations.</p>
+      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+          <h3 className="fw-bold text-navy-900 mb-1">Evaluator Dashboard</h3>
+          <p className="text-secondary small mb-0">Evaluate, review checklist items, and grade assigned faculty course files.</p>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <Link href="/coordinator/pending-reviews" className="btn btn-ppsu-navy btn-sm px-3 py-2 fw-semibold">
+            Review Queue ({pendingCount})
+          </Link>
+        </div>
       </div>
 
       {/* Stat cards */}
       <Row className="mb-4 g-3">
         {[
-          { label: 'Total Faculty',   val: uniqueFaculty,  color: 'var(--ppsu-primary)',        bg: 'rgba(30,58,138,0.07)' },
-          { label: 'Pending Review',  val: pendingCount,   color: 'var(--ppsu-warning-text)',   bg: 'var(--ppsu-warning-bg)' },
-          { label: 'Approved',        val: approvedCount,  color: 'var(--ppsu-success-text)',   bg: 'var(--ppsu-success-bg)' },
-          { label: 'Needs Revision',  val: revisionCount,  color: 'var(--ppsu-danger-text)',    bg: 'var(--ppsu-danger-bg)' }
-        ].map(({ label, val, color, bg }) => (
-          <Col xs={6} md={3} key={label}>
-            <a href={label === 'Total Faculty' ? '#my-assigned-faculty' : undefined} className={`card-custom m-0 h-100 d-flex align-items-center gap-3 text-decoration-none ${label === 'Total Faculty' ? 'card-custom-hover' : ''}`} style={{ cursor: label === 'Total Faculty' ? 'pointer' : 'default' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color }}>{val}</span>
+          {
+            label: 'Assigned Faculty',
+            val: uniqueFaculty,
+            color: 'var(--ppsu-primary)',
+            bg: 'rgba(27, 42, 107, 0.08)',
+            href: '#my-assigned-faculty',
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            )
+          },
+          {
+            label: 'Pending Reviews',
+            val: pendingCount,
+            color: 'var(--ppsu-warning-text)',
+            bg: 'var(--ppsu-warning-bg)',
+            href: '/coordinator/pending-reviews',
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )
+          },
+          {
+            label: 'Approved Course Files',
+            val: approvedCount,
+            color: 'var(--ppsu-success-text)',
+            bg: 'var(--ppsu-success-bg)',
+            href: '/coordinator/completed-reviews',
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )
+          },
+          {
+            label: 'Needs Revision',
+            val: revisionCount,
+            color: 'var(--ppsu-danger-text)',
+            bg: 'var(--ppsu-danger-bg)',
+            href: undefined,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            )
+          }
+        ].map(({ label, val, color, bg, href, icon }) => (
+          <Col xs={12} sm={6} lg={3} key={label}>
+            {href ? (
+              <Link href={href} className="card-custom card-custom-hover h-100 d-flex align-items-center gap-3 p-3.5 text-decoration-none">
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 12,
+                    background: bg,
+                    color: color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  {icon}
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 800, color, lineHeight: 1.1 }}>{val}</div>
+                  <div className="text-secondary small fw-semibold mt-0.5">{label}</div>
+                </div>
+              </Link>
+            ) : (
+              <div className="card-custom card-custom-hover h-100 d-flex align-items-center gap-3 p-3.5">
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 12,
+                    background: bg,
+                    color: color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  {icon}
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 800, color, lineHeight: 1.1 }}>{val}</div>
+                  <div className="text-secondary small fw-semibold mt-0.5">{label}</div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1.1 }}>{val}</div>
-                <div className="stat-label">{label}</div>
-              </div>
-            </a>
+            )}
           </Col>
         ))}
       </Row>
@@ -127,7 +206,7 @@ export default function CoordinatorDashboard() {
           <Row className="align-items-center g-3">
             <Col xs={12} md={8}>
               <div className="d-flex align-items-center gap-2 mb-2">
-                <span className="font-mono-ppsu small fw-bold text-secondary bg-light px-2 py-1 rounded">
+                <span className="font-mono-ppsu small fw-bold text-navy-900 bg-light border px-2 py-1 rounded">
                   {selectedCourse.courseCode}
                 </span>
                 <span className={`badge-custom ${statusBadgeClass(selectedCourse.status)}`}>
@@ -156,7 +235,7 @@ export default function CoordinatorDashboard() {
                 href={`/coordinator/review/${selectedCourse.id}`}
                 className="btn btn-ppsu-navy py-2 px-4 text-decoration-none"
               >
-                Open Evaluation
+                Open Evaluation →
               </Link>
               {selectedCourse.generatedReportPath && (
                 <a
@@ -174,9 +253,12 @@ export default function CoordinatorDashboard() {
 
       {/* My Assigned Faculty Section */}
       <div id="my-assigned-faculty" className="card-custom p-0 overflow-hidden mb-4">
-        <div className="px-4 py-3 d-flex align-items-center justify-content-between" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
-          <span className="fw-bold">My Assigned Faculty</span>
-          <Link href="/coordinator/my-faculty" className="btn btn-sm btn-light">View Full List</Link>
+        <div className="px-4 py-3 d-flex align-items-center justify-content-between border-bottom" style={{ background: '#ffffff' }}>
+          <div>
+            <h5 className="fw-bold text-navy-900 mb-0">My Assigned Faculty</h5>
+            <p className="text-secondary small mb-0 mt-0.5">Faculty members allocated to you for academic review.</p>
+          </div>
+          <Link href="/coordinator/my-faculty" className="btn btn-sm btn-outline-primary fw-semibold">View Directory</Link>
         </div>
         <div className="p-0"><AssignedFacultyList faculty={assignedFaculty} /></div>
       </div>
@@ -184,12 +266,12 @@ export default function CoordinatorDashboard() {
       {/* Recent Submissions */}
       {recentSubmissions.length > 0 && (
         <div className="card-custom p-0 overflow-hidden mb-4">
-          <div
-            className="px-4 py-3 d-flex align-items-center justify-content-between"
-            style={{ background: 'var(--ppsu-primary)', color: '#fff' }}
-          >
-            <span className="fw-bold">Recent Submissions</span>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Awaiting your review</span>
+          <div className="px-4 py-3 d-flex align-items-center justify-content-between border-bottom bg-white">
+            <div>
+              <h5 className="fw-bold text-navy-900 mb-0">Recent Submissions</h5>
+              <p className="text-secondary small mb-0 mt-0.5">Awaiting your evaluation & verification.</p>
+            </div>
+            <span className="badge-custom badge-custom-review">{recentSubmissions.length} Pending</span>
           </div>
           <div className="p-0">
             {recentSubmissions.map((cf, idx) => (
@@ -201,7 +283,7 @@ export default function CoordinatorDashboard() {
                 <div className="d-flex align-items-center gap-3 flex-grow-1">
                   <div
                     style={{
-                      width: 36, height: 36, borderRadius: 8,
+                      width: 42, height: 42, borderRadius: 10,
                       background: 'rgba(232,84,30,0.1)', color: 'var(--ppsu-accent)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0, fontSize: 14, fontWeight: 700
@@ -212,22 +294,17 @@ export default function CoordinatorDashboard() {
                   <div>
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <span className="font-mono-ppsu small fw-bold text-secondary">{cf.courseCode}</span>
-                      <span className="fw-semibold" style={{ fontSize: 14 }}>{cf.courseTitle}</span>
+                      <span className="fw-semibold text-navy-900" style={{ fontSize: 14 }}>{cf.courseTitle}</span>
                       <span className={`badge-custom ${statusBadgeClass(cf.status)}`}>{statusLabel(cf.status)}</span>
                     </div>
-                    <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    <div className="text-muted small" style={{ fontSize: '0.8rem', marginTop: 2 }}>
                       {cf.faculty?.name} · {cf.semester} · {cf.academicYear} · Submitted {timeAgo(cf.lastUpdated)}
                     </div>
                   </div>
                 </div>
                 <Link
                   href={`/coordinator/review/${cf.id}`}
-                  className="btn btn-sm px-3"
-                  style={{
-                    background: 'var(--ppsu-accent)', color: '#fff',
-                    border: 'none', fontWeight: 600, fontSize: 13,
-                    borderRadius: 8, flexShrink: 0
-                  }}
+                  className="btn btn-ppsu-accent btn-sm px-3 py-1.5 fw-semibold"
                 >
                   Review →
                 </Link>
