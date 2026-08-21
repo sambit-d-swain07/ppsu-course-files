@@ -36,8 +36,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     if (!isCoordinator && !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status)) {
       return NextResponse.json({ error: 'This course file is locked after submission.' }, { status: 409 });
     }
-    if (labBatch && ![2, 4, 7, 8, 20].includes(Number(itemIndex))) {
-      return NextResponse.json({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, 7, 8, and 20.` }, { status: 403 });
+    if (labBatch && ![2, 4, 8, 14, 20].includes(Number(itemIndex))) {
+      return NextResponse.json({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, 8, 14, and 20.` }, { status: 403 });
     }
     if (!isCoordinator && (score !== undefined || remarks !== undefined)) {
       return NextResponse.json({ error: 'Only coordinators can score checklist items.' }, { status: 403 });

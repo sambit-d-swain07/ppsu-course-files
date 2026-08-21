@@ -28,7 +28,7 @@ const CHECKLIST_ITEMS = [
   { index: 19, name: 'Lecture notes', maxScore: 20 },
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
-const LAB_TEACHER_ITEM_INDICES = [2, 4, 7, 8, 20];
+const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 14, 20];
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -278,13 +278,90 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   };
 
   const syncStudentRows = (rows: any[] = [], criteria: any[] = []) => {
+    const studentList = getStudentList();
     const storedById = new Map(rows.map((row: any) => [row.studentId || row.enrolmentNumber, row]));
-    return getStudentList().map((student: any) => {
+    
+    // 1. Map auto-populated students from Item 4
+    const autoRows = studentList.map((student: any) => {
       const previous = storedById.get(student.id) || storedById.get(student.enrolmentNumber) || {};
       const marks = { ...(previous.marks || {}) };
       criteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
       return { studentId: student.id, name: student.name, enrolmentNumber: student.enrolmentNumber, marks };
     });
+
+    // 2. Map manually added students (those in rows that have isManual: true)
+    const manualRows = rows
+      .filter((row: any) => row.isManual)
+      .map((row: any) => {
+        const marks = { ...(row.marks || {}) };
+        criteria.forEach((criterion: any) => { if (marks[criterion.id] === undefined) marks[criterion.id] = 0; });
+        return {
+          studentId: row.studentId,
+          name: row.name,
+          enrolmentNumber: row.enrolmentNumber,
+          marks,
+          isManual: true,
+          batch: row.batch
+        };
+      });
+
+    return [...autoRows, ...manualRows];
+  };
+
+  const handleManualAddStudent = async (itemIndex: number) => {
+    if (isLocked) return;
+    const subs = getSubItems(itemIndex) || {};
+    if (!subs.students) subs.students = [];
+    if (!subs.criteria) {
+      if (itemIndex === 8) {
+        subs.criteria = [
+          { id: 'term-work', label: 'Term Work', max: 20, fixed: true },
+          { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }
+        ];
+      } else if (itemIndex === 9) {
+        subs.criteria = [
+          { id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true },
+          { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }
+        ];
+      }
+    }
+    const newStudentId = `manual-${Date.now()}`;
+    const newStudent = {
+      studentId: newStudentId,
+      name: '',
+      enrolmentNumber: '',
+      marks: {} as Record<string, number>,
+      isManual: true,
+      batch: access.batch || 'A'
+    };
+    subs.criteria.forEach((criterion: any) => {
+      newStudent.marks[criterion.id] = 0;
+    });
+    subs.students.push(newStudent);
+    await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    fetchData();
+  };
+
+  const handleManualStudentFieldChange = async (itemIndex: number, studentId: string, field: 'name' | 'enrolmentNumber', value: string) => {
+    if (isLocked) return;
+    const subs = getSubItems(itemIndex) || {};
+    if (!subs.students) subs.students = [];
+    const student = subs.students.find((st: any) => st.studentId === studentId);
+    if (student) {
+      student[field] = value;
+      await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+      setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
+    }
+  };
+
+  const handleRemoveManualStudent = async (itemIndex: number, studentId: string) => {
+    if (isLocked) return;
+    const subs = getSubItems(itemIndex) || {};
+    if (subs.students) {
+      subs.students = subs.students.filter((st: any) => st.studentId !== studentId);
+      await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+      fetchData();
+    }
   };
 
   const saveStructuredItem = async (itemIndex: number, subs: any, status = 'UPLOADED') => {
@@ -994,9 +1071,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
   };
 
   const studentListUploaded = access.mode === 'OWNER' ? true : isItemComplete(4);
-  const visibleChecklistItems = access.mode === 'LAB_BATCH'
-    ? scopedChecklistItems.filter((item) => access.allowedItems?.includes(item.index))
-    : scopedChecklistItems;
+  const visibleChecklistItems = CHECKLIST_ITEMS;
 
   return (
     <div>
@@ -1141,14 +1216,16 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
             const isIA = item.index === 11 || item.index === 12;
             const isUniv = item.index === 15;
             const isSigItem = item.index === 20;
-            const isLockedByStudentList = (item.index === 8 || item.index === 9) && !studentListUploaded;
+            const isRestricted = access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(item.index);
+            const isLockedByStudentList = false;
 
             return (
               <div
                 key={item.index}
                 className={`px-4 py-3 ${idx < CHECKLIST_ITEMS.length - 1 ? 'border-bottom' : ''}`}
                 style={{
-                  background: complete ? 'rgba(22,163,74,0.03)' : isLockedByStudentList ? '#f8fafc' : 'transparent'
+                  background: isRestricted ? '#f8fafc' : (complete ? 'rgba(22,163,74,0.03)' : 'transparent'),
+                  opacity: isRestricted ? 0.6 : 1
                 }}
               >
                 {/* Header Row for Item */}
@@ -1171,27 +1248,30 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                         {item.name}
                       </div>
 
-                      {/* Locked banner for Items 8 & 9 */}
-                      {isLockedByStudentList && (
-                        <div className="text-danger small mt-1">
-                          🔒 Locked until <strong>Item 4 (Student Name List)</strong> is uploaded.
+                      {/* Locked banner for restricted items for Lab Teachers */}
+                      {isRestricted && (
+                        <div className="text-danger small mt-1 d-flex align-items-center gap-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+                          </svg>
+                          <span>Locked — Course Teacher access only</span>
                         </div>
                       )}
 
-                      {(item.index === 2 || item.index === 4 || item.index === 7) && access.mode !== 'LAB_BATCH' && (() => {
+                      {(item.index === 2 || item.index === 4 || item.index === 7) && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
                         const batches = getMergedSubItems(item.index)?.batches || [];
                         return batches.length > 1 ? <div className="mt-2 small"><strong>Batch-wise submissions</strong>{batches.map((batch: any) => <div key={batch.batch} className="border rounded p-2 mt-1"><span className="fw-semibold">Batch {batch.batch}</span> — {batch.students?.length || batch.file?.fileName || batch.fileName ? 'Submitted' : 'Pending'}</div>)}</div> : null;
                       })()}
 
                       {/* Single upload complete indicator */}
-                      {!isItem1 && !isItem8 && !isIA && !isUniv && complete && (
+                      {!isItem1 && !isItem8 && !isIA && !isUniv && complete && !isRestricted && (
                         <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: 12, color: 'var(--ppsu-success-text)', overflow: 'hidden' }}>
                           <span>✓ <strong className="font-mono-ppsu text-truncate d-inline-block" style={{ maxWidth: '360px', verticalAlign: 'bottom' }}>{dbItem.fileName}</strong></span>
                         </div>
                       )}
 
                       {/* Per-item reviewer remarks display */}
-                      {dbItem.score !== undefined && (
+                      {dbItem.score !== undefined && !isRestricted && (
                         <div className="mt-2 px-2 py-1 rounded small bg-light text-dark border">
                           Reviewer Score: <strong>{dbItem.score}/{item.maxScore}</strong>
                           {dbItem.remarks && <> — {dbItem.remarks}</>}
@@ -1286,31 +1366,275 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                   )}
 
                   {/* Item 8: per-student Laboratory Rubrics */}
-                  {isItem8 && !isLockedByStudentList && (() => {
+                  {isItem8 && (() => {
                     const subs = getMergedSubItems(8) || {};
                     const criteria = subs.criteria || [];
-                    const rows = (subs.students || []).map((row: any) => ({ ...row, marks: row.marks || {} }));
-                    return <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
-                      <div className="d-flex justify-content-between align-items-center mb-2"><span className="small text-secondary fw-semibold">Per-student Laboratory Rubrics</span>{!isLocked && <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Project'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(8, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>+ Add Criterion</Button>}</div>
-                      {!rows.length ? <div className="alert alert-info small">Student rows will appear automatically from the structured Student List in Item 4.</div> : <div className="table-responsive border rounded"><Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}><thead className="bg-light"><tr><th>Batch</th><th>Student Name</th><th>Enrolment Number</th>{criteria.map((criterion: any) => <th key={criterion.id}>{criterion.label} <span className="text-muted">({criterion.max})</span>{!criterion.fixed && !isLocked && <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(8, criterion, true)}>×</button>}</th>)}<th className="bg-warning-subtle">Total</th></tr></thead><tbody>{rows.map((row: any) => <tr key={`${row.batch || 'A'}-${row.studentId}`}><td className="fw-semibold">{row.batch || 'A'}</td><td className="text-start fw-semibold">{row.name}</td><td className="font-mono-ppsu">{row.enrolmentNumber}</td>{criteria.map((criterion: any) => <td key={criterion.id}><Form.Control type="number" min={0} max={criterion.max} size="sm" className="text-center" value={row.marks[criterion.id] ?? 0} disabled={isLocked || (access.mode === 'OWNER' && row.batch && row.batch !== 'A')} onChange={(e) => handleMarkChange(8, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))} /></td>)}<td className="fw-bold text-primary">{criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0)}</td></tr>)}</tbody></Table></div>}
-                      <div className="d-flex align-items-center gap-2 mt-2 small">{subs.file?.fileName ? <><span className="text-success fw-semibold">✓ {subs.file.fileName}</span><Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Laboratory Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(8)}>Remove</Button>}</> : !isLocked && <label className="btn btn-outline-secondary btn-sm">Upload File<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(8, file); }} /></label>}</div>
-                    </div>;
+                    const rows = syncStudentRows(subs.students, criteria);
+                    return (
+                      <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="small text-secondary fw-semibold">Per-student Laboratory Rubrics</span>
+                          {!isLocked && (
+                            <div className="d-flex gap-2">
+                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(8)}>
+                                + Add Student
+                              </Button>
+                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Project'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(8, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
+                                + Add Criterion
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="alert alert-info small py-2 mb-2">
+                          Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list.
+                        </div>
+                        <div className="table-responsive border rounded">
+                          <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
+                            <thead className="bg-light">
+                              <tr>
+                                <th>Batch</th>
+                                <th>Student Name</th>
+                                <th>Enrolment Number</th>
+                                {criteria.map((criterion: any) => (
+                                  <th key={criterion.id}>
+                                    {criterion.label} <span className="text-muted">({criterion.max})</span>
+                                    {!criterion.fixed && !isLocked && (
+                                      <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(8, criterion, true)}>×</button>
+                                    )}
+                                  </th>
+                                ))}
+                                <th className="bg-warning-subtle">Total</th>
+                                {!isLocked && <th style={{ width: '80px' }}>Actions</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.length === 0 ? (
+                                <tr>
+                                  <td colSpan={criteria.length + 4} className="text-muted py-3">No students found. Use '+ Add Student' to add someone.</td>
+                                </tr>
+                              ) : (
+                                rows.map((row: any) => {
+                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0);
+                                  return (
+                                    <tr key={`${row.batch || 'A'}-${row.studentId}`}>
+                                      <td className="fw-semibold">{row.batch || 'A'}</td>
+                                      <td className="text-start fw-semibold">
+                                        {row.isManual ? (
+                                          <Form.Control
+                                            type="text"
+                                            size="sm"
+                                            value={row.name}
+                                            disabled={isLocked}
+                                            onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'name', e.target.value)}
+                                            placeholder="Student Name"
+                                          />
+                                        ) : (
+                                          row.name
+                                        )}
+                                      </td>
+                                      <td className="font-mono-ppsu">
+                                        {row.isManual ? (
+                                          <Form.Control
+                                            type="text"
+                                            size="sm"
+                                            className="font-mono-ppsu"
+                                            value={row.enrolmentNumber}
+                                            disabled={isLocked}
+                                            onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'enrolmentNumber', e.target.value)}
+                                            placeholder="Enrolment Number"
+                                          />
+                                        ) : (
+                                          row.enrolmentNumber
+                                        )}
+                                      </td>
+                                      {criteria.map((criterion: any) => (
+                                        <td key={criterion.id}>
+                                          <Form.Control
+                                            type="number"
+                                            min={0}
+                                            max={criterion.max}
+                                            size="sm"
+                                            className="text-center"
+                                            value={row.marks[criterion.id] ?? 0}
+                                            disabled={isLocked || (access.mode === 'OWNER' && row.batch && row.batch !== 'A')}
+                                            onChange={(e) => handleMarkChange(8, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
+                                          />
+                                        </td>
+                                      ))}
+                                      <td className="fw-bold text-primary">{total}</td>
+                                      {!isLocked && (
+                                        <td>
+                                          {row.isManual ? (
+                                            <Button variant="link" className="text-danger p-0 border-0" onClick={() => handleRemoveManualStudent(8, row.studentId)}>
+                                              Remove
+                                            </Button>
+                                          ) : (
+                                            <span className="text-muted small">—</span>
+                                          )}
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
+                        <div className="d-flex align-items-center gap-2 mt-2 small">
+                          {subs.file?.fileName ? (
+                            <>
+                              <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
+                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Laboratory Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
+                              {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(8)}>Remove</Button>}
+                            </>
+                          ) : (
+                            !isLocked && (
+                              <label className="btn btn-outline-secondary btn-sm">
+                                Upload File
+                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(8, file); }} />
+                              </label>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
                   })()}
 
                   {/* Item 9: Continuous Evaluation Rubrics */}
-                  {item.index === 9 && !isLockedByStudentList && (() => {
+                  {item.index === 9 && (() => {
                     const subs = getSubItems(9) || {};
                     const criteria = subs.criteria || [];
                     const rows = syncStudentRows(subs.students, criteria);
-                    return <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
-                      <div className="d-flex justify-content-between align-items-center mb-2"><span className="small text-secondary fw-semibold">Continuous Evaluation Rubrics — per-student marks</span>{!isLocked && <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Assignment / Case Study / Other'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(9, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>+ Add Criterion</Button>}</div>
-                      {!rows.length ? <div className="alert alert-info small">Student rows will appear automatically from the structured Student List in Item 4.</div> : <div className="table-responsive border rounded"><Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}><thead className="bg-light"><tr><th>Student Name</th><th>Enrolment Number</th>{criteria.map((criterion: any) => <th key={criterion.id}>{criterion.label} <span className="text-muted">({criterion.max})</span>{!criterion.fixed && !isLocked && <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(9, criterion, true)}>×</button>}</th>)}<th className="bg-warning-subtle">Total</th></tr></thead><tbody>{rows.map((row: any) => <tr key={row.studentId}><td className="text-start fw-semibold">{row.name}</td><td className="font-mono-ppsu">{row.enrolmentNumber}</td>{criteria.map((criterion: any) => <td key={criterion.id}><Form.Control type="number" min={0} max={criterion.max} size="sm" className="text-center" value={row.marks[criterion.id] ?? 0} disabled={isLocked} onChange={(e) => handleMarkChange(9, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))} /></td>)}<td className="fw-bold text-primary">{criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0)}</td></tr>)}</tbody></Table></div>}
-                      <div className="d-flex align-items-center gap-2 mt-2 small">{subs.file?.fileName ? <><span className="text-success fw-semibold">✓ {subs.file.fileName}</span><Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(9)}>Remove</Button>}</> : !isLocked && <label className="btn btn-outline-secondary btn-sm">Upload File<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(9, file); }} /></label>}</div>
-                    </div>;
+                    return (
+                      <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="small text-secondary fw-semibold">Continuous Evaluation Rubrics — per-student marks</span>
+                          {!isLocked && (
+                            <div className="d-flex gap-2">
+                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
+                                + Add Student
+                              </Button>
+                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Assignment / Case Study / Other'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(9, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
+                                + Add Criterion
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="alert alert-info small py-2 mb-2">
+                          Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list.
+                        </div>
+                        <div className="table-responsive border rounded">
+                          <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
+                            <thead className="bg-light">
+                              <tr>
+                                <th>Student Name</th>
+                                <th>Enrolment Number</th>
+                                {criteria.map((criterion: any) => (
+                                  <th key={criterion.id}>
+                                    {criterion.label} <span className="text-muted">({criterion.max})</span>
+                                    {!criterion.fixed && !isLocked && (
+                                      <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(9, criterion, true)}>×</button>
+                                    )}
+                                  </th>
+                                ))}
+                                <th className="bg-warning-subtle">Total</th>
+                                {!isLocked && <th style={{ width: '80px' }}>Actions</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.length === 0 ? (
+                                <tr>
+                                  <td colSpan={criteria.length + 3} className="text-muted py-3">No students found. Use '+ Add Student' to add someone.</td>
+                                </tr>
+                              ) : (
+                                rows.map((row: any) => {
+                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks[criterion.id]) || 0), 0);
+                                  return (
+                                    <tr key={row.studentId}>
+                                      <td className="text-start fw-semibold">
+                                        {row.isManual ? (
+                                          <Form.Control
+                                            type="text"
+                                            size="sm"
+                                            value={row.name}
+                                            disabled={isLocked}
+                                            onChange={(e) => handleManualStudentFieldChange(9, row.studentId, 'name', e.target.value)}
+                                            placeholder="Student Name"
+                                          />
+                                        ) : (
+                                          row.name
+                                        )}
+                                      </td>
+                                      <td className="font-mono-ppsu">
+                                        {row.isManual ? (
+                                          <Form.Control
+                                            type="text"
+                                            size="sm"
+                                            className="font-mono-ppsu"
+                                            value={row.enrolmentNumber}
+                                            disabled={isLocked}
+                                            onChange={(e) => handleManualStudentFieldChange(9, row.studentId, 'enrolmentNumber', e.target.value)}
+                                            placeholder="Enrolment Number"
+                                          />
+                                        ) : (
+                                          row.enrolmentNumber
+                                        )}
+                                      </td>
+                                      {criteria.map((criterion: any) => (
+                                        <td key={criterion.id}>
+                                          <Form.Control
+                                            type="number"
+                                            min={0}
+                                            max={criterion.max}
+                                            size="sm"
+                                            className="text-center"
+                                            value={row.marks[criterion.id] ?? 0}
+                                            disabled={isLocked}
+                                            onChange={(e) => handleMarkChange(9, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
+                                          />
+                                        </td>
+                                      ))}
+                                      <td className="fw-bold text-primary">{total}</td>
+                                      {!isLocked && (
+                                        <td>
+                                          {row.isManual ? (
+                                            <Button variant="link" className="text-danger p-0 border-0" onClick={() => handleRemoveManualStudent(9, row.studentId)}>
+                                              Remove
+                                            </Button>
+                                          ) : (
+                                            <span className="text-muted small">—</span>
+                                          )}
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
+                        <div className="d-flex align-items-center gap-2 mt-2 small">
+                          {subs.file?.fileName ? (
+                            <>
+                              <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
+                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
+                              {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(9)}>Remove</Button>}
+                            </>
+                          ) : (
+                            !isLocked && (
+                              <label className="btn btn-outline-secondary btn-sm">
+                                Upload File
+                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(9, file); }} />
+                              </label>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
                   })()}
 
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && (
+                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {false && item.index === 9 && (
                         <Button
@@ -1369,7 +1693,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 </div>
 
                 {/* SECTION 10 & 16: Item 1 Split into 5 Sub-uploads */}
-                {isItem1 && (
+                {isItem1 && !isRestricted && (
                   <div className="mt-3 ps-4 border-start border-2 border-info ms-2">
                     <div className="small text-secondary mb-2 fw-semibold">5 Compulsory Sub-uploads Required:</div>
                     <Row className="g-2 small">
@@ -1421,7 +1745,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 )}
 
                 {/* SECTION 26: IA 1 & 2 */}
-                {isIA && (
+                {isIA && !isRestricted && (
                   <div className="mt-3 ps-4 border-start border-2 border-primary ms-2">
                     <Row className="g-2 small">
                       {[
@@ -1472,7 +1796,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 )}
 
                 {/* Items 11 & 12: live Mark Statement and Result Analysis from Item 9 */}
-                {isIA && (() => {
+                {isIA && !isRestricted && (() => {
                   const continuous = getSubItems(9) || {};
                   const criteria = continuous.criteria || [];
                   const rows = syncStudentRows(continuous.students, criteria);
@@ -1622,7 +1946,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 )}
 
                 {/* Item 13: Assignment Topics, Sample Assignment, and Marks Statement */}
-                {item.index === 13 && (() => {
+                {item.index === 13 && !isRestricted && (() => {
                   const subs = getSubItems(13) || { assignmentTopics: [], sampleAssignment: null, marks: [], marksFile: null };
                   const students = getStudentList();
                   const marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
@@ -1633,7 +1957,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 })()}
 
                 {/* SECTION 2 & 16: University Exam Sub-uploads */}
-                {isUniv && (
+                {isUniv && !isRestricted && (
                   <div className="mt-3 ps-4 border-start border-2 border-warning ms-2">
                     <div className="small text-secondary mb-2 fw-semibold">3 Compulsory Sub-uploads Required:</div>
                     <Row className="g-2 small">
@@ -1682,7 +2006,7 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
                 )}
 
                 {/* Item 15(c): University Exam Result Analysis — the existing auto-derived block follows. */}
-                {isUniv && (() => {
+                {isUniv && !isRestricted && (() => {
                   const subs = getSubItems(15) || { gradeSheet: null, students: [], hasSeparatePracticalGrade: false };
                   // Grade Sheet is rendered in the restored (b) card above; this block is (c) only.
                   subs.gradeSheet = null;
