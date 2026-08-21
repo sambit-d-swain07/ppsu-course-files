@@ -381,23 +381,21 @@ export async function getCourseFileDetailWithChecklist(id: string) {
     labSubmissions: { orderBy: [{ itemIndex: 'asc' as const }, { batch: 'asc' as const }] }
   };
 
-  // Run both lookups (by courseFile.id AND by subjectId) in parallel — 1 network round-trip
-  const [byId, bySubjectId] = await Promise.all([
-    prisma.courseFile.findUnique({ where: { id }, include: detailInclude }),
-    prisma.courseFile.findFirst({ where: { subjectId: id }, include: detailInclude })
-  ]);
+  // Fast-path 1: Try primary key lookup by courseFile.id (~15ms on indexed PK)
+  let file: any = await prisma.courseFile.findUnique({ where: { id }, include: detailInclude });
 
-  let file: any = byId ?? bySubjectId;
-
+  // Fast-path 2: Try lookup by subjectId if id was a subject ID instead of courseFile ID
   if (!file) {
-    // Only fall back to subject-based auto-creation when neither lookup hit.
-    // Look up subject (which is 1 query — subject.id = id)
+    file = await prisma.courseFile.findFirst({ where: { subjectId: id }, include: detailInclude });
+  }
+
+  // Fallback: If subject exists but course file hasn't been auto-created yet
+  if (!file) {
     const subject = await prisma.subject.findUnique({ where: { id } });
     if (subject?.courseTeacherId) {
       const teacher = await prisma.user.findUnique({ where: { id: subject.courseTeacherId } });
       if (teacher) {
         await prisma.$transaction((tx) => createSubjectCourseFile(tx, subject, teacher));
-        // After creation, fetch with full includes — exactly 1 more round-trip
         file = await prisma.courseFile.findFirst({ where: { subjectId: id }, include: detailInclude });
       }
     }

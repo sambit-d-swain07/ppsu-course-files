@@ -118,6 +118,11 @@ export default function FacultyCourseFileDetail({ params }: { params: Promise<{ 
         return;
       }
       const data = await res.json();
+      if (!data || !data.courseFile) {
+        setActionError('Course file not found or inaccessible.');
+        setLoading(false);
+        return;
+      }
       setCourseFile(data.courseFile);
       const checklistItems = Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : [];
       setChecklist(checklistItems);
