@@ -29,16 +29,18 @@ export default function SubjectAllocationPage() {
   const faculty = useMemo(() => users.filter(user => user.role === 'FACULTY'), [users]);
   const duplicateCoordinatorEvaluator = Boolean(form.courseCoordinatorId && form.courseCoordinatorId === form.evaluatorId);
   const divisionValue = form.division === 'Custom' ? form.customDivision.trim() : form.division.trim();
+  const schoolValidationError = !form.school.trim() ? 'School is required' : '';
   const divisionValidationError = !divisionValue ? 'Division is required' : '';
   const assignmentValidationError = duplicateCoordinatorEvaluator
     ? 'The Evaluator must be a different person from the Course Coordinator'
     : '';
+  const formValidationError = assignmentValidationError || schoolValidationError || divisionValidationError;
   const setField = (key: string, value: string) => setForm((current: any) => ({ ...current, [key]: value }));
   const displayUser = (user: any) => user ? `${user.name}${user.department ? ` (${user.department})` : ''}` : 'Unassigned';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setMessage('');
-    if (assignmentValidationError || divisionValidationError) { setError(assignmentValidationError || divisionValidationError); return; }
+    if (formValidationError) { setError(formValidationError); return; }
     setSaving(true);
     try {
       const response = await fetch('/api/admin/subjects', { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, division: divisionValue, id: editingId }) });
@@ -48,7 +50,7 @@ export default function SubjectAllocationPage() {
     } catch (error: any) { setError(error.message); } finally { setSaving(false); }
   };
 
-  const edit = (subject: any) => setForm({ subjectCode: subject.subjectCode, subjectName: subject.subjectName, department: subject.department, school: subject.school, division: divisionOptions.includes(subject.division) ? subject.division : subject.division ? 'Custom' : '', customDivision: divisionOptions.includes(subject.division) ? '' : subject.division || '', semester: subject.semester, academicYear: subject.academicYear, courseCoordinatorId: subject.courseCoordinatorId, courseTeacherId: subject.courseTeacherId, labTeacherAId: subject.labTeacherAId || '', labTeacherBId: subject.labTeacherBId || '', labTeacherCId: subject.labTeacherCId || '', evaluatorId: subject.evaluatorId });
+  const edit = (subject: any) => setForm({ subjectCode: subject.subjectCode, subjectName: subject.subjectName, department: subject.department, school: subject.school || '', division: divisionOptions.includes(subject.division) ? subject.division : subject.division ? 'Custom' : '', customDivision: divisionOptions.includes(subject.division) ? '' : subject.division || '', semester: subject.semester, academicYear: subject.academicYear, courseCoordinatorId: subject.courseCoordinatorId, courseTeacherId: subject.courseTeacherId, labTeacherAId: subject.labTeacherAId || '', labTeacherBId: subject.labTeacherBId || '', labTeacherCId: subject.labTeacherCId || '', evaluatorId: subject.evaluatorId });
 
   return <div>
     <div className="mb-4"><h4 className="fw-bold text-navy-900 mb-1">Subject Allocation</h4><p className="text-secondary small mb-0">Create a subject and assign the four subject-specific responsibilities.</p></div>
@@ -56,8 +58,9 @@ export default function SubjectAllocationPage() {
     {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
     <div className="card-custom mb-4">
       <h5 className="fw-bold text-navy-900 mb-3">{editingId ? 'Edit Subject Allocation' : 'Create Subject'}</h5>
-      <Form onSubmit={submit}>{(assignmentValidationError || divisionValidationError) && <Alert variant="warning" className="py-2 small">{assignmentValidationError || divisionValidationError}</Alert>}<Row className="g-3">
-        {[['subjectCode','Subject Code'],['subjectName','Subject Name'],['department','Department'],['school','School']].map(([key,label]) => <Col md={key === 'subjectName' ? 6 : 3} key={key}><Form.Label className="small fw-semibold text-secondary">{label} *</Form.Label><Form.Control required value={form[key]} onChange={event => setField(key, event.target.value)} /></Col>)}
+      <Form onSubmit={submit}>{formValidationError && <Alert variant="warning" className="py-2 small">{formValidationError}</Alert>}<Row className="g-3">
+        {[['subjectCode','Subject Code'],['subjectName','Subject Name'],['department','Department']].map(([key,label]) => <Col md={key === 'subjectName' ? 6 : 3} key={key}><Form.Label className="small fw-semibold text-secondary">{label} *</Form.Label><Form.Control required value={form[key]} onChange={event => setField(key, event.target.value)} /></Col>)}
+        <Col md={3}><Form.Label className="small fw-semibold text-secondary">School *</Form.Label><Form.Select required value={form.school} onChange={event => setField('school', event.target.value)}><option value="">Select School</option><option value="SOE">SOE (School of Engineering)</option><option value="IDS">IDS</option><option value="ICA">ICA</option></Form.Select></Col>
         <Col md={3}><Form.Label className="small fw-semibold text-secondary">Division *</Form.Label><Form.Select required value={form.division} onChange={event => setField('division', event.target.value)}><option value="">Select Division</option>{divisionOptions.map(division => <option key={division}>{division}</option>)}<option value="Custom">Custom / Other</option></Form.Select>{form.division === 'Custom' && <Form.Control className="mt-2" required placeholder="Enter custom division" value={form.customDivision} onChange={event => setField('customDivision', event.target.value)} />}</Col>
         <Col md={3}><Form.Label className="small fw-semibold text-secondary">Academic Year *</Form.Label><Form.Control required value={form.academicYear} onChange={event => setField('academicYear', event.target.value)} /></Col>
         <Col md={3}><Form.Label className="small fw-semibold text-secondary">Semester *</Form.Label><Form.Select required value={form.semester} onChange={event => setField('semester', event.target.value)}>{semesters.map(semester => <option key={semester}>{semester}</option>)}</Form.Select></Col>
