@@ -4,30 +4,39 @@ import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+const TAB_STORAGE_KEY = 'ppsu_active_role_tab';
+
 export default function FacultyLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isAlsoCoordinator, setIsAlsoCoordinator] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/auth/me')
       .then((res) => {
-        if (!res.ok) {
-          router.push('/login');
-          return;
-        }
+        if (!res.ok) { router.push('/login'); return; }
         return res.json();
       })
       .then((data) => {
-        if (data && data.user) {
+        if (data?.user) {
           setUser(data.user);
+          // Detect if this faculty user is ALSO a coordinator on any subject
+          if (data.user.role === 'COORDINATOR') {
+            setIsAlsoCoordinator(true);
+          }
         }
       })
       .catch(() => router.push('/login'));
   }, [router, pathname]);
+
+  const switchToCoordinator = () => {
+    try { sessionStorage.setItem(TAB_STORAGE_KEY, 'coordinator'); } catch { /**/ }
+    router.push('/coordinator/dashboard');
+  };
 
   // Click outside to close profile dropdown
   useEffect(() => {
@@ -240,6 +249,63 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
             )}
           </div>
         </header>
+
+        {/* Tab bar for dual-role users coming from coordinator layout */}
+        {isAlsoCoordinator && (
+          <div
+            style={{
+              background: 'var(--ppsu-primary)',
+              borderBottom: '2px solid rgba(255,255,255,0.08)',
+              padding: '10px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12
+            }}
+          >
+            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              Active Role:
+            </span>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 4, gap: 4 }}>
+              <button
+                onClick={switchToCoordinator}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 18px', border: 'none', borderRadius: 7,
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  background: 'transparent', color: 'rgba(255,255,255,0.55)',
+                  transition: 'all 0.22s ease', whiteSpace: 'nowrap'
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Course Coordinator
+              </button>
+              <button
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 18px', border: 'none', borderRadius: 7,
+                  fontSize: 13, fontWeight: 700, cursor: 'default',
+                  background: '#10b981', color: '#fff',
+                  boxShadow: '0 2px 8px rgba(16,185,129,0.35)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                My Courses
+              </button>
+            </div>
+            <span style={{
+              marginLeft: 'auto',
+              background: 'rgba(16,185,129,0.15)', color: '#6EE7B7',
+              borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600
+            }}>
+              📚 Managing your own teaching subjects
+            </span>
+          </div>
+        )}
 
         <main className="page-container">
           {children}
