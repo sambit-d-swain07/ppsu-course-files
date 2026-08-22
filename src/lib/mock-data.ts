@@ -434,6 +434,14 @@ function withBatchJson(item: any, batch: string, facultyName?: string) {
   return { ...item, batch, facultyName, subItemsJson: JSON.stringify({ ...parsed, batch }) };
 }
 
+export function normalizeSemesterKey(value?: string | null): string {
+  if (!value) return '';
+  const str = String(value).trim();
+  const numMatch = str.match(/\d+/);
+  if (numMatch) return `SEM ${numMatch[0]}`;
+  return str.toUpperCase();
+}
+
 export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any, sharedDocs: any[] = [], schoolSharedDocs: any[] = []) {
   const facultyNames = new Map<string, string>();
   if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
@@ -444,6 +452,49 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
 
   return items.map((item: any) => {
     let currentItem = { ...item };
+
+    // Item 5 (Department Academic Calendar) is managed centrally by Admin per School & Semester
+    if (item.itemIndex === 5) {
+      const item5Doc = schoolSharedMap.get(5);
+      let adminCal: any = null;
+      if (item5Doc?.subItemsJson) {
+        try {
+          const parsed = JSON.parse(item5Doc.subItemsJson);
+          const normSem = normalizeSemesterKey(subject?.semester);
+          if (parsed.semesters && parsed.semesters[normSem]) {
+            adminCal = parsed.semesters[normSem];
+          }
+        } catch (e) {}
+      }
+
+      if (adminCal && adminCal.fileName) {
+        currentItem = {
+          ...currentItem,
+          status: 'UPLOADED',
+          fileName: adminCal.fileName,
+          fileUrl: adminCal.fileUrl,
+          isAdminPublished: true,
+          isLocked: true,
+          subItemsJson: JSON.stringify({
+            isAdminPublished: true,
+            termType: adminCal.termType,
+            fileName: adminCal.fileName,
+            fileUrl: adminCal.fileUrl,
+            updatedAt: adminCal.updatedAt
+          })
+        };
+      } else {
+        currentItem = {
+          ...currentItem,
+          status: 'EMPTY',
+          fileName: null,
+          fileUrl: null,
+          isAdminPublished: false,
+          isLocked: true,
+          subItemsJson: JSON.stringify({ isAdminPublished: false, pendingMessage: 'Not uploaded yet — pending Admin' })
+        };
+      }
+    }
 
     // Merge Course Coordinator shared document if item is in SHARED_COORDINATOR_ITEM_INDICES
     if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex)) {

@@ -2065,8 +2065,33 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     );
                   })()}
 
+                  {/* Item 5: Centrally Managed Admin Academic Calendar */}
+                  {item.index === 5 && !isRestricted && (
+                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                      {dbItem.fileName ? (
+                        <>
+                          <span className="badge bg-success-subtle text-success border" style={{ fontSize: 11 }}>
+                            ✓ Published by Admin — view only
+                          </span>
+                          <Button
+                            variant="outline-info"
+                            size="sm"
+                            style={{ fontSize: 12 }}
+                            onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'Academic_Calendar.pdf', fileUrl: dbItem.fileUrl })}
+                          >
+                            👁️ View
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="badge bg-secondary-subtle text-secondary border" style={{ fontSize: 11 }}>
+                          ⏳ Not uploaded yet — pending Admin
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 9 && (
+                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {false && item.index === 9 && (
                         <Button

@@ -423,6 +423,21 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               </div>
                             )}
                           </div>
+                        ) : item.index === 5 ? (
+                          <div className="mt-2 small text-secondary">
+                            {uploaded || dbItem.fileName ? (
+                              <div className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold text-success">✓ Published by Admin (Department Academic Calendar)</span>
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Department Academic Calendar', fileName: dbItem.fileName || 'Academic_Calendar.pdf', fileUrl: dbItem.fileUrl })}>
+                                  👁️ View Document
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                ⏳ Not uploaded yet — pending Admin
+                              </div>
+                            )}
+                          </div>
                         ) : item.index === 8 ? (
                           <div className="mt-2 small text-secondary">
                             {subItems?.students?.length ? (

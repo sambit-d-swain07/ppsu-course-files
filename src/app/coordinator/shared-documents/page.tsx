@@ -7,7 +7,6 @@ import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 const SHARED_ITEMS = [
   { index: 1,  name: 'Item 1 — Institute Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'peo', 'pso', 'po'] },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
-  { index: 5,  name: 'Item 5 — Department Academic Calendar', category: 'Calendar' },
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching' },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
