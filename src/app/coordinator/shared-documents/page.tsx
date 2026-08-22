@@ -13,7 +13,7 @@ const SHARED_ITEMS = [
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
   { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
   { index: 12, name: 'Item 12 — Internal Assessment 2 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
-  { index: 13, name: 'Item 13 — Assignment Topics', category: 'Assessment', subKeys: ['assignmentTopics'] }
+  { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] }
 ];
 
 const readFileAsDataUrl = (file: File): Promise<string> => {

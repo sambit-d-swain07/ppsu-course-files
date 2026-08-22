@@ -13,10 +13,6 @@ export async function GET(req: NextRequest) {
     const payload = await verifyToken(token);
     if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
-    if (payload.role !== 'COORDINATOR' && payload.role !== 'ADMIN') {
-      return noStoreJson({ error: 'Forbidden: Course Coordinator access required' }, { status: 403 });
-    }
-
     const subjects = await getSubjectsByCoordinatorId(payload.userId);
     return noStoreJson({ subjects, sharedIndices: SHARED_COORDINATOR_ITEM_INDICES });
   } catch (error: any) {
@@ -31,10 +27,6 @@ export async function POST(req: NextRequest) {
 
     const payload = await verifyToken(token);
     if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
-
-    if (payload.role !== 'COORDINATOR' && payload.role !== 'ADMIN') {
-      return noStoreJson({ error: 'Forbidden: Course Coordinator access required' }, { status: 403 });
-    }
 
     const body = await req.json();
     const { subjectId, itemIndex, status, fileName, fileUrl, subItemsJson } = body;

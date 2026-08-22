@@ -43,10 +43,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
       return noStoreJson({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 4, 8, 9, and 14.` }, { status: 403 });
     }
     const isSubjectCoordinator = subject?.courseCoordinatorId === payload.userId || payload.role === 'ADMIN';
-    const isSharedCoordinatorItem = [1, 3, 5, 6, 7, 10, 11, 12, 13].includes(Number(itemIndex));
+    const isSharedCoordinatorItem = [1, 3, 5, 6, 7, 10, 11, 12, 15].includes(Number(itemIndex));
     if (isSharedCoordinatorItem && !isSubjectCoordinator) {
-      // Allow faculty to update teacher-specific sub-fields (11c/12c sample answer sheets, 13b sample assignments & marks)
-      const isTeacherSubFieldOnly = [11, 12, 13].includes(Number(itemIndex)) && subItemsJson && !fileName && !fileUrl;
+      // Allow faculty to update teacher-specific sub-fields (11c/12c sample answer sheets, 15b/c grade sheet)
+      const isTeacherSubFieldOnly = [11, 12, 15].includes(Number(itemIndex)) && subItemsJson && !fileName && !fileUrl;
       if (!isTeacherSubFieldOnly) {
         return noStoreJson({ error: 'This item is centrally managed by the Course Coordinator.' }, { status: 403 });
       }

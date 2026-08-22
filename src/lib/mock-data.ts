@@ -206,6 +206,56 @@ export async function getAssignedFacultySummary(coordinatorId: string) {
     };
   });
 }
+
+export async function getFacultyUnderCourseCoordinator(coordinatorId: string) {
+  const subjects = await prisma.subject.findMany({
+    where: { courseCoordinatorId: coordinatorId },
+    include: {
+      courseTeacher: true,
+      labTeacherA: true,
+      labTeacherB: true,
+      labTeacherC: true,
+      courseFile: true
+    }
+  });
+
+  const facultyMap = new Map<string, { user: any; assignments: any[] }>();
+
+  subjects.forEach((subj) => {
+    const roles: Array<{ user: any; roleOnSubject: string }> = [
+      { user: subj.courseTeacher, roleOnSubject: 'Course Teacher' },
+      { user: subj.labTeacherA, roleOnSubject: 'Lab Teacher A' },
+      { user: subj.labTeacherB, roleOnSubject: 'Lab Teacher B' },
+      { user: subj.labTeacherC, roleOnSubject: 'Lab Teacher C' }
+    ];
+
+    roles.forEach(({ user, roleOnSubject }) => {
+      if (!user) return;
+      if (!facultyMap.has(user.id)) {
+        facultyMap.set(user.id, { user, assignments: [] });
+      }
+      facultyMap.get(user.id)!.assignments.push({
+        subjectId: subj.id,
+        subjectCode: subj.subjectCode,
+        subjectName: subj.subjectName,
+        semester: subj.semester,
+        roleOnSubject,
+        courseFileStatus: subj.courseFile?.status || 'NOT_SUBMITTED',
+        courseFileId: subj.courseFile?.id || null
+      });
+    });
+  });
+
+  return Array.from(facultyMap.values()).map(({ user, assignments }) => ({
+    id: user.id,
+    name: user.name,
+    employeeId: user.employeeId,
+    department: user.department,
+    school: user.school,
+    designation: user.designation,
+    assignments
+  }));
+}
 export async function assignFacultyCoordinator(facultyId: string, coordinatorId: string) {
   const faculty = await prisma.user.findFirst({ where: { id: facultyId, role: 'FACULTY' } });
   if (!faculty) return false;
@@ -299,7 +349,7 @@ export async function getLabSubmissions(courseFileId: string) {
   return prisma.labChecklistSubmission.findMany({ where: { courseFileId }, orderBy: [{ itemIndex: 'asc' }, { batch: 'asc' }] });
 }
 
-export const SHARED_COORDINATOR_ITEM_INDICES = [1, 3, 5, 6, 7, 10, 11, 12, 13];
+export const SHARED_COORDINATOR_ITEM_INDICES = [1, 3, 5, 6, 7, 10, 11, 12, 15];
 
 export async function getSubjectSharedDocuments(subjectId: string) {
   return prisma.subjectSharedDocument.findMany({
