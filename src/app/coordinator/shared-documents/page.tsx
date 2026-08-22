@@ -16,6 +16,12 @@ const SHARED_ITEMS = [
   { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] }
 ];
 
+const SCHOOL_LABELS: Record<string, string> = {
+  SOE: 'SOE (School of Engineering)',
+  IDS: 'IDS',
+  ICA: 'ICA'
+};
+
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -27,7 +33,10 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
 
 export default function CoordinatorSharedDocumentsPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [schools, setSchools] = useState<any[]>([]);
+  const [schoolSharedDocuments, setSchoolSharedDocuments] = useState<any[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedSchool, setSelectedSchool] = useState<string>('SOE');
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
@@ -41,9 +50,15 @@ export default function CoordinatorSharedDocumentsPage() {
       if (!res.ok) throw new Error('Failed to load coordinator subjects');
       const data = await res.json();
       const list = Array.isArray(data.subjects) ? data.subjects : [];
+      const schoolList = Array.isArray(data.schools) ? data.schools : [];
       setSubjects(list);
+      setSchools(schoolList);
+      setSchoolSharedDocuments(Array.isArray(data.schoolSharedDocuments) ? data.schoolSharedDocuments : []);
       if (list.length > 0 && !selectedSubjectId) {
         setSelectedSubjectId(list[0].id);
+      }
+      if (schoolList.length > 0 && !schoolList.some((school: any) => school.code === selectedSchool)) {
+        setSelectedSchool(schoolList[0].code);
       }
     } catch (err: any) {
       setActionError(err.message || 'Failed to fetch shared documents data.');
@@ -59,6 +74,11 @@ export default function CoordinatorSharedDocumentsPage() {
   const activeSubject = subjects.find((s) => s.id === selectedSubjectId);
   const sharedDocsList: any[] = activeSubject?.sharedDocuments || [];
   const sharedMap = new Map(sharedDocsList.map((d: any) => [d.itemIndex, d]));
+  const schoolSharedMap = new Map(
+    schoolSharedDocuments
+      .filter((d: any) => d.school === selectedSchool)
+      .map((d: any) => [d.itemIndex, d])
+  );
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
@@ -90,11 +110,11 @@ export default function CoordinatorSharedDocumentsPage() {
   };
 
   const handleUploadSubItem = async (itemIndex: number, subKey: string, file: File) => {
-    if (!selectedSubjectId || !file) return;
+    if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId) || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const existingDoc = sharedMap.get(itemIndex);
+      const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
       let existingSubJson: any = {};
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
@@ -108,7 +128,7 @@ export default function CoordinatorSharedDocumentsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'UPLOADED',
           subItemsJson: JSON.stringify(existingSubJson)
@@ -118,7 +138,9 @@ export default function CoordinatorSharedDocumentsPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(`Sub-document '${subKey.toUpperCase()}' for Item #${itemIndex} updated.`);
+      setActionSuccess(itemIndex === 1
+        ? `School ${selectedSchool} Item 1 ${subKey.toUpperCase()} document updated.`
+        : `Sub-document '${subKey.toUpperCase()}' for Item #${itemIndex} updated.`);
       fetchSubjects();
     } catch (err: any) {
       setActionError(err.message);
@@ -128,14 +150,14 @@ export default function CoordinatorSharedDocumentsPage() {
   };
 
   const handleClearDoc = async (itemIndex: number) => {
-    if (!selectedSubjectId) return;
+    if (itemIndex === 1 ? !selectedSchool : !selectedSubjectId) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'EMPTY',
           fileName: null,
@@ -144,7 +166,44 @@ export default function CoordinatorSharedDocumentsPage() {
         })
       });
       if (!res.ok) throw new Error('Failed to remove shared document');
-      setActionSuccess(`Shared document for Item #${itemIndex} removed.`);
+      setActionSuccess(itemIndex === 1 ? `Shared Item 1 documents for ${selectedSchool} removed.` : `Shared document for Item #${itemIndex} removed.`);
+      fetchSubjects();
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
+  const handleSchoolChange = async (itemIndex: number, school: string) => {
+    if (!selectedSubjectId) return;
+    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    try {
+      const activeSub = subjects.find((s) => s.id === selectedSubjectId);
+      const sharedDocsList: any[] = activeSub?.sharedDocuments || [];
+      const sharedMap = new Map(sharedDocsList.map((d: any) => [d.itemIndex, d]));
+      const existingDoc = sharedMap.get(itemIndex);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+      existingSubJson.school = school;
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId: selectedSubjectId,
+          itemIndex,
+          status: existingDoc?.status || 'EMPTY',
+          fileName: existingDoc?.fileName || null,
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'School update failed');
+      }
+      setActionSuccess(`School updated to ${school} for Item #1.`);
       fetchSubjects();
     } catch (err: any) {
       setActionError(err.message);
@@ -268,9 +327,30 @@ export default function CoordinatorSharedDocumentsPage() {
                 </Card.Header>
 
                 <Card.Body className="p-3 p-md-4">
+                  <div className="mb-4 p-3 bg-light rounded-3 border">
+                    <Form.Group controlId="item-1-school-select">
+                      <Form.Label className="small fw-bold text-secondary mb-1">Select School for Item 1</Form.Label>
+                      <Form.Select
+                        size="sm"
+                        value={selectedSchool}
+                        onChange={(e) => setSelectedSchool(e.target.value)}
+                        style={{ maxWidth: 360 }}
+                      >
+                        {(schools.length ? schools : [{ code: 'SOE' }, { code: 'IDS' }, { code: 'ICA' }]).map((school: any) => (
+                          <option key={school.code} value={school.code}>
+                            {SCHOOL_LABELS[school.code] || school.label || school.code}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      <div className="text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                        Item 1 uploads are shared with every Course Teacher and Lab Teacher whose subject belongs to this school.
+                      </div>
+                    </Form.Group>
+                  </div>
+
                   <div className="d-flex flex-column gap-4">
                     {SHARED_ITEMS.map((item) => {
-                      const doc = sharedMap.get(item.index);
+                      const doc = item.index === 1 ? schoolSharedMap.get(item.index) : sharedMap.get(item.index);
                       const isUploaded = doc?.status === 'UPLOADED';
                       let subParsed: any = {};
                       try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
@@ -300,6 +380,25 @@ export default function CoordinatorSharedDocumentsPage() {
                           </Card.Header>
 
                           <Card.Body className="p-3">
+                            {item.index === 1 && (
+                              <div className="mb-3 p-2.5 bg-light rounded-2 border d-flex align-items-center gap-3">
+                                <span className="fw-bold small text-navy-900">Select School / Institute:</span>
+                                <Form.Select
+                                  size="sm"
+                                  style={{ maxWidth: 260, fontSize: 12, fontWeight: 600 }}
+                                  value={subParsed.school || 'SOE'}
+                                  onChange={(e) => handleSchoolChange(item.index, e.target.value)}
+                                >
+                                  <option value="SOE">SOE (School of Engineering)</option>
+                                  <option value="IDS">IDS</option>
+                                  <option value="ICA">ICA</option>
+                                </Form.Select>
+                                <Badge bg="primary" style={{ fontSize: 10 }}>
+                                  {subParsed.school || 'SOE'}
+                                </Badge>
+                              </div>
+                            )}
+
                             {/* Render Sub-keys for Item 1, 11, 12, 13 */}
                             {item.subKeys ? (
                               <div className="d-flex flex-column gap-2">

@@ -19,6 +19,22 @@ const toNotification = (n: any): Notification => ({
   id: n.id, userId: n.userId, message: n.message, read: n.read, timestamp: n.createdAt.toISOString()
 });
 
+export const SCHOOL_OPTIONS = [
+  { code: 'SOE', label: 'School of Engineering', aliases: ['SOE', 'School of Engineering'] },
+  { code: 'IDS', label: 'IDS', aliases: ['IDS'] },
+  { code: 'ICA', label: 'ICA', aliases: ['ICA'] }
+];
+
+export function normalizeSchoolCode(value?: string | null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  const match = SCHOOL_OPTIONS.find((school) =>
+    school.aliases.some((alias) => alias.toLowerCase() === normalized) ||
+    school.code.toLowerCase() === normalized ||
+    school.label.toLowerCase() === normalized
+  );
+  return match?.code || String(value || '').trim();
+}
+
 export async function getUsers() { return (await prisma.user.findMany()).map(toUser); }
 export async function getUserByEmail(email: string) {
   const user = await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
@@ -358,6 +374,37 @@ export async function getSubjectSharedDocuments(subjectId: string) {
   });
 }
 
+export async function getSchoolSharedDocuments(school?: string | null) {
+  const code = normalizeSchoolCode(school);
+  if (!code) return [];
+  return prisma.schoolSharedDocument.findMany({
+    where: { school: code },
+    orderBy: { itemIndex: 'asc' }
+  });
+}
+
+export async function getSchoolSharedDocumentsForSchools(schools: string[]) {
+  const codes = [...new Set(schools.map(normalizeSchoolCode).filter(Boolean))];
+  if (!codes.length) return [];
+  return prisma.schoolSharedDocument.findMany({
+    where: { school: { in: codes } },
+    orderBy: [{ school: 'asc' }, { itemIndex: 'asc' }]
+  });
+}
+
+export async function upsertSchoolSharedDocument(
+  school: string,
+  itemIndex: number,
+  updates: { status?: string; fileName?: string | null; fileUrl?: string | null; subItemsJson?: string | null }
+) {
+  const code = normalizeSchoolCode(school);
+  return prisma.schoolSharedDocument.upsert({
+    where: { school_itemIndex: { school: code, itemIndex } },
+    create: { school: code, itemIndex, status: updates.status || 'EMPTY', ...updates },
+    update: updates
+  });
+}
+
 export async function upsertSubjectSharedDocument(
   subjectId: string,
   itemIndex: number,
@@ -387,19 +434,20 @@ function withBatchJson(item: any, batch: string, facultyName?: string) {
   return { ...item, batch, facultyName, subItemsJson: JSON.stringify({ ...parsed, batch }) };
 }
 
-export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any, sharedDocs: any[] = []) {
+export function mergeChecklistItemsInMemory(items: any[], submissions: any[], subject?: any, sharedDocs: any[] = [], schoolSharedDocs: any[] = []) {
   const facultyNames = new Map<string, string>();
   if (subject?.labTeacherA) facultyNames.set('A', subject.labTeacherA.name);
   if (subject?.labTeacherB) facultyNames.set('B', subject.labTeacherB.name);
   if (subject?.labTeacherC) facultyNames.set('C', subject.labTeacherC.name);
   const sharedMap = new Map(sharedDocs.map((sd: any) => [sd.itemIndex, sd]));
+  const schoolSharedMap = new Map(schoolSharedDocs.map((sd: any) => [sd.itemIndex, sd]));
 
   return items.map((item: any) => {
     let currentItem = { ...item };
 
     // Merge Course Coordinator shared document if item is in SHARED_COORDINATOR_ITEM_INDICES
     if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex)) {
-      const shared = sharedMap.get(item.itemIndex);
+      const shared = item.itemIndex === 1 ? schoolSharedMap.get(item.itemIndex) : sharedMap.get(item.itemIndex);
       const isSharedUploaded = shared && shared.status === 'UPLOADED';
 
       let mergedSubItemsJson = item.subItemsJson;
@@ -411,6 +459,7 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
             ...teacherParsed,
             ...sharedParsed,
             isCoordinatorShared: true,
+            school: item.itemIndex === 1 ? shared?.school || normalizeSchoolCode(subject?.school) : undefined,
             coordinatorUploaded: isSharedUploaded
           });
         } catch (e) {}
@@ -420,6 +469,7 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
         ...currentItem,
         subItemsJson: mergedSubItemsJson,
         isCoordinatorShared: true,
+        school: item.itemIndex === 1 ? shared?.school || normalizeSchoolCode(subject?.school) : undefined,
         coordinatorUploaded: isSharedUploaded,
         sharedStatus: isSharedUploaded ? 'UPLOADED' : 'PENDING',
         sharedFileName: shared?.fileName || null,
@@ -528,7 +578,8 @@ export async function getMergedChecklistItems(courseFileId: string) {
   const [items, submissions] = await Promise.all([getChecklistItemsByCourseFileId(courseFileId), getLabSubmissions(courseFileId)]);
   const subject = await getSubjectForCourseFile(courseFileId);
   const sharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
-  return mergeChecklistItemsInMemory(items, submissions, subject, sharedDocs);
+  const schoolSharedDocs = subject?.school ? await getSchoolSharedDocuments(subject.school) : [];
+  return mergeChecklistItemsInMemory(items, submissions, subject, sharedDocs, schoolSharedDocs);
 }
 
 export async function createSubject(data: {

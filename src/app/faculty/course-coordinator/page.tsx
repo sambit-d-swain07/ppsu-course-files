@@ -228,6 +228,40 @@ export default function FacultyCourseCoordinatorPage() {
     }
   };
 
+  const handleSchoolChange = async (itemIndex: number, school: string) => {
+    if (!selectedSubjectId) return;
+    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    try {
+      const existingDoc = sharedMap.get(itemIndex);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+      existingSubJson.school = school;
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId: selectedSubjectId,
+          itemIndex,
+          status: existingDoc?.status || 'EMPTY',
+          fileName: existingDoc?.fileName || null,
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'School update failed');
+      }
+      setActionSuccess(`School updated to ${school} for Item #1.`);
+      fetchData();
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-5">
@@ -360,6 +394,24 @@ export default function FacultyCourseCoordinatorPage() {
                         {doc?.fileName && (
                           <div className="small text-success font-mono-ppsu mt-0.5">
                             ✓ {doc.fileName}
+                          </div>
+                        )}
+                        {item.index === 1 && (
+                          <div className="mt-2 p-2 bg-white rounded border d-flex align-items-center gap-3">
+                            <span className="fw-bold small text-navy-900">Select School / Institute:</span>
+                            <Form.Select
+                              size="sm"
+                              style={{ maxWidth: 260, fontSize: 12, fontWeight: 600 }}
+                              value={parsedSubs.school || 'SOE'}
+                              onChange={(e) => handleSchoolChange(item.index, e.target.value)}
+                            >
+                              <option value="SOE">SOE (School of Engineering)</option>
+                              <option value="IDS">IDS</option>
+                              <option value="ICA">ICA</option>
+                            </Form.Select>
+                            <Badge bg="primary" style={{ fontSize: 10 }}>
+                              {parsedSubs.school || 'SOE'}
+                            </Badge>
                           </div>
                         )}
 

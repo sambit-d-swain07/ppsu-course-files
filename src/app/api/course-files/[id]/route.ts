@@ -12,6 +12,8 @@ import {
   getLabBatchForUser,
   getLabSubmission,
   getMergedChecklistItems,
+  getSubjectSharedDocuments,
+  getSchoolSharedDocuments,
   updateCourseFile,
   addNotification
 } from '@/lib/mock-data';
@@ -196,21 +198,66 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const subjectSharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
+    const schoolSharedDocs = subject?.school ? await getSchoolSharedDocuments(subject.school) : [];
+    const mergedChecklist = mergeChecklistItemsInMemory(
+      courseFile.checklistItems || [],
+      courseFile.labSubmissions || [],
+      subject,
+      subjectSharedDocs,
+      schoolSharedDocs
+    );
+
+    const parseSubItems = (item: any) => {
+      try { return item?.subItemsJson ? JSON.parse(item.subItemsJson) : {}; } catch (e) { return {}; }
+    };
+    const filterItemStudentsByBatch = (item: any, batch: string) => {
+      const parsed = parseSubItems(item);
+      const students = (Array.isArray(parsed.students) ? parsed.students : [])
+        .filter((student: any) => String(student?.batch || '').toUpperCase() === batch);
+      return {
+        ...item,
+        status: students.length || item?.fileName ? 'UPLOADED' : item?.status || 'EMPTY',
+        subItemsJson: JSON.stringify({ ...parsed, students, batch, filteredByBatch: true })
+      };
+    };
+
     let checklist: any[];
     if (labBatch) {
       const submissions = courseFile.labSubmissions || [];
       checklist = [2, 4, 8, 9, 14].map((itemIndex) => {
+        if ([4, 8, 9].includes(itemIndex)) {
+          const mergedItem = mergedChecklist.find((item: any) => item.itemIndex === itemIndex);
+          const filteredItem = filterItemStudentsByBatch(mergedItem, labBatch);
+          const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
+          if ([8, 9].includes(itemIndex) && submission) {
+            const baseParsed = parseSubItems(filteredItem);
+            const submissionParsed = parseSubItems(submission);
+            const criteria = Array.isArray(submissionParsed.criteria) && submissionParsed.criteria.length
+              ? submissionParsed.criteria
+              : baseParsed.criteria;
+            const storedById = new Map((Array.isArray(submissionParsed.students) ? submissionParsed.students : []).map((row: any) => [row.studentId || row.id || row.enrolmentNumber, row]));
+            const students = (Array.isArray(baseParsed.students) ? baseParsed.students : []).map((student: any) => {
+              const existing = storedById.get(student.studentId || student.id || student.enrolmentNumber) || {};
+              return { ...student, ...existing, batch: labBatch };
+            });
+            return {
+              ...filteredItem,
+              ...submission,
+              itemIndex,
+              batch: labBatch,
+              subItemsJson: JSON.stringify({ ...baseParsed, ...submissionParsed, criteria, students, batch: labBatch, filteredByBatch: true })
+            };
+          }
+          return { ...filteredItem, itemIndex, batch: labBatch };
+        }
         const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
         return submission
           ? { ...submission, itemIndex, batch: labBatch }
           : { itemIndex, status: 'EMPTY', batch: labBatch, subItemsJson: JSON.stringify({ batch: labBatch }) };
       });
     } else {
-      checklist = mergeChecklistItemsInMemory(
-        courseFile.checklistItems || [],
-        courseFile.labSubmissions || [],
-        subject
-      );
+      checklist = mergedChecklist;
     }
 
     return noStoreJson({
@@ -260,7 +307,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14] } : { mode: 'OWNER' }
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] } : { mode: 'OWNER' }
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });

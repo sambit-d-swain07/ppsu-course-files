@@ -369,6 +369,11 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                         {/* SECTION 23: Sub-items display with Clean Status + View */}
                         {item.index === 1 ? (
                           <div className="mt-2 small text-secondary">
+                            <div className="mb-2">
+                              <span className="badge bg-primary text-white" style={{ fontSize: 10 }}>
+                                School: {subItems?.school || 'SOE'}
+                              </span>
+                            </div>
                             {[
                               { k: 'vision', l: '(a) Vision' },
                               { k: 'mission', l: '(b) Mission' },

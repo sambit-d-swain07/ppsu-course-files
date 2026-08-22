@@ -29,6 +29,12 @@ const CHECKLIST_ITEMS = [
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
 const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14];
+const LAB_TEACHER_EDITABLE_ITEM_INDICES = [2, 8, 9, 14];
+const SCHOOL_LABELS: Record<string, string> = {
+  SOE: 'SOE (School of Engineering)',
+  IDS: 'IDS',
+  ICA: 'ICA'
+};
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -80,7 +86,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   });
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
-  const [access, setAccess] = useState<{ mode: string; batch?: string; allowedItems?: number[] }>({ mode: 'OWNER' });
+  const [access, setAccess] = useState<{ mode: string; batch?: string; allowedItems?: number[]; editableItems?: number[] }>({ mode: 'OWNER' });
   const saveTimeoutsRef = useRef<Record<number, NodeJS.Timeout>>({});
   const [activeIaItem, setActiveIaItem] = useState<number | null>(null);
   const [addDocName, setAddDocName] = useState('Mark Statement & Result Analysis');
@@ -125,7 +131,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setCourseFile(data.courseFile);
       const checklistItems = Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : [];
       setChecklist(checklistItems);
-      setAccess(data.courseFile.access || { mode: 'OWNER' });
+      const loadedAccess = data.courseFile.access || { mode: 'OWNER' };
+      setAccess(loadedAccess);
 
       setHeaderEdit({
         facultyName: data.courseFile.facultyName || data.courseFile.faculty?.name || '',
@@ -161,7 +168,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             bs.filter(Boolean).forEach(add);
           });
         }
-        return all;
+        return loadedAccess.mode === 'LAB_BATCH' && loadedAccess.batch
+          ? all.filter((student) => String(student.batch || '').toUpperCase() === loadedAccess.batch)
+          : all;
       };
 
       const buildRows = (items: any[], itemIndex: number, studentList: any[]) => {
@@ -426,7 +435,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       });
     }
 
-    return allStudents;
+    return access.mode === 'LAB_BATCH' && access.batch
+      ? allStudents.filter((student) => String(student.batch || '').toUpperCase() === access.batch)
+      : allStudents;
   };
 
   const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
@@ -697,7 +708,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // Standard upload handler (converts file to real Data URL)
   const handleUpload = async (itemIndex: number, itemName: string, selectedFile?: File) => {
     if (isLocked) return;
-    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(itemIndex)) return;
+    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_EDITABLE_ITEM_INDICES.includes(itemIndex)) return;
     setActionError(''); setActionSuccess('');
     if (!selectedFile) return;
 
@@ -707,9 +718,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       let studentListJson: string | undefined;
       if (itemIndex === 4 && /\.(csv|txt)$/i.test(selectedFile.name)) {
         const lines = (await selectedFile.text()).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        const header = lines[0]?.split(',').map((value) => value.trim().toLowerCase()) || [];
+        const findIndex = (patterns: string[], fallback: number) => {
+          const found = header.findIndex((label) => patterns.some((pattern) => label.includes(pattern)));
+          return found >= 0 ? found : fallback;
+        };
+        const enrolmentIndex = findIndex(['enrol', 'enroll', 'roll'], 0);
+        const nameIndex = findIndex(['name', 'student'], 1);
+        const batchIndex = findIndex(['batch'], 2);
         const rows = lines.slice(1).map((line, index) => {
-          const [enrolmentNumber, name] = line.split(',').map((value) => value.trim());
-          return { id: enrolmentNumber || `student-${index}`, enrolmentNumber: enrolmentNumber || '', name: name || '' };
+          const values = line.split(',').map((value) => value.trim());
+          const enrolmentNumber = values[enrolmentIndex] || '';
+          const name = values[nameIndex] || '';
+          const batch = String(values[batchIndex] || '').toUpperCase();
+          return { id: enrolmentNumber || `student-${index}`, enrolmentNumber, name, batch: ['A', 'B', 'C'].includes(batch) ? batch : '' };
         }).filter((student) => student.enrolmentNumber && student.name);
         studentListJson = JSON.stringify({ students: rows });
       }
@@ -744,7 +766,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleRemove = async (itemIndex: number) => {
     if (isLocked) return;
-    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(itemIndex)) return;
+    if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_EDITABLE_ITEM_INDICES.includes(itemIndex)) return;
     setActionError(''); setActionSuccess('');
     try {
       const res = await fetch(`/api/checklist/${courseFileId}`, {
@@ -756,6 +778,47 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionSuccess(`Item #${itemIndex} cleared.`);
       fetchData();
     } catch (err: any) { setActionError(err.message); }
+  };
+  const handleStudentBatchChange = async (studentId: string, newBatch: string) => {
+    if (isLocked || access.mode === 'LAB_BATCH') return;
+    const item4Db = checklist.find((c: any) => c.itemIndex === 4);
+    let subs: any = {};
+    try { if (item4Db?.subItemsJson) subs = JSON.parse(item4Db.subItemsJson); } catch (e) {}
+    const students: any[] = Array.isArray(subs.students) ? subs.students : [];
+
+    let found = false;
+    const updatedStudents = students.map((st: any) => {
+      const id = st.id || st.studentId || st.enrolmentNumber;
+      if (id === studentId || st.enrolmentNumber === studentId) {
+        found = true;
+        return { ...st, batch: newBatch };
+      }
+      return st;
+    });
+
+    if (!found) {
+      const student = getStudentList().find((s: any) => s.id === studentId || s.enrolmentNumber === studentId);
+      if (student) {
+        updatedStudents.push({ ...student, batch: newBatch });
+      }
+    }
+
+    const updatedSubJson = JSON.stringify({ ...subs, students: updatedStudents });
+
+    try {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 4,
+          subItemsJson: updatedSubJson
+        })
+      });
+      if (!res.ok) throw new Error('Failed to update student batch');
+      fetchData();
+    } catch (err: any) {
+      setActionError(err.message);
+    }
   };
 
   // Item 1 Sub-upload handler with real Data URL
@@ -1636,9 +1699,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           <span className="small text-secondary fw-semibold">Per-student Laboratory Rubrics</span>
                           {!isLocked && (
                             <div className="d-flex gap-2">
-                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(8)}>
-                                + Add Student
-                              </Button>
+                              {access.mode !== 'LAB_BATCH' && (
+                                <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(8)}>
+                                  + Add Student
+                                </Button>
+                              )}
                               <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Project'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(8, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
                                 + Add Criterion
                               </Button>
@@ -1646,7 +1711,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           )}
                         </div>
                         <div className="alert alert-info small py-2 mb-2">
-                          Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list.
+                          {access.mode === 'LAB_BATCH'
+                            ? `Student rows are automatically filtered to Batch ${access.batch} from Item 4. Unassigned students are hidden.`
+                            : "Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list."}
                         </div>
                         <div className="table-responsive border rounded">
                           <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
@@ -1771,9 +1838,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           <span className="small text-secondary fw-semibold">Continuous Evaluation Rubrics — per-student marks</span>
                           {!isLocked && (
                             <div className="d-flex gap-2">
-                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
-                                + Add Student
-                              </Button>
+                              {access.mode !== 'LAB_BATCH' && (
+                                <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
+                                  + Add Student
+                                </Button>
+                              )}
                               <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Assignment / Case Study / Other'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(9, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
                                 + Add Criterion
                               </Button>
@@ -1781,7 +1850,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           )}
                         </div>
                         <div className="alert alert-info small py-2 mb-2">
-                          Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list.
+                          {access.mode === 'LAB_BATCH'
+                            ? `Student rows are automatically filtered to Batch ${access.batch} from Item 4. Unassigned students are hidden.`
+                            : "Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list."}
                         </div>
                         <div className="table-responsive border rounded">
                           <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
@@ -1893,24 +1964,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     );
                   })()}
 
-                  {/* Item 4: Merged / unified student list for Course Teacher & Coordinator */}
-                  {item.index === 4 && access.mode !== 'LAB_BATCH' && !isRestricted && (() => {
+                  {/* Item 4: Merged / unified student list for Course Teacher & Coordinator; filtered read-only for Lab Teachers */}
+                  {item.index === 4 && !isRestricted && (() => {
                     const mergedStudents = getStudentList();
                     const item4Db = checklist.find((c: any) => c.itemIndex === 4);
                     const uploadedFile = item4Db?.fileName;
                     const uploadedFileUrl = item4Db?.fileUrl;
+                    const isLabBatchView = access.mode === 'LAB_BATCH';
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
                         <div className="d-flex justify-content-between align-items-center mb-2">
                           <span className="small text-secondary fw-semibold">
-                            Combined Class List
+                            {isLabBatchView ? `Batch ${access.batch} Student List` : 'Combined Class List'}
                             {mergedStudents.length > 0 && (
                               <span className="ms-2 badge bg-primary text-white" style={{ fontSize: 11 }}>
                                 {mergedStudents.length} students
                               </span>
                             )}
                           </span>
-                          {!isLocked && (
+                          {!isLocked && !isLabBatchView && (
                             <label className="btn btn-outline-secondary btn-sm" style={{ fontSize: 11 }}>
                               {uploadedFile ? 'Replace CSV' : '↑ Upload CSV / PDF'}
                               <input type="file" className="d-none" accept=".csv,.txt,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(4, 'Student Name List', f); e.currentTarget.value = ''; }} />
@@ -1925,7 +1997,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               onClick={() => setViewingDoc({ title: 'Student Name List', fileName: uploadedFile, fileUrl: uploadedFileUrl })}>
                               View
                             </Button>
-                            {!isLocked && (
+                            {!isLocked && !isLabBatchView && (
                               <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
                                 onClick={() => handleRemove(4)}>
                                 Remove
@@ -1934,14 +2006,22 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </div>
                         )}
 
+                        {isLabBatchView && (
+                          <div className="alert alert-info small py-1.5 px-3 mb-2 d-flex align-items-center justify-content-between">
+                            <span>🔍 <strong>Auto-filtered for Batch {access.batch}:</strong> Showing only students assigned to Batch {access.batch}.</span>
+                            <span className="badge bg-primary">{mergedStudents.length} Students</span>
+                          </div>
+                        )}
+
                         {mergedStudents.length > 0 ? (
                           <div className="table-responsive border rounded">
-                            <Table bordered size="sm" className="small align-middle mb-0" style={{ minWidth: 420 }}>
+                            <Table bordered size="sm" className="small align-middle mb-0" style={{ minWidth: 520 }}>
                               <thead className="bg-light">
                                 <tr>
                                   <th style={{ width: 36 }}>#</th>
                                   <th>Student Name</th>
                                   <th>Enrolment Number</th>
+                                  <th style={{ width: 110 }}>Batch</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1950,6 +2030,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     <td className="text-muted font-mono-ppsu">{idx + 1}</td>
                                     <td className="fw-semibold">{student.name}</td>
                                     <td className="font-mono-ppsu">{student.enrolmentNumber}</td>
+                                    <td>
+                                      {!isLocked && !isLabBatchView ? (
+                                        <Form.Select
+                                          size="sm"
+                                          style={{ fontSize: 11, padding: '2px 4px', width: 100 }}
+                                          value={student.batch || ''}
+                                          onChange={(e) => handleStudentBatchChange(student.id, e.target.value)}
+                                        >
+                                          <option value="">Unassigned</option>
+                                          <option value="A">Batch A</option>
+                                          <option value="B">Batch B</option>
+                                          <option value="C">Batch C</option>
+                                        </Form.Select>
+                                      ) : (
+                                        <span className={`badge ${student.batch ? 'bg-primary text-white' : 'bg-secondary text-white'}`} style={{ fontSize: 11 }}>
+                                          {student.batch ? `Batch ${student.batch}` : 'Unassigned'}
+                                        </span>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1957,7 +2056,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </div>
                         ) : (
                           <div className="alert alert-light small py-2 mb-0">
-                            No students yet. Upload a CSV file above, or Lab Teachers can submit their batch lists to auto-populate this list.
+                            {isLabBatchView
+                              ? `No Batch ${access.batch} students available. Students without a Batch value are hidden until the Course Teacher assigns A, B, or C.`
+                              : 'No students yet. Upload a CSV file above with Student Name, Enrolment Number, and Batch.'}
                           </div>
                         )}
                       </div>
@@ -2026,7 +2127,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 {/* SECTION 10 & 16: Item 1 Split into 5 Sub-uploads */}
                 {isItem1 && !isRestricted && (
                   <div className="mt-3 ps-4 border-start border-2 border-info ms-2">
-                    <div className="small text-secondary mb-2 fw-semibold">5 Compulsory Sub-uploads Required:</div>
+                    <div className="small text-secondary mb-2 fw-semibold">
+                      5 Compulsory Sub-uploads Required
+                      {dbItem.isCoordinatorShared && (
+                        <span className="ms-2 badge bg-info-subtle text-info-emphasis border">
+                          School: {SCHOOL_LABELS[getSubItems(1)?.school] || getSubItems(1)?.school || courseFile.school || 'Not selected'}
+                        </span>
+                      )}
+                    </div>
                     <Row className="g-2 small">
                       {[
                         { key: 'vision', label: '(a) Vision' },
@@ -2065,7 +2173,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   </div>
                                 </div>
                               ) : (
-                                !dbItem.isCoordinatorShared && (
+                                dbItem.isCoordinatorShared ? (
+                                  <div className="text-muted mb-1" style={{ fontSize: 11 }}>
+                                    Not uploaded yet — pending Course Coordinator
+                                  </div>
+                                ) : (
                                   <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
                                     Choose Document
                                     <input type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
@@ -2423,7 +2535,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           </Card.Header>
           <Card.Body>
             <p className="text-secondary small mb-3">
-              Submit your Batch {access.batch} lab data (Items 2, 4, 8, 9, 14). This will automatically merge your student list and rubric marks into the Course Teacher and Coordinator views.
+              Submit your Batch {access.batch} lab data (Items 2, 8, 9, 14). Item 4 is view-only and automatically filtered from the Course Teacher's combined list.
             </p>
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
               <div className="small text-secondary">
