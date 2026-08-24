@@ -56,7 +56,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
       'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)',
       'List of Laboratory (or Experiments)',
       'Laboratory Rubrics',
-      'Continuous Evaluation Rubrics',
+      'Theory Continuous Evaluation Rubrics',
       'Lab Manuals/Tutorials',
       'Internal Assessment 1',
       'Internal Assessment 2',

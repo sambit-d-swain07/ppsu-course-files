@@ -15,7 +15,7 @@ const CHECKLIST_ITEMS = [
   { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
   { index: 7,  name: 'List of Laboratory (or Experiments)', maxScore: 10 },
   { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
-  { index: 9,  name: 'Continuous Evaluation Rubrics', maxScore: 10 },
+  { index: 9,  name: 'Theory Continuous Evaluation Rubrics', maxScore: 10 },
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
@@ -28,6 +28,19 @@ const CHECKLIST_ITEMS = [
   { index: 19, name: 'Lecture notes', maxScore: 20 },
   { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
 ];
+
+const PREDEFINED_THEORY_CRITERIA = [
+  { id: 'predef-project',      label: 'Project' },
+  { id: 'predef-case-study',   label: 'Case Study' },
+  { id: 'predef-assignment',   label: 'Assignment' },
+  { id: 'predef-termwork',     label: 'Termwork' },
+  { id: 'predef-gd',           label: 'Group Discussion' },
+  { id: 'predef-field-visit',  label: 'Field Visit' },
+  { id: 'predef-presentation', label: 'Presentation' },
+  { id: 'predef-self-learning',label: 'Self Learning' },
+  { id: 'predef-faculty-eval', label: 'Faculty Evaluation' },
+];
+
 const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14];
 const LAB_TEACHER_EDITABLE_ITEM_INDICES = [2, 8, 9, 14];
 const SCHOOL_LABELS: Record<string, string> = {
@@ -111,6 +124,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [item8Criteria, setItem8Criteria] = useState<any[]>([]);
   const [item9Rows, setItem9Rows] = useState<any[]>([]);
   const [item9Criteria, setItem9Criteria] = useState<any[]>([]);
+  // Item 9 custom criterion add panel state
+  const [item9CustomLabel, setItem9CustomLabel] = useState('');
+  const [item9CustomMax, setItem9CustomMax] = useState<number>(10);
 
   const hashString = (str: string): number => {
     let hash = 0;
@@ -454,6 +470,108 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     debouncedSaveStructuredItem(8, subs, 'UPLOADED');
   }, [isLocked, access.mode, item8Rows]);
 
+  // Item 9 — toggle a predefined criterion on/off
+  const handleToggleTheoryCriterion = useCallback((predefId: string, label: string, checked: boolean, maxMarks: number) => {
+    if (isLocked) return;
+    const subs = getSubItems(9) || {};
+    const existing: any[] = Array.isArray(subs.criteria) ? subs.criteria : [];
+
+    if (checked) {
+      // Add criterion if not already present
+      if (!existing.find((c: any) => c.id === predefId)) {
+        subs.criteria = [...existing, { id: predefId, label, max: maxMarks, fixed: false, predefined: true }];
+      } else {
+        return; // already there
+      }
+    } else {
+      // Check if any student has marks for this criterion
+      const students: any[] = Array.isArray(subs.students) ? subs.students : [];
+      const hasMarks = students.some((s: any) => (s.marks?.[predefId] || 0) > 0);
+      if (hasMarks) {
+        const confirmed = window.confirm(
+          `Some students have marks entered for "${label}". Removing this criterion will delete those marks. Continue?`
+        );
+        if (!confirmed) return;
+        // Clear marks for this criterion
+        subs.students = students.map((s: any) => {
+          const m = { ...(s.marks || {}) };
+          delete m[predefId];
+          return { ...s, marks: m };
+        });
+      }
+      subs.criteria = existing.filter((c: any) => c.id !== predefId);
+    }
+
+    subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
+    const newCriteria = normalizeCriteria(subs.criteria);
+    setItem9Criteria(newCriteria);
+    setItem9Rows(prev => prev.map(r => {
+      const m = { ...r.marks };
+      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+      return { ...r, marks: m };
+    }));
+    debouncedSaveStructuredItem(9, subs, 'UPLOADED');
+  }, [isLocked, checklist]);
+
+  // Item 9 — add a fully custom criterion
+  const handleAddCustomTheoryCriterion = useCallback((label: string, maxMarks: number) => {
+    if (isLocked || !label.trim() || maxMarks <= 0) return;
+    const subs = getSubItems(9) || {};
+    const existing: any[] = Array.isArray(subs.criteria) ? subs.criteria : [];
+    const newId = `custom-${Date.now()}`;
+    subs.criteria = [...existing, { id: newId, label: label.trim(), max: maxMarks, fixed: false, predefined: false }];
+    subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
+    const newCriteria = normalizeCriteria(subs.criteria);
+    setItem9Criteria(newCriteria);
+    setItem9Rows(prev => prev.map(r => {
+      const m = { ...r.marks };
+      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+      return { ...r, marks: m };
+    }));
+    debouncedSaveStructuredItem(9, subs, 'UPLOADED');
+  }, [isLocked, checklist]);
+
+  // Item 9 — remove any (non-fixed) criterion with optional confirmation
+  const handleRemoveTheoryCriterion = useCallback((criterionId: string, label: string) => {
+    if (isLocked) return;
+    const subs = getSubItems(9) || {};
+    const students: any[] = Array.isArray(subs.students) ? subs.students : [];
+    const hasMarks = students.some((s: any) => (s.marks?.[criterionId] || 0) > 0);
+    if (hasMarks) {
+      const confirmed = window.confirm(
+        `Some students have marks entered for "${label}". Removing this criterion will delete those marks. Continue?`
+      );
+      if (!confirmed) return;
+      subs.students = students.map((s: any) => {
+        const m = { ...(s.marks || {}) };
+        delete m[criterionId];
+        return { ...s, marks: m };
+      });
+    }
+    subs.criteria = (Array.isArray(subs.criteria) ? subs.criteria : []).filter((c: any) => c.id !== criterionId);
+    subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
+    const newCriteria = normalizeCriteria(subs.criteria);
+    setItem9Criteria(newCriteria);
+    setItem9Rows(prev => prev.map(r => {
+      const m = { ...r.marks };
+      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+      return { ...r, marks: m };
+    }));
+    debouncedSaveStructuredItem(9, subs, 'UPLOADED');
+  }, [isLocked, checklist]);
+
+  // Item 9 — update max marks on a predefined criterion inline
+  const handleUpdateTheoryCriterionMax = useCallback((criterionId: string, newMax: number) => {
+    if (isLocked || newMax <= 0) return;
+    const subs = getSubItems(9) || {};
+    subs.criteria = (Array.isArray(subs.criteria) ? subs.criteria : []).map((c: any) =>
+      c.id === criterionId ? { ...c, max: newMax } : c
+    );
+    const newCriteria = normalizeCriteria(subs.criteria);
+    setItem9Criteria(newCriteria);
+    debouncedSaveStructuredItem(9, subs, 'UPLOADED');
+  }, [isLocked, checklist]);
+
   const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
     const clamped = Math.max(0, value || 0);
@@ -500,8 +618,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         return {
           file: null,
           criteria: [
-            { id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true },
-            { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }
+            { id: 'internal-1', label: 'Internal 1', max: 30, fixed: true },
+            { id: 'internal-2', label: 'Internal 2', max: 30, fixed: true }
           ],
           students: []
         };
@@ -2442,59 +2560,185 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     );
                   })()}
 
-                  {/* Item 9: Continuous Evaluation Rubrics */}
+                  {/* Item 9: Theory Continuous Evaluation Rubrics */}
                   {item.index === 9 && (() => {
                     const subs = getSubItems(9) || {};
-                    const criteria = item9Criteria;
+
+                    // Fixed base criteria (always present)
+                    const FIXED_CRITERIA = [
+                      { id: 'internal-1', label: 'Internal 1', max: 30, fixed: true },
+                      { id: 'internal-2', label: 'Internal 2', max: 30, fixed: true },
+                    ];
+
+                    // Dynamic selected criteria (predefined + custom, non-fixed)
+                    const selectedCriteria = item9Criteria.filter((c: any) => !c.fixed);
+
+                    // All criteria combined for table columns
+                    const allCriteria = [...FIXED_CRITERIA, ...selectedCriteria];
+
                     const rows = item9Rows;
+
+                    // Compute avg of internals and total for a row
+                    const computeRow = (row: any) => {
+                      const i1 = Number(row.marks?.['internal-1'] || 0);
+                      const i2 = Number(row.marks?.['internal-2'] || 0);
+                      const avgInternals = Number(((i1 + i2) / 2).toFixed(1));
+                      const criteriaSum = selectedCriteria.reduce((sum: number, c: any) => sum + (Number(row.marks?.[c.id]) || 0), 0);
+                      const total = Number((avgInternals + criteriaSum).toFixed(1));
+                      return { avgInternals, total };
+                    };
+
                     return (
                       <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
+
+                        {/* Header row */}
                         <div className="d-flex justify-content-between align-items-center mb-2">
-                          <span className="small text-secondary fw-semibold">Continuous Evaluation Rubrics — per-student marks</span>
-                          {!isLocked && (
-                            <div className="d-flex gap-2">
-                              {access.mode !== 'LAB_BATCH' && (
-                                <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
-                                  + Add Student
-                                </Button>
-                              )}
-                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Assignment / Case Study / Other'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(9, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
-                                + Add Criterion
-                              </Button>
-                            </div>
+                          <span className="small text-secondary fw-semibold">Theory Continuous Evaluation Rubrics — per-student marks</span>
+                          {!isLocked && access.mode !== 'LAB_BATCH' && (
+                            <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
+                              + Add Student
+                            </Button>
                           )}
                         </div>
-                        <div className="alert alert-info small py-2 mb-2">
+
+                        {/* Info banner */}
+                        <div className="alert alert-info small py-2 mb-3">
                           {access.mode === 'LAB_BATCH'
                             ? `Student rows are automatically filtered to Batch ${access.batch} from Item 4. Unassigned students are hidden.`
                             : "Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list."}
                         </div>
+
+                        {/* ── Criteria Selection Panel ── */}
+                        {!isLocked && (
+                          <div className="border rounded p-3 mb-3" style={{ background: '#f8f9fa' }}>
+                            <div className="fw-semibold small mb-2" style={{ color: '#0d6efd' }}>
+                              📋 Select Evaluation Criteria
+                            </div>
+                            <div className="row g-2 mb-3">
+                              {PREDEFINED_THEORY_CRITERIA.map((predef) => {
+                                const active = item9Criteria.find((c: any) => c.id === predef.id);
+                                const isChecked = Boolean(active);
+                                return (
+                                  <div key={predef.id} className="col-6 col-md-4 col-lg-3">
+                                    <div className={`d-flex align-items-center gap-2 p-2 rounded border ${isChecked ? 'border-primary bg-white' : 'border-light bg-white'}`}
+                                      style={{ cursor: 'pointer', transition: 'border-color 0.15s' }}>
+                                      <Form.Check
+                                        type="checkbox"
+                                        id={`theory-crit-${predef.id}`}
+                                        checked={isChecked}
+                                        onChange={(e) => handleToggleTheoryCriterion(predef.id, predef.label, e.target.checked, active?.max || 10)}
+                                        style={{ cursor: 'pointer' }}
+                                      />
+                                      <label htmlFor={`theory-crit-${predef.id}`} className="small fw-semibold mb-0 flex-grow-1" style={{ cursor: 'pointer' }}>
+                                        {predef.label}
+                                      </label>
+                                      {isChecked && (
+                                        <div className="d-flex align-items-center gap-1">
+                                          <span className="text-muted small">Max:</span>
+                                          <Form.Control
+                                            type="number"
+                                            min={1}
+                                            size="sm"
+                                            value={active?.max || 10}
+                                            style={{ width: 55, fontSize: 12 }}
+                                            onChange={(e) => handleUpdateTheoryCriterionMax(predef.id, Number(e.target.value) || 10)}
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Custom criterion add row */}
+                            <div className="d-flex align-items-center gap-2 pt-2 border-top">
+                              <span className="small text-muted fw-semibold">+ Add Custom:</span>
+                              <Form.Control
+                                type="text"
+                                size="sm"
+                                placeholder="Criterion name"
+                                value={item9CustomLabel}
+                                onChange={(e) => setItem9CustomLabel(e.target.value)}
+                                style={{ maxWidth: 200, fontSize: 12 }}
+                              />
+                              <span className="small text-muted">out of</span>
+                              <Form.Control
+                                type="number"
+                                min={1}
+                                size="sm"
+                                value={item9CustomMax}
+                                onChange={(e) => setItem9CustomMax(Number(e.target.value) || 10)}
+                                style={{ width: 70, fontSize: 12 }}
+                              />
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                style={{ fontSize: 11 }}
+                                disabled={!item9CustomLabel.trim() || item9CustomMax <= 0}
+                                onClick={() => {
+                                  handleAddCustomTheoryCriterion(item9CustomLabel, item9CustomMax);
+                                  setItem9CustomLabel('');
+                                  setItem9CustomMax(10);
+                                }}
+                              >
+                                Add
+                              </Button>
+                            </div>
+
+                            {/* Currently selected non-fixed criteria badges */}
+                            {selectedCriteria.length > 0 && (
+                              <div className="d-flex flex-wrap gap-1 mt-2">
+                                {selectedCriteria.map((c: any) => (
+                                  <span key={c.id} className="badge" style={{ background: '#e8f0fe', color: '#1a73e8', fontSize: 11, fontWeight: 500 }}>
+                                    {c.label} ({c.max})
+                                    {!isLocked && (
+                                      <button
+                                        className="btn btn-link p-0 ms-1 text-danger"
+                                        style={{ fontSize: 11, lineHeight: 1, verticalAlign: 'middle' }}
+                                        title={`Remove ${c.label}`}
+                                        onClick={() => handleRemoveTheoryCriterion(c.id, c.label)}
+                                      >×</button>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ── Per-Student Marks Table ── */}
                         <div className="table-responsive border rounded">
-                          <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
+                          <Table bordered hover size="sm" className="small align-middle text-center mb-0"
+                            style={{ minWidth: 700 + selectedCriteria.length * 120 }}>
                             <thead className="bg-light">
                               <tr>
-                                <th>Student Name</th>
-                                <th>Enrolment Number</th>
-                                {criteria.map((criterion: any) => (
-                                  <th key={criterion.id}>
-                                    {criterion.label} <span className="text-muted">({criterion.max})</span>
-                                    {!criterion.fixed && !isLocked && (
-                                      <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(9, criterion, true)}>×</button>
-                                    )}
+                                <th className="text-start" style={{ minWidth: 140 }}>Student Name</th>
+                                <th style={{ minWidth: 130 }}>Enrolment Number</th>
+                                <th style={{ minWidth: 60 }}>Batch</th>
+                                <th style={{ minWidth: 90 }}>Internal 1 <span className="text-muted">(30)</span></th>
+                                <th style={{ minWidth: 90 }}>Internal 2 <span className="text-muted">(30)</span></th>
+                                <th className="bg-info bg-opacity-10" style={{ minWidth: 110 }}>Avg of Internals <span className="text-muted">(30)</span></th>
+                                {selectedCriteria.map((c: any) => (
+                                  <th key={c.id} style={{ minWidth: 100 }}>
+                                    {c.label.toUpperCase()} <span className="text-muted">({c.max})</span>
                                   </th>
                                 ))}
-                                <th className="bg-warning-subtle">Total</th>
-                                {!isLocked && <th style={{ width: '80px' }}>Actions</th>}
+                                <th className="bg-warning-subtle fw-bold" style={{ minWidth: 90 }}>Total</th>
+                                {!isLocked && <th style={{ width: 70 }}>Actions</th>}
                               </tr>
                             </thead>
                             <tbody>
                               {rows.length === 0 ? (
                                 <tr>
-                                  <td colSpan={criteria.length + 3} className="text-muted py-3">No students found. Use '+ Add Student' to add someone.</td>
+                                  <td colSpan={6 + selectedCriteria.length + (isLocked ? 0 : 1)} className="text-muted py-3">
+                                    No students found. Use &apos;+ Add Student&apos; to add someone.
+                                  </td>
                                 </tr>
                               ) : (
                                 rows.map((row: any) => {
-                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0);
+                                  const { avgInternals, total } = computeRow(row);
                                   return (
                                     <tr key={row.studentId}>
                                       <td className="text-start fw-semibold">
@@ -2507,9 +2751,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                             onChange={(e) => handleManualStudentFieldChange(9, row.studentId, 'name', e.target.value)}
                                             placeholder="Student Name"
                                           />
-                                        ) : (
-                                          row.name
-                                        )}
+                                        ) : row.name}
                                       </td>
                                       <td className="font-mono-ppsu">
                                         {row.isManual ? (
@@ -2520,26 +2762,43 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                             value={row.enrolmentNumber}
                                             disabled={isLocked}
                                             onChange={(e) => handleManualStudentFieldChange(9, row.studentId, 'enrolmentNumber', e.target.value)}
-                                            placeholder="Enrolment Number"
+                                            placeholder="Enrolment No."
                                           />
-                                        ) : (
-                                          row.enrolmentNumber
-                                        )}
+                                        ) : row.enrolmentNumber}
                                       </td>
-                                      {criteria.map((criterion: any) => (
-                                        <td key={criterion.id}>
+                                      <td>{row.batch || '—'}</td>
+                                      {/* Internal 1 */}
+                                      <td>
+                                        <Form.Control
+                                          type="number" min={0} max={30} size="sm" className="text-center"
+                                          value={row.marks?.['internal-1'] ?? 0}
+                                          disabled={isLocked}
+                                          onChange={(e) => handleMarkChange(9, row.studentId, 'internal-1', Math.min(30, Number(e.target.value) || 0))}
+                                        />
+                                      </td>
+                                      {/* Internal 2 */}
+                                      <td>
+                                        <Form.Control
+                                          type="number" min={0} max={30} size="sm" className="text-center"
+                                          value={row.marks?.['internal-2'] ?? 0}
+                                          disabled={isLocked}
+                                          onChange={(e) => handleMarkChange(9, row.studentId, 'internal-2', Math.min(30, Number(e.target.value) || 0))}
+                                        />
+                                      </td>
+                                      {/* Average of Internals — auto-calculated, read-only */}
+                                      <td className="fw-semibold text-info-emphasis bg-info bg-opacity-10">{avgInternals}</td>
+                                      {/* Dynamic selected criteria */}
+                                      {selectedCriteria.map((c: any) => (
+                                        <td key={c.id}>
                                           <Form.Control
-                                            type="number"
-                                            min={0}
-                                            max={criterion.max}
-                                            size="sm"
-                                            className="text-center"
-                                            value={row.marks?.[criterion.id] ?? 0}
+                                            type="number" min={0} max={c.max} size="sm" className="text-center"
+                                            value={row.marks?.[c.id] ?? 0}
                                             disabled={isLocked}
-                                            onChange={(e) => handleMarkChange(9, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
+                                            onChange={(e) => handleMarkChange(9, row.studentId, c.id, Math.min(c.max, Number(e.target.value) || 0))}
                                           />
                                         </td>
                                       ))}
+                                      {/* Total — auto-calculated */}
                                       <td className="fw-bold text-primary">{total}</td>
                                       {!isLocked && (
                                         <td>
@@ -2559,11 +2818,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </tbody>
                           </Table>
                         </div>
+
+                        {/* File upload */}
                         <div className="d-flex align-items-center gap-2 mt-2 small">
                           {subs.file?.fileName ? (
                             <>
                               <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
-                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
+                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Theory Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
                               {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(9)}>Remove</Button>}
                             </>
                           ) : (

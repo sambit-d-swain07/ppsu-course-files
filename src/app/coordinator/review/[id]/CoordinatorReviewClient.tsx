@@ -15,7 +15,7 @@ const CHECKLIST_ITEMS = [
   { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
   { index: 7,  name: 'List of Laboratory (or Experiments)', maxScore: 10 },
   { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
-  { index: 9,  name: 'Continuous Evaluation Rubrics', maxScore: 10 },
+  { index: 9,  name: 'Theory Continuous Evaluation Rubrics', maxScore: 10 },
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
@@ -482,9 +482,9 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                           <div className="mt-2 small text-secondary">
                             {subItems?.students?.length ? (
                               <div className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
-                                <span className="fw-semibold text-success">✓ Continuous Evaluation Rubrics ({subItems.students.length} students assessed)</span>
+                                <span className="fw-semibold text-success">✓ Theory Continuous Evaluation Rubrics ({subItems.students.length} students assessed)</span>
                                 {subItems.file?.fileName && (
-                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Continuous Evaluation Rubrics', fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'Theory Continuous Evaluation Rubrics', fileName: subItems.file.fileName, fileUrl: subItems.file.fileUrl })}>
                                     👁️ View Document
                                   </Button>
                                 )}
@@ -529,7 +529,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                             )}
                           </div>
                         ) : item.index === 11 || item.index === 12 ? (<>{(() => {
-                          // Pull Item 9 (Continuous Evaluation Rubrics) data for (d) Mark Statement
+                          // Pull Item 9 (Theory Continuous Evaluation Rubrics) data for (d) Mark Statement
                           const item9Db = checklist.find((c) => c?.itemIndex === 9);
                           const item9Subs = item9Db?.subItemsJson ? (() => { try { return JSON.parse(item9Db.subItemsJson); } catch { return {}; } })() : {};
                           const criteria: any[] = Array.isArray(item9Subs.criteria) ? item9Subs.criteria : [];
@@ -621,7 +621,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
 
                                 {studentRows.length === 0 ? (
                                   <div className="text-muted" style={{ fontSize: 11 }}>
-                                    ⚠ No marks entered in Item 9 yet — table will populate once faculty saves Continuous Evaluation Rubrics.
+                                    ⚠ No marks entered in Item 9 yet — table will populate once faculty saves Theory Continuous Evaluation Rubrics.
                                   </div>
                                 ) : (
                                   <>

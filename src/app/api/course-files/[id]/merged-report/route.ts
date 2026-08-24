@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       new Paragraph({ text: '' })
     ];
     for (const item of checklist) {
-      lines.push(new Paragraph({ text: `Item ${item.itemIndex}: ${item.itemIndex === 9 ? 'Continuous Evaluation Rubrics' : item.itemIndex === 8 ? 'Laboratory Rubrics' : item.itemIndex === 2 ? 'Timetable' : item.itemIndex === 4 ? 'Student Name List' : 'Checklist Item'}`, heading: HeadingLevel.HEADING_2 }));
+      lines.push(new Paragraph({ text: `Item ${item.itemIndex}: ${item.itemIndex === 9 ? 'Theory Continuous Evaluation Rubrics' : item.itemIndex === 8 ? 'Laboratory Rubrics' : item.itemIndex === 2 ? 'Timetable' : item.itemIndex === 4 ? 'Student Name List' : 'Checklist Item'}`, heading: HeadingLevel.HEADING_2 }));
       if (item.batchSubmissions) {
         for (const batch of item.batchSubmissions) {
           let parsed: any = {};
