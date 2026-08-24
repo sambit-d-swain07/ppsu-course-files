@@ -106,10 +106,103 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [hasSeparatePracticalGrade, setHasSeparatePracticalGrade] = useState(false);
 
   // Lifted state for Items 8 & 9 — populated once in fetchData, updated surgically on mark changes
+  const [numPracticals, setNumPracticals] = useState<number>(4);
   const [item8Rows, setItem8Rows] = useState<any[]>([]);
   const [item8Criteria, setItem8Criteria] = useState<any[]>([]);
   const [item9Rows, setItem9Rows] = useState<any[]>([]);
   const [item9Criteria, setItem9Criteria] = useState<any[]>([]);
+
+  const hashString = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  };
+
+  const generateBreakdown = useCallback((totalMark: number, seedKey: string) => {
+    const roundedTotal = Math.max(0, Math.min(20, Math.round((Number(totalMark) || 0) * 10) / 10));
+    
+    if (roundedTotal === 20) {
+      return { a: 5, b: 5, c: 5, d: 5, total: 20 };
+    }
+    if (roundedTotal === 0) {
+      return { a: 0, b: 0, c: 0, d: 0, total: 0 };
+    }
+
+    const hash = hashString(`${seedKey}-${roundedTotal}`);
+    const targetUnits = Math.round(roundedTotal * 2);
+    const maxUnitsPerCol = 10;
+    
+    const baseAvg = Math.floor(targetUnits / 4);
+    let units = [baseAvg, baseAvg, baseAvg, baseAvg];
+    let remainder = targetUnits - (baseAvg * 4);
+
+    const shift = hash % 4;
+    const shuffledOrder = [
+      (0 + shift) % 4,
+      (1 + shift) % 4,
+      (2 + shift) % 4,
+      (3 + shift) % 4,
+    ];
+
+    for (let i = 0; i < remainder; i++) {
+      const colIdx = shuffledOrder[i % 4];
+      units[colIdx]++;
+    }
+
+    for (let i = 0; i < 4; i++) {
+      if (units[i] > maxUnitsPerCol) {
+        const overflow = units[i] - maxUnitsPerCol;
+        units[i] = maxUnitsPerCol;
+        for (let j = 0; j < 4; j++) {
+          if (i !== j && units[j] + overflow <= maxUnitsPerCol) {
+            units[j] += overflow;
+            break;
+          }
+        }
+      }
+    }
+
+    for (let pass = 0; pass < 5; pass++) {
+      let changed = false;
+      for (let i = 0; i < 3; i++) {
+        if (units[i] === units[i + 1]) {
+          const otherIdx = (i + 2) % 4;
+          if (units[i] < maxUnitsPerCol && units[otherIdx] > 0) {
+            units[i]++;
+            units[otherIdx]--;
+            changed = true;
+          } else if (units[i] > 0 && units[otherIdx] < maxUnitsPerCol) {
+            units[i]--;
+            units[otherIdx]++;
+            changed = true;
+          }
+        }
+      }
+      if (!changed) break;
+    }
+
+    const a = units[0] / 2;
+    const b = units[1] / 2;
+    const c = units[2] / 2;
+    const d = units[3] / 2;
+    const sum = Number((a + b + c + d).toFixed(1));
+
+    return { a, b, c, d, total: sum };
+  }, []);
+
+  const calcStudentAverages = useCallback((row: any, numP: number) => {
+    const practicals = row.practicals || {};
+    let sum = 0;
+    for (let i = 1; i <= numP; i++) {
+      sum += Number(practicals[`P${i}`]) || 0;
+    }
+    const avg10 = numP > 0 ? Number((sum / numP).toFixed(2)) : 0;
+    const avg20 = Number((avg10 * 2).toFixed(2));
+    return { avg10, avg20 };
+  }, []);
 
   const fetchData = async () => {
     if (!courseFileId) return;
@@ -173,13 +266,79 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           : all;
       };
 
+      const buildItem8Rows = (items: any[], studentList: any[]) => {
+        const dbItem = items.find((c: any) => c.itemIndex === 8);
+        let rawSubs: any = {};
+        try { if (dbItem?.subItemsJson) rawSubs = JSON.parse(dbItem.subItemsJson); } catch {}
+        
+        if (rawSubs.numPracticals) {
+          setNumPracticals(Math.max(1, Math.min(20, Number(rawSubs.numPracticals))));
+        }
+
+        const storedById = new Map<string, any>(
+          (Array.isArray(rawSubs.students) ? rawSubs.students : []).filter(Boolean).map((r: any) => [r.studentId || r.enrolmentNumber, r])
+        );
+
+        const labDataMap = new Map<string, any>();
+        if (Array.isArray(dbItem?.batchSubmissions)) {
+          dbItem.batchSubmissions.forEach((bSub: any) => {
+            let bs: any[] = Array.isArray(bSub.students) ? bSub.students : [];
+            if (!bs.length && bSub.subItemsJson) {
+              try { const p = JSON.parse(bSub.subItemsJson); if (Array.isArray(p.students)) bs = p.students; } catch {}
+            }
+            bs.forEach((st: any) => {
+              const id = st.studentId || st.id || st.enrolmentNumber;
+              if (id) labDataMap.set(id, { ...(labDataMap.get(id) || {}), ...st });
+            });
+          });
+        }
+
+        const autoRows = studentList.map((s: any) => {
+          const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
+          const lm = labDataMap.get(s.id) || labDataMap.get(s.enrolmentNumber) || {};
+
+          const practicals = prev.practicals || prev.scores || lm.practicals || lm.scores || {};
+          const termWork = prev.termWork ?? prev.marks?.['term-work'] ?? lm.termWork ?? 0;
+          const internalViva = prev.internalViva ?? prev.marks?.['internal-viva'] ?? lm.internalViva ?? 0;
+          const esePerformance = prev.esePerformance ?? prev.marks?.['ese-performance'] ?? lm.esePerformance ?? 0;
+          const eseExternalViva = prev.eseExternalViva ?? prev.marks?.['ese-external-viva'] ?? lm.eseExternalViva ?? 0;
+
+          return {
+            studentId: s.id,
+            name: s.name,
+            enrolmentNumber: s.enrolmentNumber,
+            batch: s.batch,
+            practicals,
+            termWork: Number(termWork) || 0,
+            internalViva: Number(internalViva) || 0,
+            esePerformance: Number(esePerformance) || 0,
+            eseExternalViva: Number(eseExternalViva) || 0
+          };
+        });
+
+        const manualRows = (Array.isArray(rawSubs.students) ? rawSubs.students : [])
+          .filter((r: any) => r?.isManual)
+          .map((r: any) => ({
+            studentId: r.studentId,
+            name: r.name,
+            enrolmentNumber: r.enrolmentNumber,
+            batch: r.batch || 'A',
+            isManual: true,
+            practicals: r.practicals || {},
+            termWork: Number(r.termWork) || 0,
+            internalViva: Number(r.internalViva) || 0,
+            esePerformance: Number(r.esePerformance) || 0,
+            eseExternalViva: Number(r.eseExternalViva) || 0
+          }));
+
+        return [...autoRows, ...manualRows];
+      };
+
       const buildRows = (items: any[], itemIndex: number, studentList: any[]) => {
         const dbItem = items.find((c: any) => c.itemIndex === itemIndex);
         let rawSubs: any = {};
         try { if (dbItem?.subItemsJson) rawSubs = JSON.parse(dbItem.subItemsJson); } catch {}
-        const defaultCriteria = itemIndex === 8
-          ? [{ id: 'term-work', label: 'Term Work', max: 20, fixed: true }, { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }]
-          : [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+        const defaultCriteria = [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
         const criteria = (Array.isArray(rawSubs.criteria) && rawSubs.criteria.length ? rawSubs.criteria : defaultCriteria)
           .filter((c: any) => c && String(c.id || '').trim())
           .map((c: any) => ({ ...c, id: String(c.id), label: String(c.label || 'Criterion'), max: Number(c.max) || 0 }));
@@ -187,7 +346,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         const storedById = new Map<string, any>(
           (Array.isArray(rawSubs.students) ? rawSubs.students : []).filter(Boolean).map((r: any) => [r.studentId || r.enrolmentNumber, r])
         );
-        // Merge Lab Teacher marks by student ID
         const labMarks = new Map<string, Record<string, number>>();
         if (Array.isArray(dbItem?.batchSubmissions)) {
           dbItem.batchSubmissions.forEach((bSub: any) => {
@@ -218,9 +376,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       };
 
       const mergedStudentList = buildStudentList(checklistItems);
-      const { rows: r8, criteria: c8 } = buildRows(checklistItems, 8, mergedStudentList);
+      const r8 = buildItem8Rows(checklistItems, mergedStudentList);
       const { rows: r9, criteria: c9 } = buildRows(checklistItems, 9, mergedStudentList);
-      setItem8Rows(r8); setItem8Criteria(c8);
+      setItem8Rows(r8);
       setItem9Rows(r9); setItem9Criteria(c9);
 
       const item8 = checklistItems.find((cli: any) => cli.itemIndex === 8);
@@ -259,6 +417,42 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   useEffect(() => { if (courseFileId) fetchData(); }, [courseFileId]);
 
   const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status);
+
+  const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
+    if (isLocked) return;
+    const numVal = Math.max(0, Number(value) || 0);
+
+    setItem8Rows(prev => {
+      const updated = prev.map(row => {
+        if (row.studentId !== studentId) return row;
+        if (pKey) {
+          const practicals = { ...(row.practicals || {}) };
+          practicals[pKey] = Math.min(10, numVal);
+          return { ...row, practicals };
+        } else {
+          return { ...row, [field]: Math.min(20, numVal) };
+        }
+      });
+      if (saveTimeoutsRef.current[8]) clearTimeout(saveTimeoutsRef.current[8]);
+      saveTimeoutsRef.current[8] = setTimeout(() => {
+        const subs = getSubItems(8) || {};
+        subs.numPracticals = numPracticals;
+        subs.students = updated;
+        saveStructuredItem(8, subs, 'UPLOADED');
+      }, 600);
+      return updated;
+    });
+  }, [isLocked, numPracticals]);
+
+  const handleNumPracticalsChange = useCallback((val: number) => {
+    if (isLocked || access.mode === 'LAB_BATCH') return;
+    const clamped = Math.max(1, Math.min(20, val || 1));
+    setNumPracticals(clamped);
+    const subs = getSubItems(8) || {};
+    subs.numPracticals = clamped;
+    subs.students = item8Rows;
+    debouncedSaveStructuredItem(8, subs, 'UPLOADED');
+  }, [isLocked, access.mode, item8Rows]);
 
   const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
@@ -526,18 +720,36 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
-    const defaultCriteria = itemIndex === 8
-      ? [{ id: 'term-work', label: 'Term Work', max: 20, fixed: true }, { id: 'internal-viva', label: 'Internal Viva', max: 10, fixed: true }]
-      : [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+    
+    if (itemIndex === 8) {
+      const newStudentId = `manual-${Date.now()}`;
+      const newStudent: any = {
+        studentId: newStudentId,
+        name: '',
+        enrolmentNumber: '',
+        batch: access.batch || 'A',
+        isManual: true,
+        practicals: {},
+        termWork: 0,
+        internalViva: 0,
+        esePerformance: 0,
+        eseExternalViva: 0
+      };
+      subs.numPracticals = numPracticals;
+      subs.students.push(newStudent);
+      await saveStructuredItem(8, subs, 'UPLOADED');
+      setItem8Rows(prev => [...prev, newStudent]);
+      return;
+    }
+
+    const defaultCriteria = [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
     if (!Array.isArray(subs.criteria) || subs.criteria.length === 0) subs.criteria = defaultCriteria;
     const newStudentId = `manual-${Date.now()}`;
     const newStudent: any = { studentId: newStudentId, name: '', enrolmentNumber: '', marks: {}, isManual: true, batch: access.batch || 'A' };
     normalizeCriteria(subs.criteria).forEach((criterion: any) => { newStudent.marks[criterion.id] = 0; });
     subs.students.push(newStudent);
     await saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    // Add to lifted state immediately so table updates without fetchData round-trip
-    if (itemIndex === 8) setItem8Rows(prev => [...prev, newStudent]);
-    else if (itemIndex === 9) setItem9Rows(prev => [...prev, newStudent]);
+    setItem9Rows(prev => [...prev, newStudent]);
   };
 
   const debouncedSaveStructuredItem = (itemIndex: number, subs: any, status = 'UPLOADED') => {
@@ -551,6 +763,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleManualStudentFieldChange = (itemIndex: number, studentId: string, field: 'name' | 'enrolmentNumber', value: string) => {
     if (isLocked) return;
+    if (itemIndex === 8) {
+      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, [field]: value } : r));
+    }
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
     const student = subs.students.find((st: any) => st.studentId === studentId);
@@ -1691,122 +1906,522 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   {/* Item 8: per-student Laboratory Rubrics */}
                   {isItem8 && (() => {
                     const subs = getMergedSubItems(8) || {};
-                    const criteria = item8Criteria;
                     const rows = item8Rows;
+                    const isCoordinatorUser = access.mode !== 'LAB_BATCH';
+
                     return (
-                      <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                          <span className="small text-secondary fw-semibold">Per-student Laboratory Rubrics</span>
-                          {!isLocked && (
-                            <div className="d-flex gap-2">
-                              {access.mode !== 'LAB_BATCH' && (
-                                <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(8)}>
+                      <div className="mt-3 ps-3 border-start border-3 border-primary ms-2 w-100">
+                        {/* 1. COURSE COORDINATOR SETUP BOX */}
+                        <div className="p-3 bg-light rounded border mb-4">
+                          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                            <div>
+                              <h6 className="fw-bold text-primary mb-1">
+                                ⚙️ Course Coordinator Setup — Practical Evaluation Configuration
+                              </h6>
+                              <p className="text-muted small mb-0">
+                                Set the number of practicals for this subject. This automatically generates P1...Pn columns for all lab teachers and course faculty.
+                              </p>
+                            </div>
+
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Label className="mb-0 fw-semibold small text-nowrap">Number of Practicals:</Form.Label>
+                              {isCoordinatorUser && !isLocked ? (
+                                <Form.Control
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  size="sm"
+                                  className="text-center font-mono-ppsu fw-bold"
+                                  style={{ width: '80px' }}
+                                  value={numPracticals}
+                                  onChange={(e) => handleNumPracticalsChange(Number(e.target.value))}
+                                />
+                              ) : (
+                                <span className="badge bg-primary fs-6 px-3 py-2">
+                                  {numPracticals} (P1–P{numPracticals})
+                                </span>
+                              )}
+
+                              {!isLocked && isCoordinatorUser && (
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  className="ms-2 text-nowrap"
+                                  onClick={() => handleManualAddStudent(8)}
+                                >
                                   + Add Student
                                 </Button>
                               )}
-                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => { const label = window.prompt('Criterion label', 'Project'); const max = Number(window.prompt('Maximum marks', '10')); if (label?.trim() && max > 0) handleCriterion(8, { id: `criterion-${Date.now()}`, label: label.trim(), max, fixed: false }); }}>
-                                + Add Criterion
-                              </Button>
                             </div>
-                          )}
+                          </div>
                         </div>
-                        <div className="alert alert-info small py-2 mb-2">
+
+                        <div className="alert alert-info small py-2 mb-3">
                           {access.mode === 'LAB_BATCH'
                             ? `Student rows are automatically filtered to Batch ${access.batch} from Item 4. Unassigned students are hidden.`
                             : "Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list."}
                         </div>
-                        <div className="table-responsive border rounded">
-                          <Table bordered hover size="sm" className="small align-middle text-center mb-0" style={{ minWidth: 720 }}>
-                            <thead className="bg-light">
-                              <tr>
-                                <th>Batch</th>
-                                <th>Student Name</th>
-                                <th>Enrolment Number</th>
-                                {criteria.map((criterion: any) => (
-                                  <th key={criterion.id}>
-                                    {criterion.label} <span className="text-muted">({criterion.max})</span>
-                                    {!criterion.fixed && !isLocked && (
-                                      <button className="btn btn-link text-danger p-0 ms-1" onClick={() => handleCriterion(8, criterion, true)}>×</button>
-                                    )}
-                                  </th>
-                                ))}
-                                <th className="bg-warning-subtle">Total</th>
-                                {!isLocked && <th style={{ width: '80px' }}>Actions</th>}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.length === 0 ? (
-                                <tr>
-                                  <td colSpan={criteria.length + 4} className="text-muted py-3">No students found. Use '+ Add Student' to add someone.</td>
-                                </tr>
-                              ) : (
-                                rows.map((row: any) => {
-                                  const total = criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0);
-                                  return (
-                                    <tr key={`${row.batch || 'A'}-${row.studentId}`}>
-                                      <td className="fw-semibold">{row.batch || 'A'}</td>
-                                      <td className="text-start fw-semibold">
-                                        {row.isManual ? (
-                                          <Form.Control
-                                            type="text"
-                                            size="sm"
-                                            value={row.name}
-                                            disabled={isLocked}
-                                            onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'name', e.target.value)}
-                                            placeholder="Student Name"
-                                          />
-                                        ) : (
-                                          row.name
-                                        )}
+
+                        {/* 2. CONTINUOUS EVALUATION (CE) SECTION */}
+                        <div className="mb-4 border rounded p-3 bg-white shadow-sm">
+                          <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                            <h5 className="fw-bold text-primary mb-0 d-flex align-items-center gap-2">
+                              <span className="badge bg-primary">CE</span> Continuous Evaluation (Laboratory)
+                            </h5>
+                            <span className="text-muted small">Practicals + Term Work + Internal Viva</span>
+                          </div>
+
+                          {/* 2.1 Practical Marks Table */}
+                          <div className="mb-4">
+                            <h6 className="fw-bold text-secondary small mb-2">
+                              2.1 Practical Marks Table (Out of 10 per Practical)
+                            </h6>
+                            <div className="table-responsive border rounded">
+                              <Table bordered hover size="sm" className="small align-middle text-center mb-0">
+                                <thead className="bg-light">
+                                  <tr>
+                                    <th style={{ width: '60px' }}>Batch</th>
+                                    <th>Student Name</th>
+                                    <th>Enrolment Number</th>
+                                    {Array.from({ length: numPracticals }).map((_, i) => (
+                                      <th key={i} style={{ width: '70px' }} className="bg-primary-subtle text-primary">
+                                        P{i + 1}
+                                      </th>
+                                    ))}
+                                    <th className="bg-info-subtle" style={{ width: '90px' }}>Avg of 10</th>
+                                    <th className="bg-warning-subtle" style={{ width: '90px' }}>Avg of 20</th>
+                                    {!isLocked && <th style={{ width: '70px' }}>Actions</th>}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={numPracticals + 5} className="text-muted py-3">
+                                        No students found.
                                       </td>
-                                      <td className="font-mono-ppsu">
-                                        {row.isManual ? (
-                                          <Form.Control
-                                            type="text"
-                                            size="sm"
-                                            className="font-mono-ppsu"
-                                            value={row.enrolmentNumber}
-                                            disabled={isLocked}
-                                            onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'enrolmentNumber', e.target.value)}
-                                            placeholder="Enrolment Number"
-                                          />
-                                        ) : (
-                                          row.enrolmentNumber
-                                        )}
-                                      </td>
-                                      {criteria.map((criterion: any) => (
-                                        <td key={criterion.id}>
-                                          <Form.Control
-                                            type="number"
-                                            min={0}
-                                            max={criterion.max}
-                                            size="sm"
-                                            className="text-center"
-                                            value={row.marks?.[criterion.id] ?? 0}
-                                            disabled={isLocked || (access.mode === 'OWNER' && row.batch && row.batch !== 'A')}
-                                            onChange={(e) => handleMarkChange(8, row.studentId, criterion.id, Math.min(criterion.max, Number(e.target.value) || 0))}
-                                          />
-                                        </td>
-                                      ))}
-                                      <td className="fw-bold text-primary">{total}</td>
-                                      {!isLocked && (
-                                        <td>
-                                          {row.isManual ? (
-                                            <Button variant="link" className="text-danger p-0 border-0" onClick={() => handleRemoveManualStudent(8, row.studentId)}>
-                                              Remove
-                                            </Button>
-                                          ) : (
-                                            <span className="text-muted small">—</span>
-                                          )}
-                                        </td>
-                                      )}
                                     </tr>
-                                  );
-                                })
-                              )}
-                            </tbody>
-                          </Table>
+                                  ) : (
+                                    rows.map((row: any) => {
+                                      const { avg10, avg20 } = calcStudentAverages(row, numPracticals);
+                                      return (
+                                        <tr key={`prac-${row.studentId}`}>
+                                          <td className="fw-semibold">{row.batch || 'A'}</td>
+                                          <td className="text-start fw-semibold">
+                                            {row.isManual ? (
+                                              <Form.Control
+                                                type="text"
+                                                size="sm"
+                                                value={row.name}
+                                                disabled={isLocked}
+                                                onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'name', e.target.value)}
+                                                placeholder="Student Name"
+                                              />
+                                            ) : (
+                                              row.name
+                                            )}
+                                          </td>
+                                          <td className="font-mono-ppsu">
+                                            {row.isManual ? (
+                                              <Form.Control
+                                                type="text"
+                                                size="sm"
+                                                className="font-mono-ppsu"
+                                                value={row.enrolmentNumber}
+                                                disabled={isLocked}
+                                                onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'enrolmentNumber', e.target.value)}
+                                                placeholder="Enrolment Number"
+                                              />
+                                            ) : (
+                                              row.enrolmentNumber
+                                            )}
+                                          </td>
+
+                                          {Array.from({ length: numPracticals }).map((_, i) => {
+                                            const pKey = `P${i + 1}`;
+                                            return (
+                                              <td key={pKey}>
+                                                <Form.Control
+                                                  type="number"
+                                                  min={0}
+                                                  max={10}
+                                                  step={0.5}
+                                                  size="sm"
+                                                  className="text-center font-mono-ppsu px-1"
+                                                  value={row.practicals?.[pKey] ?? 0}
+                                                  disabled={isLocked}
+                                                  onChange={(e) => handleItem8StudentChange(row.studentId, '', e.target.value, pKey)}
+                                                />
+                                              </td>
+                                            );
+                                          })}
+
+                                          <td className="fw-bold text-info font-mono-ppsu">{avg10}</td>
+                                          <td className="fw-bold text-primary font-mono-ppsu">{avg20}</td>
+
+                                          {!isLocked && (
+                                            <td>
+                                              {row.isManual ? (
+                                                <Button variant="link" className="text-danger p-0 border-0" onClick={() => handleRemoveManualStudent(8, row.studentId)}>
+                                                  Remove
+                                                </Button>
+                                              ) : (
+                                                <span className="text-muted small">—</span>
+                                              )}
+                                            </td>
+                                          )}
+                                        </tr>
+                                      );
+                                    })
+                                  )}
+                                </tbody>
+                              </Table>
+                            </div>
+                          </div>
+
+                          {/* 2.2 CE — Practicals 4-Criteria Breakdown Table */}
+                          <div className="mb-4 p-3 bg-light rounded border">
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                              <h6 className="fw-bold text-dark small mb-0">
+                                2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
+                              </h6>
+                              <span className="badge bg-secondary">Auto-Calculated from Avg of 20 (Max 5 per criterion)</span>
+                            </div>
+                            <div className="table-responsive border rounded bg-white">
+                              <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                <thead className="bg-light text-muted">
+                                  <tr>
+                                    <th style={{ width: '60px' }}>Batch</th>
+                                    <th>Student Name</th>
+                                    <th>Enrolment Number</th>
+                                    <th style={{ width: '130px' }}>A (Understanding)</th>
+                                    <th style={{ width: '130px' }}>B (Performance)</th>
+                                    <th style={{ width: '130px' }}>C (Record Maint.)</th>
+                                    <th style={{ width: '130px' }}>D (Viva)</th>
+                                    <th className="bg-warning-subtle" style={{ width: '90px' }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row: any) => {
+                                    const { avg20 } = calcStudentAverages(row, numPracticals);
+                                    const bd = generateBreakdown(avg20, `${row.studentId}-ce-prac`);
+                                    return (
+                                      <tr key={`prac-bd-${row.studentId}`}>
+                                        <td className="fw-semibold">{row.batch || 'A'}</td>
+                                        <td className="text-start">{row.name}</td>
+                                        <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                        <td className="font-mono-ppsu">{bd.a}</td>
+                                        <td className="font-mono-ppsu">{bd.b}</td>
+                                        <td className="font-mono-ppsu">{bd.c}</td>
+                                        <td className="font-mono-ppsu">{bd.d}</td>
+                                        <td className="fw-bold text-primary font-mono-ppsu">{bd.total}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </div>
+                          </div>
+
+                          {/* 2.3 Term Work Evaluation & Breakdown */}
+                          <div className="mb-4 p-3 bg-light rounded border">
+                            <h6 className="fw-bold text-dark small mb-2">
+                              2.3 Term Work Evaluation & Auto-Breakdown (Score out of 20)
+                            </h6>
+                            <Row className="g-3">
+                              <Col md={5}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>Student</th>
+                                        <th style={{ width: '110px' }}>Term Work (20)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => (
+                                        <tr key={`tw-in-${row.studentId}`}>
+                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                          <td>
+                                            <Form.Control
+                                              type="number"
+                                              min={0}
+                                              max={20}
+                                              step={0.5}
+                                              size="sm"
+                                              className="text-center font-mono-ppsu px-1"
+                                              value={row.termWork ?? 0}
+                                              disabled={isLocked}
+                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'termWork', e.target.value)}
+                                            />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                              <Col md={7}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>A</th>
+                                        <th>B</th>
+                                        <th>C</th>
+                                        <th>D</th>
+                                        <th className="bg-warning-subtle">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => {
+                                        const bd = generateBreakdown(row.termWork ?? 0, `${row.studentId}-ce-tw`);
+                                        return (
+                                          <tr key={`tw-bd-${row.studentId}`}>
+                                            <td className="font-mono-ppsu">{bd.a}</td>
+                                            <td className="font-mono-ppsu">{bd.b}</td>
+                                            <td className="font-mono-ppsu">{bd.c}</td>
+                                            <td className="font-mono-ppsu">{bd.d}</td>
+                                            <td className="fw-bold text-primary font-mono-ppsu">{bd.total}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
+
+                          {/* 2.4 Internal Viva Evaluation & Breakdown */}
+                          <div className="p-3 bg-light rounded border">
+                            <h6 className="fw-bold text-dark small mb-2">
+                              2.4 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
+                            </h6>
+                            <Row className="g-3">
+                              <Col md={5}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>Student</th>
+                                        <th style={{ width: '110px' }}>Internal Viva (20)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => (
+                                        <tr key={`iv-in-${row.studentId}`}>
+                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                          <td>
+                                            <Form.Control
+                                              type="number"
+                                              min={0}
+                                              max={20}
+                                              step={0.5}
+                                              size="sm"
+                                              className="text-center font-mono-ppsu px-1"
+                                              value={row.internalViva ?? 0}
+                                              disabled={isLocked}
+                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
+                                            />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                              <Col md={7}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>A</th>
+                                        <th>B</th>
+                                        <th>C</th>
+                                        <th>D</th>
+                                        <th className="bg-warning-subtle">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => {
+                                        const bd = generateBreakdown(row.internalViva ?? 0, `${row.studentId}-ce-iv`);
+                                        return (
+                                          <tr key={`iv-bd-${row.studentId}`}>
+                                            <td className="font-mono-ppsu">{bd.a}</td>
+                                            <td className="font-mono-ppsu">{bd.b}</td>
+                                            <td className="font-mono-ppsu">{bd.c}</td>
+                                            <td className="font-mono-ppsu">{bd.d}</td>
+                                            <td className="fw-bold text-primary font-mono-ppsu">{bd.total}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
                         </div>
+
+                        {/* 3. END SEMESTER EXAM (ESE) SECTION */}
+                        <div className="mb-4 border rounded p-3 bg-white shadow-sm">
+                          <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                            <h5 className="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+                              <span className="badge bg-success">ESE</span> End Semester Exam (Laboratory)
+                            </h5>
+                            <span className="text-muted small">Performance / Quiz + External Viva</span>
+                          </div>
+
+                          {/* 3.1 Performance / Quiz Evaluation & Breakdown */}
+                          <div className="mb-4 p-3 bg-light rounded border">
+                            <h6 className="fw-bold text-dark small mb-2">
+                              3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 20)
+                            </h6>
+                            <Row className="g-3">
+                              <Col md={5}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>Student</th>
+                                        <th style={{ width: '130px' }}>Perf / Quiz (20)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => (
+                                        <tr key={`pq-in-${row.studentId}`}>
+                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                          <td>
+                                            <Form.Control
+                                              type="number"
+                                              min={0}
+                                              max={20}
+                                              step={0.5}
+                                              size="sm"
+                                              className="text-center font-mono-ppsu px-1"
+                                              value={row.esePerformance ?? 0}
+                                              disabled={isLocked}
+                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
+                                            />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                              <Col md={7}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>A</th>
+                                        <th>B</th>
+                                        <th>C</th>
+                                        <th>D</th>
+                                        <th className="bg-warning-subtle">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => {
+                                        const bd = generateBreakdown(row.esePerformance ?? 0, `${row.studentId}-ese-pq`);
+                                        return (
+                                          <tr key={`pq-bd-${row.studentId}`}>
+                                            <td className="font-mono-ppsu">{bd.a}</td>
+                                            <td className="font-mono-ppsu">{bd.b}</td>
+                                            <td className="font-mono-ppsu">{bd.c}</td>
+                                            <td className="font-mono-ppsu">{bd.d}</td>
+                                            <td className="fw-bold text-success font-mono-ppsu">{bd.total}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
+
+                          {/* 3.2 External Viva Evaluation & Breakdown */}
+                          <div className="p-3 bg-light rounded border">
+                            <h6 className="fw-bold text-dark small mb-2">
+                              3.2 External Viva Evaluation & Auto-Breakdown (Score out of 20)
+                            </h6>
+                            <Row className="g-3">
+                              <Col md={5}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>Student</th>
+                                        <th style={{ width: '130px' }}>Ext Viva (20)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => (
+                                        <tr key={`ev-in-${row.studentId}`}>
+                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                          <td>
+                                            <Form.Control
+                                              type="number"
+                                              min={0}
+                                              max={20}
+                                              step={0.5}
+                                              size="sm"
+                                              className="text-center font-mono-ppsu px-1"
+                                              value={row.eseExternalViva ?? 0}
+                                              disabled={isLocked}
+                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
+                                            />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                              <Col md={7}>
+                                <div className="border rounded bg-white p-2">
+                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
+                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                    <thead className="bg-light">
+                                      <tr>
+                                        <th>A</th>
+                                        <th>B</th>
+                                        <th>C</th>
+                                        <th>D</th>
+                                        <th className="bg-warning-subtle">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row: any) => {
+                                        const bd = generateBreakdown(row.eseExternalViva ?? 0, `${row.studentId}-ese-ev`);
+                                        return (
+                                          <tr key={`ev-bd-${row.studentId}`}>
+                                            <td className="font-mono-ppsu">{bd.a}</td>
+                                            <td className="font-mono-ppsu">{bd.b}</td>
+                                            <td className="font-mono-ppsu">{bd.c}</td>
+                                            <td className="font-mono-ppsu">{bd.d}</td>
+                                            <td className="fw-bold text-success font-mono-ppsu">{bd.total}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </Table>
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
+                        </div>
+
+                        {/* File upload for Item 8 */}
                         <div className="d-flex align-items-center gap-2 mt-2 small">
                           {subs.file?.fileName ? (
                             <>
