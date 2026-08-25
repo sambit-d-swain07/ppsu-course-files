@@ -87,6 +87,17 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
+/* High-contrast overrides for dark backgrounds and text-white containers */
+.text-white h1, .text-white h2, .text-white h3, .text-white h4, .text-white h5, .text-white h6,
+.bg-primary h1, .bg-primary h2, .bg-primary h3, .bg-primary h4, .bg-primary h5, .bg-primary h6,
+.bg-dark h1, .bg-dark h2, .bg-dark h3, .bg-dark h4, .bg-dark h5, .bg-dark h6 {
+  color: #ffffff !important;
+}
+
+.text-white-50 {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
 .font-mono-ppsu {
   font-family: var(--ppsu-font-mono) !important;
 }

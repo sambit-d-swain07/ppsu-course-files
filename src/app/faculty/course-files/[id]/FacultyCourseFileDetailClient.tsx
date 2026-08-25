@@ -313,17 +313,17 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
           const lm = labDataMap.get(s.id) || labDataMap.get(s.enrolmentNumber) || {};
 
-          const practicals = prev.practicals || prev.scores || lm.practicals || lm.scores || {};
-          const termWork = prev.termWork ?? prev.marks?.['term-work'] ?? lm.termWork ?? 0;
-          const internalViva = prev.internalViva ?? prev.marks?.['internal-viva'] ?? lm.internalViva ?? 0;
-          const esePerformance = prev.esePerformance ?? prev.marks?.['ese-performance'] ?? lm.esePerformance ?? 0;
-          const eseExternalViva = prev.eseExternalViva ?? prev.marks?.['ese-external-viva'] ?? lm.eseExternalViva ?? 0;
+          const practicals = lm.practicals || lm.scores || prev.practicals || prev.scores || {};
+          const termWork = lm.termWork ?? prev.termWork ?? prev.marks?.['term-work'] ?? 0;
+          const internalViva = lm.internalViva ?? prev.internalViva ?? prev.marks?.['internal-viva'] ?? 0;
+          const esePerformance = lm.esePerformance ?? prev.esePerformance ?? prev.marks?.['ese-performance'] ?? 0;
+          const eseExternalViva = lm.eseExternalViva ?? prev.eseExternalViva ?? prev.marks?.['ese-external-viva'] ?? 0;
 
           return {
             studentId: s.id,
             name: s.name,
             enrolmentNumber: s.enrolmentNumber,
-            batch: s.batch,
+            batch: s.batch || lm.batch || prev.batch || 'A',
             practicals,
             termWork: Number(termWork) || 0,
             internalViva: Number(internalViva) || 0,
@@ -378,8 +378,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
           const lm = labMarks.get(s.id) || labMarks.get(s.enrolmentNumber) || {};
           const marks: Record<string, number> = {};
-          criteria.forEach((c: any) => { const v = prev.marks?.[c.id] ?? lm[c.id]; marks[c.id] = v !== undefined ? Number(v) : 0; });
-          return { studentId: s.id, name: s.name, enrolmentNumber: s.enrolmentNumber, marks, batch: s.batch };
+          criteria.forEach((c: any) => { const v = lm[c.id] ?? prev.marks?.[c.id]; marks[c.id] = v !== undefined ? Number(v) : 0; });
+          return { studentId: s.id, name: s.name, enrolmentNumber: s.enrolmentNumber, marks, batch: s.batch || lm.batch || prev.batch || 'A' };
         });
         const manualRows = (Array.isArray(rawSubs.students) ? rawSubs.students : [])
           .filter((r: any) => r?.isManual)
@@ -589,6 +589,52 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
     }, 600);
   }, [isLocked, item8Rows, item9Rows, checklist]);
+
+  const handleCeGuidelineUpload = async (criterionId: string, file?: File) => {
+    if (isLocked) return;
+    const subs = getSubItems(13) || {};
+    const currentGuidelines = subs.ceGuidelines || {};
+    let updatedGuidelines = { ...currentGuidelines };
+
+    if (file) {
+      const fileUrl = await readFileAsDataUrl(file);
+      updatedGuidelines[criterionId] = { fileName: file.name, fileUrl };
+    } else {
+      delete updatedGuidelines[criterionId];
+    }
+
+    await saveStructuredItem(13, { ...subs, ceGuidelines: updatedGuidelines }, 'UPLOADED');
+  };
+
+  const handleGradeChange = async (studentId: string, field: 'theoryGrade' | 'practicalGrade', value: string) => {
+    if (isLocked) return;
+    const subs = getSubItems(15) || { questionPaper: null, gradeSheet: null, hasSeparatePracticalGrade: false, students: [] };
+    const currentStudents = Array.isArray(subs.students) ? [...subs.students] : [];
+
+    const existingIdx = currentStudents.findIndex((s: any) => s && (s.studentId === studentId || s.id === studentId));
+    if (existingIdx >= 0) {
+      currentStudents[existingIdx] = { ...currentStudents[existingIdx], studentId, id: studentId, [field]: value };
+    } else {
+      currentStudents.push({ studentId, id: studentId, [field]: value });
+    }
+
+    subs.students = currentStudents;
+    await saveStructuredItem(15, subs, 'UPLOADED');
+  };
+
+  const isRowEditableByCurrentFaculty = (rowBatch?: string) => {
+    if (isLocked) return false;
+    if (isLabTeacher) {
+      return rowBatch === access.batch || (!rowBatch && access.batch === 'A');
+    }
+    const hasLabTeacherB = Boolean(courseFile?.subject?.labTeacherBId);
+    const hasLabTeacherC = Boolean(courseFile?.subject?.labTeacherCId);
+
+    if (rowBatch === 'B' && hasLabTeacherB) return false;
+    if (rowBatch === 'C' && hasLabTeacherC) return false;
+
+    return true;
+  };
 
   if (loading) return (
     <div className="d-flex justify-content-center py-5">
@@ -1003,17 +1049,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setHasSeparatePracticalGrade(enabled);
   };
 
-  const handleGradeChange = async (studentId: string, field: 'theoryGrade' | 'practicalGrade', value: string) => {
-    if (isLocked) return;
-    const subs = getSubItems(15) || { questionPaper: null, gradeSheet: null, students: [] };
-    const source = getStudentList();
-    subs.students = source.map((student: any) => {
-      const existing = (subs.students || []).find((row: any) => row.studentId === student.id) || {};
-      return { ...existing, studentId: student.id, name: student.name, enrolmentNumber: student.enrolmentNumber, [field]: value };
-    });
-    await saveStructuredItem(15, subs, 'UPLOADED');
-    setChecklist((prev) => prev.map((item) => item.itemIndex === 15 ? { ...item, subItemsJson: JSON.stringify(subs) } : item));
-  };
+
 
   const isLabTeacher = access.mode === 'LAB_BATCH';
   const scopedChecklistItems = isLabTeacher
@@ -2092,7 +2128,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           {/* 2.1 Practical Marks Table */}
                           <div className="mb-4">
                             <h6 className="fw-bold text-secondary small mb-2">
-                              2.1 Practical Marks Table (Out of 10 per Practical)
+                              2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
                             </h6>
                             <div className="table-responsive border rounded">
                               <Table bordered hover size="sm" className="small align-middle text-center mb-0">
@@ -2121,6 +2157,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   ) : (
                                     rows.map((row: any) => {
                                       const { avg10, avg20 } = calcStudentAverages(row, numPracticals);
+                                      const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
                                       return (
                                         <tr key={`prac-${row.studentId}`}>
                                           <td className="fw-semibold">{row.batch || 'A'}</td>
@@ -2130,7 +2167,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                 type="text"
                                                 size="sm"
                                                 value={row.name}
-                                                disabled={isLocked}
+                                                disabled={!isRowEditable}
                                                 onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'name', e.target.value)}
                                                 placeholder="Student Name"
                                               />
@@ -2145,7 +2182,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                 size="sm"
                                                 className="font-mono-ppsu"
                                                 value={row.enrolmentNumber}
-                                                disabled={isLocked}
+                                                disabled={!isRowEditable}
                                                 onChange={(e) => handleManualStudentFieldChange(8, row.studentId, 'enrolmentNumber', e.target.value)}
                                                 placeholder="Enrolment Number"
                                               />
@@ -2166,7 +2203,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                   size="sm"
                                                   className="text-center font-mono-ppsu px-1"
                                                   value={row.practicals?.[pKey] ?? 0}
-                                                  disabled={isLocked}
+                                                  disabled={!isRowEditable}
                                                   onChange={(e) => handleItem8StudentChange(row.studentId, '', e.target.value, pKey)}
                                                 />
                                               </td>
@@ -2178,7 +2215,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                                           {!isLocked && (
                                             <td>
-                                              {row.isManual ? (
+                                              {row.isManual && isRowEditable ? (
                                                 <Button variant="link" className="text-danger p-0 border-0" onClick={() => handleRemoveManualStudent(8, row.studentId)}>
                                                   Remove
                                                 </Button>
@@ -2240,78 +2277,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </div>
                           </div>
 
-                          {/* 2.3 Term Work Evaluation & Breakdown */}
-                          <div className="mb-4 p-3 bg-light rounded border">
-                            <h6 className="fw-bold text-dark small mb-2">
-                              2.3 Term Work Evaluation & Auto-Breakdown (Score out of 20)
-                            </h6>
-                            <Row className="g-3">
-                              <Col md={5}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>Student</th>
-                                        <th style={{ width: '110px' }}>Term Work (20)</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => (
-                                        <tr key={`tw-in-${row.studentId}`}>
-                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                          <td>
-                                            <Form.Control
-                                              type="number"
-                                              min={0}
-                                              max={20}
-                                              step={0.5}
-                                              size="sm"
-                                              className="text-center font-mono-ppsu px-1"
-                                              value={row.termWork ?? 0}
-                                              disabled={isLocked}
-                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'termWork', e.target.value)}
-                                            />
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                              <Col md={7}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>A</th>
-                                        <th>B</th>
-                                        <th>C</th>
-                                        <th>D</th>
-                                        <th className="bg-warning-subtle">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.termWork ?? 0, `${row.studentId}-ce-tw`);
-                                        return (
-                                          <tr key={`tw-bd-${row.studentId}`}>
-                                            <td className="font-mono-ppsu">{bd.a}</td>
-                                            <td className="font-mono-ppsu">{bd.b}</td>
-                                            <td className="font-mono-ppsu">{bd.c}</td>
-                                            <td className="font-mono-ppsu">{bd.d}</td>
-                                            <td className="fw-bold text-primary font-mono-ppsu">{bd.total}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                            </Row>
-                          </div>
-
                           {/* 2.4 Internal Viva Evaluation & Breakdown */}
                           <div className="p-3 bg-light rounded border">
                             <h6 className="fw-bold text-dark small mb-2">
@@ -2329,24 +2294,27 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {rows.map((row: any) => (
-                                        <tr key={`iv-in-${row.studentId}`}>
-                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                          <td>
-                                            <Form.Control
-                                              type="number"
-                                              min={0}
-                                              max={20}
-                                              step={0.5}
-                                              size="sm"
-                                              className="text-center font-mono-ppsu px-1"
-                                              value={row.internalViva ?? 0}
-                                              disabled={isLocked}
-                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
-                                            />
-                                          </td>
-                                        </tr>
-                                      ))}
+                                      {rows.map((row: any) => {
+                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                        return (
+                                          <tr key={`iv-in-${row.studentId}`}>
+                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                            <td>
+                                              <Form.Control
+                                                type="number"
+                                                min={0}
+                                                max={20}
+                                                step={0.5}
+                                                size="sm"
+                                                className="text-center font-mono-ppsu px-1"
+                                                value={row.internalViva ?? 0}
+                                                disabled={!isRowEditable}
+                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
+                                              />
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
                                     </tbody>
                                   </Table>
                                 </div>
@@ -2411,24 +2379,27 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {rows.map((row: any) => (
-                                        <tr key={`pq-in-${row.studentId}`}>
-                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                          <td>
-                                            <Form.Control
-                                              type="number"
-                                              min={0}
-                                              max={20}
-                                              step={0.5}
-                                              size="sm"
-                                              className="text-center font-mono-ppsu px-1"
-                                              value={row.esePerformance ?? 0}
-                                              disabled={isLocked}
-                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
-                                            />
-                                          </td>
-                                        </tr>
-                                      ))}
+                                      {rows.map((row: any) => {
+                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                        return (
+                                          <tr key={`pq-in-${row.studentId}`}>
+                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                            <td>
+                                              <Form.Control
+                                                type="number"
+                                                min={0}
+                                                max={20}
+                                                step={0.5}
+                                                size="sm"
+                                                className="text-center font-mono-ppsu px-1"
+                                                value={row.esePerformance ?? 0}
+                                                disabled={!isRowEditable}
+                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
+                                              />
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
                                     </tbody>
                                   </Table>
                                 </div>
@@ -2483,24 +2454,27 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {rows.map((row: any) => (
-                                        <tr key={`ev-in-${row.studentId}`}>
-                                          <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                          <td>
-                                            <Form.Control
-                                              type="number"
-                                              min={0}
-                                              max={20}
-                                              step={0.5}
-                                              size="sm"
-                                              className="text-center font-mono-ppsu px-1"
-                                              value={row.eseExternalViva ?? 0}
-                                              disabled={isLocked}
-                                              onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
-                                            />
-                                          </td>
-                                        </tr>
-                                      ))}
+                                      {rows.map((row: any) => {
+                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                        return (
+                                          <tr key={`ev-in-${row.studentId}`}>
+                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
+                                            <td>
+                                              <Form.Control
+                                                type="number"
+                                                min={0}
+                                                max={20}
+                                                step={0.5}
+                                                size="sm"
+                                                className="text-center font-mono-ppsu px-1"
+                                                value={row.eseExternalViva ?? 0}
+                                                disabled={!isRowEditable}
+                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
+                                              />
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
                                     </tbody>
                                   </Table>
                                 </div>
@@ -2562,6 +2536,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                   {/* Item 9: Theory Continuous Evaluation Rubrics */}
                   {item.index === 9 && (() => {
+                    if (access.mode === 'LAB_BATCH') {
+                      return (
+                        <div className="mt-3 ps-4 border-start border-2 border-secondary ms-2 w-100">
+                          <div className="alert alert-secondary small mb-0 d-flex align-items-center gap-2">
+                            <span>🔒 <strong>Item 9 (Theory Continuous Evaluation Rubrics)</strong> is managed exclusively by the Course Teacher (Theory Faculty) and is locked/read-only for Lab Teachers.</span>
+                          </div>
+                        </div>
+                      );
+                    }
                     const subs = getSubItems(9) || {};
 
                     // Fixed base criteria (always present)
@@ -2966,8 +2949,33 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   )}
 
+                  {/* Item 10: Centrally Managed Course Coordinator Lab Manuals / Tutorials */}
+                  {item.index === 10 && !isRestricted && (
+                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                      {dbItem.fileName || dbItem.sharedFileName ? (
+                        <>
+                          <span className="badge bg-success-subtle text-success border" style={{ fontSize: 11 }}>
+                            ✓ Published by Course Coordinator (Coordinator Upload)
+                          </span>
+                          <Button
+                            variant="outline-info"
+                            size="sm"
+                            style={{ fontSize: 12 }}
+                            onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || dbItem.sharedFileName || 'Lab_Manual.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
+                          >
+                            👁️ View
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="badge bg-secondary-subtle text-secondary border" style={{ fontSize: 11 }}>
+                          ⏳ Not uploaded yet — pending Course Coordinator (Locked)
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && (
+                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {false && item.index === 9 && (
                         <Button
@@ -3038,15 +3046,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                     <Row className="g-2 small">
                       {[
-                        { key: 'vision', label: '(a) Vision' },
-                        { key: 'mission', label: '(b) Mission' },
-                        { key: 'peo', label: '(c) PEO (Program Educational Objectives)' },
-                        { key: 'pso', label: '(d) PSO (Program Specific Outcomes)' },
-                        { key: 'po', label: '(e) PO (Program Outcomes)' }
+                        { key: 'vision', label: '(a) Vision *' },
+                        { key: 'mission', label: '(b) Mission *' },
+                        { key: 'peo', label: '(c) PEO *' },
+                        { key: 'pso', label: '(d) PSO *' },
+                        { key: 'po', label: '(e) PO *' }
                       ].map((sub) => {
                         const subData = getSubItems(1)?.[sub.key];
                         return (
-                          <Col xs={12} md={4} key={sub.key}>
+                          <Col xs={12} md={6} lg={4} key={sub.key}>
                             <div className="p-2 bg-light rounded border">
                               <div className="fw-bold mb-1">
                                 {sub.label}
@@ -3103,7 +3111,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         { key: 'sampleAnswerSheet', label: '(c) Sample Answer Sheet *' },
                       ].map((sub) => {
                         const subData = getSubItems(item.index)?.[sub.key];
-                        const isSubLockedByCoord = dbItem.isCoordinatorShared && ['timetable', 'questionPaper'].includes(sub.key);
+                        const isSubLockedByCoord = dbItem.isCoordinatorShared && ['timetable', 'questionPaper', 'sampleAnswerSheet'].includes(sub.key);
                         return (
                           <Col xs={12} md={6} key={sub.key}>
                             <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
@@ -3119,7 +3127,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
                                   </div>
                                 ) : (
-                                  <div className="text-muted mb-1" style={{ fontSize: 11 }}>✗ Not uploaded</div>
+                                  <div className="text-muted mb-1" style={{ fontSize: 11 }}>
+                                    {isSubLockedByCoord ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                  </div>
                                 )}
                               </div>
                               <div className="d-flex gap-1 mt-2">
@@ -3150,56 +3160,593 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   </div>
                 )}
 
-                {/* Items 11 & 12: live Mark Statement and Result Analysis from Item 9 */}
+                {/* Items 11 & 12: (d) live Mark Statement and Result Analysis from Item 9 */}
                 {isIA && !isRestricted && (() => {
-                  const continuous = getSubItems(9) || {};
-                  const criteria = normalizeCriteria(continuous.criteria);
-                  const rows = syncStudentRows(continuous.students, criteria);
-                  const totals = rows.map((row: any) => criteria.reduce((sum: number, criterion: any) => sum + (Number(row.marks?.[criterion.id]) || 0), 0));
+                  const targetExamId = item.index === 11 ? 'internal-exam-1' : 'internal-exam-2';
+                  const examTitle = item.index === 11 ? 'Internal Exam 1' : 'Internal Exam 2';
+
+                  // 1. Gather student rows for Item 9
+                  let sourceStudents: any[] = [];
+                  if (item9Rows && item9Rows.length > 0) {
+                    sourceStudents = item9Rows;
+                  } else {
+                    const item9Db = checklist.find((c: any) => c.itemIndex === 9);
+                    if (item9Db?.subItemsJson) {
+                      try {
+                        const parsed = JSON.parse(item9Db.subItemsJson);
+                        if (Array.isArray(parsed.students)) sourceStudents = parsed.students;
+                      } catch (e) {}
+                    }
+                  }
+
+                  if (!sourceStudents || sourceStudents.length === 0) {
+                    sourceStudents = getStudentList();
+                  }
+
+                  const studentRecords = sourceStudents.map((s: any) => {
+                    const studentId = s.studentId || s.id || s.enrolmentNumber;
+                    const name = s.name || s.studentName || 'Student';
+                    const enrolmentNumber = s.enrolmentNumber || s.enrollmentNumber || s.rollNo || '';
+                    const mark = Number(
+                      s.marks?.[targetExamId] ??
+                      s.marks?.[targetExamId.replace('-exam', '')] ??
+                      s.marks?.[targetExamId.replace('internal-exam-', 'internal-')] ??
+                      s[targetExamId] ??
+                      0
+                    ) || 0;
+                    return { studentId, name, enrolmentNumber, mark: Math.min(30, Math.max(0, mark)) };
+                  });
+
+                  const hasStudentsWithMarks = studentRecords.some((r: any) => r.mark > 0);
                   const markBands = ['below 12', '13–15', '16–18', '19–21', '22–24', '25–27', '28–30'];
-                  const markCounts = markBands.map((band) => totals.filter((value: number) => band === 'below 12' ? value < 12 : band === '13–15' ? value >= 13 && value <= 15 : band === '16–18' ? value >= 16 && value <= 18 : band === '19–21' ? value >= 19 && value <= 21 : band === '22–24' ? value >= 22 && value <= 24 : band === '25–27' ? value >= 25 && value <= 27 : value >= 28 && value <= 30).length);
+                  const markCounts = markBands.map((band) =>
+                    studentRecords.filter((r: any) => {
+                      const m = r.mark;
+                      if (band === 'below 12') return m < 12;
+                      if (band === '13–15') return m >= 12 && m <= 15;
+                      if (band === '16–18') return m >= 16 && m <= 18;
+                      if (band === '19–21') return m >= 19 && m <= 21;
+                      if (band === '22–24') return m >= 22 && m <= 24;
+                      if (band === '25–27') return m >= 25 && m <= 27;
+                      return m >= 28;
+                    }).length
+                  );
+
                   const percentageBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
-                  const percentageCounts = percentageBands.map((band) => totals.filter((value: number) => { const percentage = (value / 30) * 100; return band === '<40%' ? percentage < 40 : band === '41–50%' ? percentage >= 41 && percentage <= 50 : band === '51–60%' ? percentage >= 51 && percentage <= 60 : band === '61–70%' ? percentage >= 61 && percentage <= 70 : band === '71–80%' ? percentage >= 71 && percentage <= 80 : band === '81–90%' ? percentage >= 81 && percentage <= 90 : percentage > 90; }).length);
+                  const percentageCounts = percentageBands.map((band) =>
+                    studentRecords.filter((r: any) => {
+                      const pct = (r.mark / 30) * 100;
+                      if (band === '<40%') return pct < 40;
+                      if (band === '41–50%') return pct >= 40 && pct <= 50;
+                      if (band === '51–60%') return pct > 50 && pct <= 60;
+                      if (band === '61–70%') return pct > 60 && pct <= 70;
+                      if (band === '71–80%') return pct > 70 && pct <= 80;
+                      if (band === '81–90%') return pct > 80 && pct <= 90;
+                      return pct > 90;
+                    }).length
+                  );
+
                   const subs = getSubItems(item.index) || {};
-                  const chart = (labels: string[], counts: number[]) => <div className="d-flex align-items-end gap-2 mt-2" style={{ height: 100 }}>{labels.map((label, index) => <div key={label} className="text-center flex-fill"><div className="bg-primary mx-auto" style={{ height: `${Math.max(4, counts[index] * 18)}px`, width: '70%' }} title={`${counts[index]} students`} /><small style={{ fontSize: 9 }}>{label}</small><div className="font-mono-ppsu" style={{ fontSize: 10 }}>{counts[index]}</div></div>)}</div>;
-                  return <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100"><div className="small fw-semibold text-secondary mb-2">Mark Statement & Result Analysis — linked live to Item 9</div>{!rows.length ? <div className="alert alert-info small">Enter marks in Item 9 to populate this statement automatically.</div> : <><div className="table-responsive border rounded mb-3"><Table bordered size="sm" className="small mb-0"><thead className="bg-light"><tr><th>Student Name</th><th>Enrolment Number</th><th>Total Marks / 30</th></tr></thead><tbody>{rows.map((row: any, index: number) => <tr key={row.studentId}><td>{row.name}</td><td className="font-mono-ppsu">{row.enrolmentNumber}</td><td className="fw-bold">{totals[index]}</td></tr>)}</tbody></Table></div><Row className="g-2 small"><Col md={6}><div className="p-2 bg-light border rounded"><strong>Marks-band distribution</strong>{chart(markBands, markCounts)}</div></Col><Col md={6}><div className="p-2 bg-light border rounded"><strong>Percentage distribution</strong>{chart(percentageBands, percentageCounts)}</div></Col></Row></>}{subs.file?.fileName ? <div className="d-flex align-items-center gap-2 mt-2 small"><span className="text-success fw-semibold">✓ {subs.file.fileName}</span><Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: `Internal Assessment ${item.index === 11 ? 1 : 2} Mark Statement`, fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(item.index)}>Remove</Button>}</div> : !isLocked && <label className="btn btn-outline-secondary btn-sm mt-2">Upload File<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(item.index, file); }} /></label>}</div>;
+
+                  const renderChart = (title: string, labels: string[], counts: number[]) => {
+                    const maxVal = Math.max(...counts, 1);
+                    return (
+                      <Card className="border shadow-sm h-100">
+                        <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
+                          <span className="fw-bold text-navy-900 small">📊 {title}</span>
+                          <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {studentRecords.length}</span>
+                        </Card.Header>
+                        <Card.Body className="p-3 d-flex flex-column justify-content-between">
+                          <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-1 border-bottom" style={{ height: 130 }}>
+                            {labels.map((label, i) => {
+                              const cnt = counts[i];
+                              const barPct = Math.max(8, Math.round((cnt / maxVal) * 75));
+                              return (
+                                <div key={label} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
+                                  <div className="fw-bold font-mono-ppsu text-primary mb-1" style={{ fontSize: 11 }}>
+                                    {cnt}
+                                  </div>
+                                  <div
+                                    className="rounded-top shadow-sm"
+                                    style={{
+                                      height: `${barPct}%`,
+                                      width: '70%',
+                                      backgroundColor: cnt > 0 ? '#1E3A8A' : '#CBD5E1',
+                                      minHeight: '4px'
+                                    }}
+                                    title={`${label}: ${cnt} students`}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="d-flex gap-1 pt-2 px-1">
+                            {labels.map((label) => (
+                              <div key={label} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>
+                                {label}
+                              </div>
+                            ))}
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    );
+                  };
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <span className="small fw-bold text-primary">
+                          (d) Mark Statement & Result Analysis — linked live to Item 9 ({examTitle})
+                        </span>
+                        <span className="badge bg-info text-dark" style={{ fontSize: 10 }}>
+                          Auto-Fetched Live
+                        </span>
+                      </div>
+
+                      {studentRecords.length === 0 || !hasStudentsWithMarks ? (
+                        <div className="alert alert-info small py-2 mb-3">
+                          ℹ️ Enter marks for <strong>{examTitle}</strong> in Item 9 (Theory Continuous Evaluation Rubrics) to populate this Mark Statement and Result Analysis automatically.
+                        </div>
+                      ) : (
+                        <>
+                          {/* Mark Statement Table */}
+                          <div className="table-responsive border rounded mb-3 shadow-sm" style={{ maxHeight: 280 }}>
+                            <Table bordered hover size="sm" className="small align-middle mb-0">
+                              <thead className="bg-light sticky-top">
+                                <tr>
+                                  <th style={{ width: 40 }}>#</th>
+                                  <th>Student Name</th>
+                                  <th>Enrolment Number</th>
+                                  <th className="text-center bg-primary-subtle text-primary" style={{ width: 160 }}>
+                                    {examTitle} Marks (/ 30)
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {studentRecords.map((row: any, idx: number) => (
+                                  <tr key={row.studentId || idx}>
+                                    <td className="text-muted font-mono-ppsu">{idx + 1}</td>
+                                    <td className="fw-semibold">{row.name}</td>
+                                    <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                    <td className="text-center fw-bold font-mono-ppsu text-primary">
+                                      {row.mark} / 30
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          </div>
+
+                          {/* Result Analysis Column Charts */}
+                          <Row className="g-3 mb-3">
+                            <Col md={6}>
+                              {renderChart('Marks-Band Distribution', markBands, markCounts)}
+                            </Col>
+                            <Col md={6}>
+                              {renderChart('Percentage Distribution', percentageBands, percentageCounts)}
+                            </Col>
+                          </Row>
+                        </>
+                      )}
+
+                      {/* Optional File Upload alongside Analysis */}
+                      <div className="p-2 bg-light rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <span className="small text-secondary fw-semibold">
+                          Optional Document Upload for (d) Mark Statement / Result Analysis:
+                        </span>
+                        {subs.file?.fileName ? (
+                          <div className="d-flex align-items-center gap-2 small">
+                            <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                              onClick={() => setViewingDoc({ title: `Internal Assessment ${item.index === 11 ? 1 : 2} Mark Statement Document`, fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}
+                            >
+                              👁️ View
+                            </Button>
+                            {!isLocked && (
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                style={{ fontSize: 11, padding: '2px 8px' }}
+                                onClick={() => handleStructuredFileUpload(item.index)}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          !isLocked && (
+                            <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
+                              ↑ Upload Document File
+                              <input
+                                type="file"
+                                className="d-none"
+                                onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(item.index, file); }}
+                              />
+                            </label>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
                 })()}
 
-                {/* SECTION 27: Item 13 — Assignment topics, sample assignment, named assignments & custom docs */}
-                {false && item.index === 13 && (
-                  <div className="mt-3 ps-4 border-start border-2 border-info ms-2">
-                    {/* Fixed slots (a) & (b) */}
-                    <Row className="g-2 small mb-3">
-                      {[
-                        { key: 'assignmentTopics', label: '(a) Assignment Topics' },
-                        { key: 'sampleAssignment', label: '(b) Sample Assignment' }
-                      ].map((sub) => {
-                        const subData = getSubItems(13)?.[sub.key];
-                        return (
-                          <Col xs={12} md={6} key={sub.key}>
-                            <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                {/* Item 13: Assignment Topics, Sample Assignment, Marks Statement, and (d) CE Parameter Guidelines */}
+                {item.index === 13 && !isRestricted && (() => {
+                  const subs = getSubItems(13) || {};
+                  const students = getStudentList();
+                  const marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
+
+                  // Extract Item 9 custom criteria
+                  const item9Db = checklist.find((c: any) => c.itemIndex === 9);
+                  let item9CriteriaList: any[] = [];
+                  if (item9Db?.subItemsJson) {
+                    try {
+                      const parsed = JSON.parse(item9Db.subItemsJson);
+                      if (Array.isArray(parsed.criteria)) item9CriteriaList = parsed.criteria;
+                    } catch (e) {}
+                  }
+                  if (!item9CriteriaList.length && item9Criteria) {
+                    item9CriteriaList = item9Criteria;
+                  }
+                  const customCeCriteria = item9CriteriaList.filter((c: any) =>
+                    c && c.id && !['internal-exam-1', 'internal-exam-2', 'internal-1', 'internal-2'].includes(String(c.id).toLowerCase())
+                  );
+                  const ceGuidelines = subs.ceGuidelines || {};
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-info ms-2 w-100">
+                      {/* (a) Assignment Topics */}
+                      <div className="mb-3">
+                        <div className="small fw-bold text-navy-900 mb-1">(a) Assignment Topics</div>
+                        {(subs.assignmentTopics || []).map((topic: any) => (
+                          <div key={topic.id} className="d-flex gap-2 mb-1">
+                            <Form.Control size="sm" value={topic.title} disabled={isLocked} onChange={(e) => handleUpdateAssignmentTopic({ ...topic, title: e.target.value })} />
+                            {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleAssignmentTopic(topic, true)}>Remove</Button>}
+                          </div>
+                        ))}
+                        {!isLocked && (
+                          <Button size="sm" variant="outline-primary" style={{ fontSize: 11 }} onClick={() => { const title = window.prompt('Assignment topic/title', `Assignment ${(subs.assignmentTopics || []).length + 1}`); if (title?.trim()) handleAssignmentTopic({ id: `topic-${Date.now()}`, title: title.trim() }); }}>
+                            + Add Assignment Topic
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* (b) Sample Assignment */}
+                      <div className="mb-3">
+                        <div className="small fw-bold text-navy-900 mb-1">(b) Sample Assignment</div>
+                        <div className="d-flex align-items-center gap-2 small">
+                          {subs.sampleAssignment?.fileName ? (
+                            <>
+                              <span className="text-success fw-semibold">✓ {subs.sampleAssignment.fileName}</span>
+                              <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Sample Assignment', fileName: subs.sampleAssignment.fileName, fileUrl: subs.sampleAssignment.fileUrl })}>View</Button>
+                              {!isLocked && <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleSubFileUpload(13, 'sampleAssignment')}>Remove</Button>}
+                            </>
+                          ) : (
+                            !isLocked && (
+                              <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
+                                Upload File
+                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'sampleAssignment', file); }} />
+                              </label>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {/* (c) Marks Statement & Result Analysis */}
+                      <div className="mb-3">
+                        <div className="small fw-bold text-navy-900 mb-1">(c) Assignment Marks Statement & Result Analysis</div>
+                        {!students.length ? (
+                          <div className="alert alert-info small py-2 mb-2">Student rows will appear automatically from Item 4.</div>
+                        ) : (
+                          <>
+                            <div className="table-responsive border rounded mb-3">
+                              <Table bordered size="sm" className="small mb-0 align-middle">
+                                <thead className="bg-light">
+                                  <tr><th>#</th><th>Student Name</th><th>Enrolment Number</th><th>Marks (/ 100)</th></tr>
+                                </thead>
+                                <tbody>
+                                  {marks.map((row: any, idx: number) => (
+                                    <tr key={row.studentId}>
+                                      <td className="text-muted font-mono-ppsu">{idx + 1}</td>
+                                      <td className="fw-semibold">{row.name}</td>
+                                      <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                      <td>
+                                        <Form.Control type="number" min={0} max={100} size="sm" value={row.marks['assignment-marks'] || 0} disabled={isLocked} onChange={(e) => handleAssignmentMarkChange(row.studentId, Number(e.target.value))} style={{ maxWidth: 100 }} />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </Table>
+                            </div>
+
+                            {/* Result Analysis Column Charts for Item 13(c) */}
+                            {(() => {
+                              const markValues = marks.map((r: any) => Number(r.marks?.['assignment-marks'] || 0));
+                              const mBands = ['<40', '41–50', '51–60', '61–70', '71–80', '81–90', '>90'];
+                              const mCounts = [
+                                markValues.filter(m => m <= 40).length,
+                                markValues.filter(m => m >= 41 && m <= 50).length,
+                                markValues.filter(m => m >= 51 && m <= 60).length,
+                                markValues.filter(m => m >= 61 && m <= 70).length,
+                                markValues.filter(m => m >= 71 && m <= 80).length,
+                                markValues.filter(m => m >= 81 && m <= 90).length,
+                                markValues.filter(m => m > 90).length,
+                              ];
+                              const pBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
+                              const maxValM = Math.max(...mCounts, 1);
+
+                              return (
+                                <Row className="g-3 mb-3">
+                                  <Col md={6}>
+                                    <Card className="border shadow-sm h-100">
+                                      <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
+                                        <span className="fw-bold text-navy-900 small">📊 Assignment Marks-Band Distribution</span>
+                                        <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {marks.length}</span>
+                                      </Card.Header>
+                                      <Card.Body className="p-3 d-flex flex-column justify-content-between">
+                                        <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-1 border-bottom" style={{ height: 130 }}>
+                                          {mBands.map((label, i) => {
+                                            const cnt = mCounts[i];
+                                            const barPct = Math.max(8, Math.round((cnt / maxValM) * 75));
+                                            return (
+                                              <div key={label} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
+                                                <div className="fw-bold font-mono-ppsu text-primary mb-1" style={{ fontSize: 11 }}>{cnt}</div>
+                                                <div className="rounded-top shadow-sm" style={{ height: `${barPct}%`, width: '70%', backgroundColor: cnt > 0 ? '#1E3A8A' : '#CBD5E1', minHeight: '4px' }} title={`${label}: ${cnt} students`} />
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                        <div className="d-flex gap-1 pt-2 px-1">
+                                          {mBands.map((label) => (
+                                            <div key={label} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>{label}</div>
+                                          ))}
+                                        </div>
+                                      </Card.Body>
+                                    </Card>
+                                  </Col>
+                                  <Col md={6}>
+                                    <Card className="border shadow-sm h-100">
+                                      <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
+                                        <span className="fw-bold text-navy-900 small">📊 Assignment Percentage Distribution</span>
+                                        <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {marks.length}</span>
+                                      </Card.Header>
+                                      <Card.Body className="p-3 d-flex flex-column justify-content-between">
+                                        <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-1 border-bottom" style={{ height: 130 }}>
+                                          {pBands.map((label, i) => {
+                                            const cnt = mCounts[i];
+                                            const barPct = Math.max(8, Math.round((cnt / maxValM) * 75));
+                                            return (
+                                              <div key={label} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
+                                                <div className="fw-bold font-mono-ppsu mb-1" style={{ fontSize: 11, color: '#0D9488' }}>{cnt}</div>
+                                                <div className="rounded-top shadow-sm" style={{ height: `${barPct}%`, width: '70%', backgroundColor: cnt > 0 ? '#0D9488' : '#CBD5E1', minHeight: '4px' }} title={`${label}: ${cnt} students`} />
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                        <div className="d-flex gap-1 pt-2 px-1">
+                                          {pBands.map((label) => (
+                                            <div key={label} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>{label}</div>
+                                          ))}
+                                        </div>
+                                      </Card.Body>
+                                    </Card>
+                                  </Col>
+                                </Row>
+                              );
+                            })()}
+                          </>
+                        )}
+                        {subs.marksFile?.fileName ? (
+                          <div className="small d-flex align-items-center gap-2">
+                            <span className="text-success fw-semibold">✓ {subs.marksFile.fileName}</span>
+                            <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Assignment Marks Statement', fileName: subs.marksFile.fileName, fileUrl: subs.marksFile.fileUrl })}>View</Button>
+                            {!isLocked && <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleSubFileUpload(13, 'marksFile')}>Remove</Button>}
+                          </div>
+                        ) : (
+                          !isLocked && (
+                            <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
+                              Upload Marks Statement File
+                              <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'marksFile', file); }} />
+                            </label>
+                          )
+                        )}
+                      </div>
+
+                      {/* (d) Guidelines/Documents Related to Theory CE Parameters */}
+                      <div className="p-3 bg-light rounded border">
+                        <div className="fw-bold text-navy-900 small mb-2 d-flex align-items-center justify-content-between">
+                          <span>(d) Guidelines / Documents for Theory CE Parameters</span>
+                          <span className="badge bg-primary" style={{ fontSize: 10 }}>Auto-Generated from Item 9</span>
+                        </div>
+
+                        {!customCeCriteria.length ? (
+                          <div className="alert alert-light border small py-2 mb-0">
+                            ℹ️ Select additional Theory CE criteria in <strong>Item 9 (Continuous Evaluation Rubrics)</strong> — such as Project, Case Study, Field Visit, Assignment, etc. — to automatically generate guidelines document upload slots here.
+                          </div>
+                        ) : (
+                          <div className="d-flex flex-column gap-2">
+                            {customCeCriteria.map((crit: any) => {
+                              const fileData = ceGuidelines[crit.id];
+                              return (
+                                <div key={crit.id} className="p-2 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                  <div>
+                                    <div className="fw-bold small text-dark">Guidelines / Documents related to {crit.label}</div>
+                                    {fileData?.fileName ? (
+                                      <div className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 11 }}>✓ {fileData.fileName}</div>
+                                    ) : (
+                                      <div className="text-muted" style={{ fontSize: 11 }}>✗ Document not uploaded yet</div>
+                                    )}
+                                  </div>
+                                  <div className="d-flex align-items-center gap-1">
+                                    {fileData?.fileName && (
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Guidelines — ${crit.label}`, fileName: fileData.fileName, fileUrl: fileData.fileUrl })}>
+                                        👁️ View
+                                      </Button>
+                                    )}
+                                    {!isLocked && (
+                                      <>
+                                        <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                          {fileData?.fileName ? 'Replace' : 'Upload Guidelines File'}
+                                          <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCeGuidelineUpload(crit.id, file); }} />
+                                        </label>
+                                        {fileData?.fileName && (
+                                          <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleCeGuidelineUpload(crit.id, undefined)}>
+                                            Remove
+                                          </Button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Item 14: Attendance Register (Course Teacher + Batch A, B, C Split) */}
+                {item.index === 14 && !isRestricted && (() => {
+                  const batchSubs = dbItem.batchSubmissions || [];
+                  const teacherSub = dbItem.fileName ? { fileName: dbItem.fileName, fileUrl: dbItem.fileUrl } : null;
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-info ms-2 w-100">
+                      <div className="small fw-bold text-navy-900 mb-2">
+                        Attendance Registers — Role & Batch Split
+                      </div>
+
+                      <Row className="g-2 small">
+                        {/* Course Teacher Theory Attendance Register Slot */}
+                        {!isLabTeacher && (
+                          <Col xs={12} md={6}>
+                            <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
                               <div>
-                                <div className="fw-bold mb-1">{sub.label}</div>
-                                {subData?.fileName ? (
-                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
+                                <div className="fw-bold mb-1 text-primary">Attendance Register — Course Teacher (Theory / Class)</div>
+                                {teacherSub?.fileName ? (
+                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {teacherSub.fileName}</div>
                                 ) : (
                                   <div className="text-muted mb-1" style={{ fontSize: 11 }}>✗ Not uploaded</div>
                                 )}
                               </div>
                               <div className="d-flex gap-1 mt-2">
-                                {subData?.fileName && (
-                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 13 — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
-                                    View
+                                {teacherSub?.fileName && (
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Attendance Register — Course Teacher', fileName: teacherSub.fileName, fileUrl: teacherSub.fileUrl })}>
+                                    👁️ View
                                   </Button>
                                 )}
                                 {!isLocked && (
                                   <>
-                                    <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
-                                      {subData?.fileName ? 'Replace' : 'Choose File'}
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem13FixedUpload(sub.key as any, f); }} />
+                                    <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                      {teacherSub?.fileName ? 'Replace' : 'Upload Register'}
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, item.name, f); }} />
+                                    </label>
+                                    {teacherSub?.fileName && (
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
+                                        Remove
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </Col>
+                        )}
+
+                        {/* Lab Batch Attendance Register Slots */}
+                        {['A', 'B', 'C'].map((batchKey) => {
+                          if (isLabTeacher && access?.batch !== batchKey) return null;
+                          const batchData = batchSubs.find((s: any) => s.batch === batchKey);
+
+                          return (
+                            <Col xs={12} md={6} key={batchKey}>
+                              <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                  <div className="fw-bold mb-1 text-dark">
+                                    Attendance Register — Batch {batchKey}
+                                    <span className="ms-2 badge bg-primary" style={{ fontSize: 9 }}>Lab Batch {batchKey}</span>
+                                  </div>
+                                  {batchData?.fileName ? (
+                                    <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {batchData.fileName}</div>
+                                  ) : (
+                                    <div className="text-muted mb-1" style={{ fontSize: 11 }}>✗ Not uploaded yet</div>
+                                  )}
+                                </div>
+                                <div className="d-flex gap-1 mt-2">
+                                  {batchData?.fileName && (
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Attendance Register — Batch ${batchKey}`, fileName: batchData.fileName, fileUrl: batchData.fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                  )}
+                                  {!isLocked && isLabTeacher && access?.batch === batchKey && (
+                                    <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                      {batchData?.fileName ? 'Replace' : 'Upload Register'}
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, 'Attendance Register', f); }} />
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            </Col>
+                          );
+                        })}
+                      </Row>
+                    </div>
+                  );
+                })()}
+
+                {/* Item 15: University Exam Sub-uploads & Grade Sheet Result Analysis */}
+                {isUniv && !isRestricted && (
+                  <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
+                    <div className="small text-secondary mb-2 fw-semibold">3 Compulsory Sub-uploads Required:</div>
+                    <Row className="g-2 small mb-3">
+                      {[
+                        { key: 'questionPaper', label: '(a) Question Paper' },
+                        { key: 'gradeSheet', label: '(b) Grade Sheet' },
+                      ].map((sub) => {
+                        const subData = getSubItems(15)?.[sub.key];
+                        const isSubLockedByCoord = dbItem.isCoordinatorShared && sub.key === 'questionPaper';
+                        return (
+                          <Col xs={12} md={6} key={sub.key}>
+                            <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                              <div>
+                                <div className="fw-bold mb-1">
+                                  {sub.label}
+                                  {isSubLockedByCoord && (
+                                    <span className="ms-2 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>
+                                  )}
+                                </div>
+                                {sub.key === 'gradeSheet' && (
+                                  <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />
+                                )}
+                                {subData?.fileName ? (
+                                  <div>
+                                    <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
+                                  </div>
+                                ) : (
+                                  <div className="text-muted mb-1" style={{ fontSize: 11 }}>
+                                    {isSubLockedByCoord ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="d-flex gap-1 mt-2">
+                                {subData?.fileName && (
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `University Exam — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
+                                    👁️ View
+                                  </Button>
+                                )}
+                                {!isLocked && !isSubLockedByCoord && (
+                                  <>
+                                    <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
+                                      {subData?.fileName ? 'Replace' : 'Upload Document'}
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload(sub.key as any, f); }} />
                                     </label>
                                     {subData?.fileName && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleItem13FixedUpload(sub.key as any, undefined)}>
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload(sub.key as any, undefined)}>
                                         Remove
                                       </Button>
                                     )}
@@ -3211,167 +3758,183 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         );
                       })}
                     </Row>
-
-                    {/* Named Assignment Statements List */}
-                    <div className="p-2 bg-light rounded border mb-2">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <span className="fw-bold text-navy-900 small">Assignment Marks Statements</span>
-                        {!isLocked && (
-                          <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={handleAddAssignmentRow}>
-                            + Add Assignment
-                          </Button>
-                        )}
-                      </div>
-
-                      {(getSubItems(13)?.assignments || []).map((asgn: any) => (
-                        <div key={asgn.id} className="p-2 bg-white rounded border mb-2 small">
-                          <div className="d-flex align-items-center justify-content-between gap-2 mb-1">
-                            <Form.Control
-                              type="text"
-                              size="sm"
-                              value={asgn.name}
-                              disabled={isLocked}
-                              onChange={(e) => handleUpdateAssignmentName(asgn.id, e.target.value)}
-                              className="fw-bold py-0"
-                              style={{ fontSize: 12, maxWidth: 280 }}
-                            />
-                            {!isLocked && (
-                              <Button variant="link" className="text-danger p-0 text-decoration-none" style={{ fontSize: 14 }} onClick={() => handleRemoveAssignmentRow(asgn.id)} title="Remove Assignment">
-                                ×
-                              </Button>
-                            )}
-                          </div>
-
-                          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                            <div>
-                              {asgn.fileName ? (
-                                <span className="text-success fw-bold font-mono-ppsu">✓ {asgn.fileName}</span>
-                              ) : (
-                                <span className="text-muted">No file attached</span>
-                              )}
-                            </div>
-                            <div className="d-flex gap-1">
-                              {asgn.fileName && (
-                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: asgn.name, fileName: asgn.fileName, fileUrl: asgn.fileUrl })}>
-                                  View
-                                </Button>
-                              )}
-                              {!isLocked && (
-                                <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
-                                  {asgn.fileName ? 'Replace' : 'Choose File'}
-                                  <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadAssignmentFile(asgn.id, f); }} />
-                                </label>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* General Additional / Supporting Documents (e.g. Industry Visit) */}
-                    <div className="p-2 bg-light rounded border">
-                      <div className="d-flex justify-content-between align-items-center mb-1">
-                        <span className="fw-bold small">Additional Supporting Documents (e.g. Industry Visit)</span>
-                        {!isLocked && (
-                          <Button variant="link" size="sm" className="p-0 text-decoration-none" style={{ fontSize: 11 }} onClick={() => setActiveIaItem(13)}>
-                            + Add Document
-                          </Button>
-                        )}
-                      </div>
-
-                      {(getSubItems(13)?.additionalDocuments || []).map((doc: any) => (
-                        <div key={doc.id} className="d-flex align-items-center justify-content-between p-2 bg-white rounded border mb-1" style={{ fontSize: 11 }}>
-                          <div>
-                            <span className="fw-bold">✓ {doc.name}:</span> <span className="font-mono-ppsu">{doc.fileName || 'No file selected'}</span>
-                          </div>
-                          <div className="d-flex gap-1 align-items-center">
-                            <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: doc.name, fileName: doc.fileName || 'document.pdf', fileUrl: doc.fileUrl })}>
-                              View
-                            </Button>
-                            {!isLocked && doc.id && (
-                              <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleRemoveIaCustomDoc(13, doc.id)}>
-                                Remove
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
 
-                {/* Item 13: Assignment Topics, Sample Assignment, and Marks Statement */}
-                {item.index === 13 && !isRestricted && (() => {
-                  const subs = getSubItems(13) || { assignmentTopics: [], sampleAssignment: null, marks: [], marksFile: null };
-                  const students = getStudentList();
-                  const marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
-                  return <div className="mt-3 ps-4 border-start border-2 border-info ms-2 w-100"><div className="small fw-semibold mb-2">(a) Assignment Topics</div>{(subs.assignmentTopics || []).map((topic: any) => <div key={topic.id} className="d-flex gap-2 mb-1"><Form.Control size="sm" value={topic.title} disabled={isLocked} onChange={(e) => handleUpdateAssignmentTopic({ ...topic, title: e.target.value })} />{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleAssignmentTopic(topic, true)}>Remove</Button>}</div>)}{!isLocked && <Button size="sm" variant="outline-primary" onClick={() => { const title = window.prompt('Assignment topic/title', `Assignment ${(subs.assignmentTopics || []).length + 1}`); if (title?.trim()) handleAssignmentTopic({ id: `topic-${Date.now()}`, title: title.trim() }); }}>+ Add Assignment</Button>}
-                    <div className="small fw-semibold mt-3 mb-2">(b) Sample Assignment</div><div className="d-flex align-items-center gap-2 small">{subs.sampleAssignment?.fileName ? <><span className="text-success fw-semibold">✓ {subs.sampleAssignment.fileName}</span><Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Sample Assignment', fileName: subs.sampleAssignment.fileName, fileUrl: subs.sampleAssignment.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleSubFileUpload(13, 'sampleAssignment')}>Remove</Button>}</> : !isLocked && <label className="btn btn-outline-secondary btn-sm">Upload File<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'sampleAssignment', file); }} /></label>}</div>
-                    <div className="small fw-semibold mt-3 mb-2">(c) Marks Statement</div>{!students.length ? <div className="alert alert-info small">Student rows will appear automatically from Item 4.</div> : <div className="table-responsive border rounded"><Table bordered size="sm" className="small mb-0"><thead className="bg-light"><tr><th>Student Name</th><th>Enrolment Number</th><th>Marks</th></tr></thead><tbody>{marks.map((row: any) => <tr key={row.studentId}><td>{row.name}</td><td className="font-mono-ppsu">{row.enrolmentNumber}</td><td><Form.Control type="number" min={0} max={100} size="sm" value={row.marks['assignment-marks'] || 0} disabled={isLocked} onChange={(e) => handleAssignmentMarkChange(row.studentId, Number(e.target.value))} /></td></tr>)}</tbody></Table></div>}{subs.marksFile?.fileName && <div className="small mt-2"><span className="text-success fw-semibold">✓ {subs.marksFile.fileName}</span> <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Assignment Marks Statement', fileName: subs.marksFile.fileName, fileUrl: subs.marksFile.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleSubFileUpload(13, 'marksFile')}>Remove</Button>}</div>}{!isLocked && <label className="btn btn-outline-secondary btn-sm mt-2">Upload Marks Statement<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'marksFile', file); }} /></label>}
-                  </div>;
-                })()}
-
-                {/* SECTION 2 & 16: University Exam Sub-uploads */}
-                {isUniv && !isRestricted && (
-                  <div className="mt-3 ps-4 border-start border-2 border-warning ms-2">
-                    <div className="small text-secondary mb-2 fw-semibold">3 Compulsory Sub-uploads Required:</div>
-                    <Row className="g-2 small">
-                      {[
-                        { key: 'questionPaper', label: '(a) Question Paper' },
-                        { key: 'gradeSheet', label: '(b) Grade Sheet' },
-                      ].map((sub) => {
-                        const subData = getSubItems(15)?.[sub.key];
-                        return (
-                          <Col xs={12} md={4} key={sub.key}>
-                            <div className="p-2 bg-light rounded border">
-                              <div className="fw-bold mb-1">{sub.label}</div>
-                              {sub.key === 'gradeSheet' && <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />}
-                              {subData?.fileName ? (
-                                <div>
-                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
-                                  <div className="d-flex gap-1">
-                                    <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `University Exam — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
-                                      View
-                                    </Button>
-                                    {!isLocked && (
-                                      <>
-                                        <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
-                                          Replace
-                                          <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload(sub.key as any, f); }} />
-                                        </label>
-                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload(sub.key as any, undefined)}>
-                                          Remove
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
-                                  Upload Document
-                                  <input type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload(sub.key as any, f); }} />
-                                </label>
-                              )}
-                            </div>
-                          </Col>
-                        );
-                      })}
-                    </Row>
-                  </div>
-                )}
-
-                {/* Item 15(c): University Exam Result Analysis — the existing auto-derived block follows. */}
+                {/* Item 15(c): University Exam Result Analysis */}
                 {isUniv && !isRestricted && (() => {
                   const subs = getSubItems(15) || { gradeSheet: null, students: [], hasSeparatePracticalGrade: false };
-                  // Grade Sheet is rendered in the restored (b) card above; this block is (c) only.
-                  subs.gradeSheet = null;
                   const storedStudents = Array.isArray(subs.students) ? subs.students.filter(Boolean) : [];
-                  const rows = getStudentList().map((student: any) => ({ ...(storedStudents.find((entry: any) => entry.studentId === student.id) || {}), ...student }));
+                  const rows = getStudentList().map((student: any) => {
+                    const found = storedStudents.find((entry: any) => entry && (entry.studentId === student.id || entry.id === student.id));
+                    return { ...student, ...(found || {}) };
+                  });
                   const grades = ['F', 'P', 'C', 'B', 'B+', 'A', 'A+', 'O'];
-                  const theoryCounts = grades.map((grade) => rows.filter((row: any) => row.theoryGrade === grade).length);
-                  const practicalCounts = grades.map((grade) => rows.filter((row: any) => row.practicalGrade === grade).length);
-                  const chart = (counts: number[]) => <div className="d-flex align-items-end gap-2 mt-2" style={{ height: 100 }}>{grades.map((grade, index) => <div key={grade} className="text-center flex-fill"><div className="bg-warning mx-auto" style={{ height: `${Math.max(4, counts[index] * 18)}px`, width: '70%' }} /><small>{grade}</small><div className="font-mono-ppsu" style={{ fontSize: 10 }}>{counts[index]}</div></div>)}</div>;
-                  return <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100"><div className="d-flex align-items-center justify-content-between mb-2"><span className="small fw-semibold text-secondary">Grade Sheet and Result Analysis</span><Form.Check type="switch" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} /></div><div className="d-flex align-items-center gap-2 small mb-2">{subs.gradeSheet?.fileName ? <><span className="text-success fw-semibold">✓ {subs.gradeSheet.fileName}</span><Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'University Exam Grade Sheet', fileName: subs.gradeSheet.fileName, fileUrl: subs.gradeSheet.fileUrl })}>View</Button>{!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleSubFileUpload(15, 'gradeSheet')}>Remove</Button>}</> : !isLocked && <label className="btn btn-outline-secondary btn-sm">Upload Grade Sheet<input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(15, 'gradeSheet', file); }} /></label>}</div>{!rows.length ? <div className="alert alert-info small">Student rows will appear automatically from Item 4.</div> : <div className="table-responsive border rounded"><Table bordered size="sm" className="small mb-0"><thead className="bg-light"><tr><th>Enrolment Number</th><th>Student Name</th><th>Theory Grade</th>{hasSeparatePracticalGrade && <th>Practical Grade</th>}</tr></thead><tbody>{rows.map((row: any) => <tr key={row.id}><td className="font-mono-ppsu">{row.enrolmentNumber}</td><td>{row.name}</td><td><Form.Select size="sm" value={row.theoryGrade || ''} disabled={isLocked} onChange={(e) => handleGradeChange(row.id, 'theoryGrade', e.target.value)}><option value="">Select</option>{grades.map((grade) => <option key={grade}>{grade}</option>)}</Form.Select></td>{hasSeparatePracticalGrade && <td><Form.Select size="sm" value={row.practicalGrade || ''} disabled={isLocked} onChange={(e) => handleGradeChange(row.id, 'practicalGrade', e.target.value)}><option value="">Select</option>{grades.map((grade) => <option key={grade}>{grade}</option>)}</Form.Select></td>}</tr>)}</tbody></Table></div>}<Row className="g-2 mt-2 small"><Col md={hasSeparatePracticalGrade ? 6 : 12}><div className="p-2 bg-light border rounded"><strong>Theory Grade Distribution</strong>{chart(theoryCounts)}</div></Col>{hasSeparatePracticalGrade && <Col md={6}><div className="p-2 bg-light border rounded"><strong>Practical Grade Distribution</strong>{chart(practicalCounts)}</div></Col>}</Row></div>;
+                  const theoryCounts = grades.map((g) => rows.filter((r: any) => r.theoryGrade === g).length);
+                  const practicalCounts = grades.map((g) => rows.filter((r: any) => r.practicalGrade === g).length);
+
+                  const renderGradeDistributionChart = (title: string, counts: number[], barColor: string) => {
+                    const maxVal = Math.max(...counts, 1);
+                    const total = counts.reduce((a, b) => a + b, 0);
+                    return (
+                      <Card className="border shadow-sm h-100">
+                        <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
+                          <span className="fw-bold text-navy-900 small">📊 {title}</span>
+                          <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {total}</span>
+                        </Card.Header>
+                        <Card.Body className="p-3 d-flex flex-column justify-content-between">
+                          <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-2 border-bottom" style={{ height: 130 }}>
+                            {grades.map((g, idx) => {
+                              const cnt = counts[idx];
+                              const barPct = Math.max(8, Math.round((cnt / maxVal) * 75));
+                              return (
+                                <div key={g} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
+                                  <div className="fw-bold font-mono-ppsu text-primary mb-1" style={{ fontSize: 11 }}>
+                                    {cnt}
+                                  </div>
+                                  <div
+                                    className="rounded-top shadow-sm"
+                                    style={{
+                                      height: `${barPct}%`,
+                                      width: '70%',
+                                      backgroundColor: cnt > 0 ? barColor : '#cbd5e1',
+                                      minHeight: '4px'
+                                    }}
+                                    title={`${g}: ${cnt} students`}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="d-flex gap-2 pt-2 px-2">
+                            {grades.map((g) => (
+                              <div key={g} className="flex-fill text-center fw-bold text-dark" style={{ fontSize: 10 }}>
+                                {g}
+                              </div>
+                            ))}
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    );
+                  };
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <span className="small fw-bold text-secondary">(c) Grade Sheet & Result Analysis</span>
+                      </div>
+                      {!rows.length ? (
+                        <div className="alert alert-info small">Student rows will appear automatically from Item 4.</div>
+                      ) : (
+                        <div className="table-responsive border rounded mb-3 shadow-sm">
+                          <Table bordered hover size="sm" className="small mb-0 align-middle">
+                            <thead className="bg-light">
+                              <tr>
+                                <th style={{ width: 40 }}>#</th>
+                                <th>Enrolment Number</th>
+                                <th>Student Name</th>
+                                <th>Theory Grade</th>
+                                {hasSeparatePracticalGrade && <th>Practical Grade</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((row: any, idx: number) => (
+                                <tr key={row.id}>
+                                  <td className="text-muted font-mono-ppsu">{idx + 1}</td>
+                                  <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                  <td className="fw-semibold">{row.name}</td>
+                                  <td>
+                                    <Form.Select size="sm" value={row.theoryGrade || ''} disabled={isLocked} onChange={(e) => handleGradeChange(row.id, 'theoryGrade', e.target.value)}>
+                                      <option value="">Select Grade</option>
+                                      {grades.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+                                    </Form.Select>
+                                  </td>
+                                  {hasSeparatePracticalGrade && (
+                                    <td>
+                                      <Form.Select size="sm" value={row.practicalGrade || ''} disabled={isLocked} onChange={(e) => handleGradeChange(row.id, 'practicalGrade', e.target.value)}>
+                                        <option value="">Select Grade</option>
+                                        {grades.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+                                      </Form.Select>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        </div>
+                      )}
+                      <Row className="g-3 mt-1 small">
+                        <Col md={hasSeparatePracticalGrade ? 6 : 12}>
+                          {renderGradeDistributionChart('Theory Grade Distribution', theoryCounts, '#1E3A8A')}
+                        </Col>
+                        {hasSeparatePracticalGrade && (
+                          <Col md={6}>
+                            {renderGradeDistributionChart('Practical Grade Distribution', practicalCounts, '#0D9488')}
+                          </Col>
+                        )}
+                      </Row>
+                    </div>
+                  );
+                })()}
+
+                {/* Item 18: Action to be taken for next year based on CO Attainment (School Dropdown & Coordinator Upload) */}
+                {item.index === 18 && !isRestricted && (() => {
+                  const selectedSchoolCode = getSubItems(18)?.school || courseFile.school || 'SOE';
+                  const schoolLabel = SCHOOL_LABELS[selectedSchoolCode] || selectedSchoolCode;
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-secondary ms-2 w-100">
+                      <div className="p-3 bg-light rounded border">
+                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                          <div className="fw-bold small text-navy-900">
+                            Select School for CO Attainment Action Plan
+                          </div>
+                          <span className="badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>
+                        </div>
+
+                        <Form.Group className="mb-3" style={{ maxWidth: 320 }}>
+                          <Form.Label className="small text-secondary fw-semibold">School Scope</Form.Label>
+                          <Form.Select
+                            size="sm"
+                            value={selectedSchoolCode}
+                            disabled={true}
+                          >
+                            <option value="SOE">SOE (School of Engineering)</option>
+                            <option value="IDS">IDS</option>
+                            <option value="ICA">ICA</option>
+                          </Form.Select>
+                        </Form.Group>
+
+                        <div className="p-2 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                          <div>
+                            <div className="fw-bold small text-dark">
+                              Action Plan Document — {schoolLabel}
+                            </div>
+                            {dbItem.fileName || dbItem.sharedFileName ? (
+                              <div className="text-success fw-bold font-mono-ppsu small">
+                                ✓ {dbItem.fileName || dbItem.sharedFileName}
+                              </div>
+                            ) : (
+                              <div className="text-muted small">
+                                ⏳ Not uploaded yet — pending Course Coordinator (Locked)
+                              </div>
+                            )}
+                          </div>
+
+                          {(dbItem.fileName || dbItem.sharedFileName) && (
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                              onClick={() => setViewingDoc({ title: `Item 18 Action Plan — ${schoolLabel}`, fileName: dbItem.fileName || dbItem.sharedFileName || 'Action_Plan.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
+                            >
+                              👁️ View Document
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
                 })()}
               </div>
             );

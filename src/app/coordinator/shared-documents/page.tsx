@@ -10,9 +10,10 @@ const SHARED_ITEMS = [
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching' },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
-  { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
-  { index: 12, name: 'Item 12 — Internal Assessment 2 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
-  { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] }
+  { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable, Question Paper & Sample Answer Sheet)', category: 'Assessment', subKeys: ['timetable', 'questionPaper', 'sampleAnswerSheet'] },
+  { index: 12, name: 'Item 12 — Internal Assessment 2 (Timetable, Question Paper & Sample Answer Sheet)', category: 'Assessment', subKeys: ['timetable', 'questionPaper', 'sampleAnswerSheet'] },
+  { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] },
+  { index: 18, name: 'Item 18 — Action to be taken for next year based on CO Attainment', category: 'Institutional' }
 ];
 
 const SCHOOL_LABELS: Record<string, string> = {
@@ -237,11 +238,11 @@ export default function CoordinatorSharedDocumentsPage() {
       >
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
           <div>
-            <span className="badge mb-2" style={{ backgroundColor: 'rgba(232, 84, 30, 0.3)', color: '#FFA07A', fontWeight: 600 }}>
+            <span className="badge mb-2 shadow-sm text-white" style={{ backgroundColor: '#E8541E', fontWeight: 600, letterSpacing: '0.03em' }}>
               Course Coordinator Hub
             </span>
-            <h3 className="fw-bold mb-1">Shared Subject Documents Upload</h3>
-            <p className="mb-0 text-white-50 small" style={{ maxWidth: '780px' }}>
+            <h3 className="fw-bold mb-1 text-white" style={{ color: '#FFFFFF' }}>Shared Subject Documents Upload</h3>
+            <p className="mb-0 text-white small" style={{ maxWidth: '780px', color: '#FFFFFF', opacity: 0.95 }}>
               Upload common subject-level documents ONCE (Syllabus, Academic Calendar, Lesson Plans, Experiments, Assessment Timetables & Question Papers).
               They will automatically populate as <strong>read-only/locked</strong> across every Course Teacher and Lab Teacher’s checklist for this subject.
             </p>

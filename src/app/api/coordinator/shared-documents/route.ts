@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
       return noStoreJson({ error: 'This item is not a Course Coordinator shared document.' }, { status: 400 });
     }
 
-    if (Number(itemIndex) === 1) {
+    if ([1, 18].includes(Number(itemIndex))) {
       if (!school) {
-        return noStoreJson({ error: 'school is required for Item 1 shared documents' }, { status: 400 });
+        return noStoreJson({ error: `school is required for Item ${itemIndex} shared documents` }, { status: 400 });
       }
       const schoolCode = normalizeSchoolCode(school);
       const coordinatorSubjects = await getSubjectsByCoordinatorId(payload.userId);

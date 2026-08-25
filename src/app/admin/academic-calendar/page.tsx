@@ -244,11 +244,11 @@ export default function AdminAcademicCalendarPage() {
       >
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
           <div>
-            <span className="badge mb-2" style={{ backgroundColor: 'rgba(232, 84, 30, 0.3)', color: '#FFA07A', fontWeight: 600 }}>
+            <span className="badge mb-2 shadow-sm text-white" style={{ backgroundColor: '#E8541E', fontWeight: 600, letterSpacing: '0.03em' }}>
               Centralized Admin Control
             </span>
-            <h3 className="fw-bold mb-1">Department Academic Calendar Upload</h3>
-            <p className="mb-0 text-white-50 small" style={{ maxWidth: '820px' }}>
+            <h3 className="fw-bold mb-1 text-white" style={{ color: '#FFFFFF' }}>Department Academic Calendar Upload</h3>
+            <p className="mb-0 text-white small" style={{ maxWidth: '820px', color: '#FFFFFF', opacity: 0.95 }}>
               Publish institutional academic calendars ONCE by Admin per School & Semester scope. Published calendars automatically reflect as <strong>read-only/locked</strong> (Item 5) across all relevant Course Coordinators and Course Teachers.
             </p>
           </div>
