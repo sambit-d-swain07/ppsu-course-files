@@ -13,7 +13,7 @@ const CHECKLIST_ITEMS = [
   { index: 4,  name: 'Student Name List', maxScore: 10 },
   { index: 5,  name: 'Department Academic Calendar', maxScore: 10 },
   { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
-  { index: 7,  name: 'List of Laboratory (or Experiments)', maxScore: 10 },
+  { index: 7,  name: 'List of Laboratory Experiments', maxScore: 10 },
   { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
   { index: 9,  name: 'Theory Continuous Evaluation Rubrics', maxScore: 10 },
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
@@ -41,8 +41,11 @@ const PREDEFINED_THEORY_CRITERIA = [
   { id: 'predef-faculty-eval', label: 'Faculty Evaluation' },
 ];
 
-const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14];
-const LAB_TEACHER_EDITABLE_ITEM_INDICES = [2, 8, 9, 14];
+const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14, 20];
+const LAB_TEACHER_EDITABLE_ITEM_INDICES = [2, 8, 9, 14, 20];
+
+// Title-case helper for criterion labels
+const toTitleCase = (s: string) => s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
 const SCHOOL_LABELS: Record<string, string> = {
   SOE: 'SOE (School of Engineering)',
   IDS: 'IDS',
@@ -95,7 +98,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [submitLoading, setSubmitLoading] = useState(false);
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerEdit, setHeaderEdit] = useState({
-    facultyName: '', department: '', school: '', semester: '', courseCode: '', courseTitle: ''
+    facultyName: '', department: '', school: '', semester: '', courseCode: '', courseTitle: '', division: ''
   });
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
@@ -127,6 +130,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // Item 9 custom criterion add panel state
   const [item9CustomLabel, setItem9CustomLabel] = useState('');
   const [item9CustomMax, setItem9CustomMax] = useState<number>(10);
+  const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
 
   const hashString = (str: string): number => {
     let hash = 0;
@@ -137,18 +141,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     return Math.abs(hash);
   };
 
-  const generateBreakdown = useCallback((totalMark: number, seedKey: string) => {
-    const roundedTotal = Math.max(0, Math.min(20, Math.round((Number(totalMark) || 0) * 10) / 10));
+  const generateBreakdown = useCallback((totalMark: number, seedKey: string, maxMark = 20) => {
+    const roundedTotal = Math.max(0, Math.min(maxMark, Math.round((Number(totalMark) || 0) * 10) / 10));
     
-    if (roundedTotal === 20) {
-      return { a: 5, b: 5, c: 5, d: 5, total: 20 };
+    if (roundedTotal === maxMark) {
+      const q = maxMark / 4;
+      return { a: q, b: q, c: q, d: q, total: maxMark };
     }
     if (roundedTotal === 0) {
       return { a: 0, b: 0, c: 0, d: 0, total: 0 };
     }
 
     const hash = hashString(`${seedKey}-${roundedTotal}`);
-    const targetUnits = Math.round(roundedTotal * 2);
+    const scaleFactor = 20 / maxMark;
+    const targetUnits = Math.round(roundedTotal * scaleFactor * 2);
     const maxUnitsPerCol = 10;
     
     const baseAvg = Math.floor(targetUnits / 4);
@@ -249,7 +255,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         school: data.courseFile.school || data.courseFile.faculty?.school || 'School of Engineering',
         semester: data.courseFile.semester || '',
         courseCode: data.courseFile.courseCode || '',
-        courseTitle: data.courseFile.courseTitle || ''
+        courseTitle: data.courseFile.courseTitle || '',
+        division: data.courseFile.division || ''
       });
 
       setFacultySignatureName(data.courseFile.facultySignatureName || data.courseFile.faculty?.name || '');
@@ -511,7 +518,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return { ...r, marks: m };
     }));
     debouncedSaveStructuredItem(9, subs, 'UPLOADED');
-  }, [isLocked, checklist]);
+  }, [isLocked, checklist, item9Criteria]);
 
   // Item 9 — add a fully custom criterion
   const handleAddCustomTheoryCriterion = useCallback((label: string, maxMarks: number) => {
@@ -519,7 +526,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const subs = getSubItems(9) || {};
     const existing: any[] = Array.isArray(subs.criteria) ? subs.criteria : [];
     const newId = `custom-${Date.now()}`;
-    subs.criteria = [...existing, { id: newId, label: label.trim(), max: maxMarks, fixed: false, predefined: false }];
+    subs.criteria = [...existing, { id: newId, label: toTitleCase(label.trim()), max: maxMarks, fixed: false, predefined: false }];
     subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
     const newCriteria = normalizeCriteria(subs.criteria);
     setItem9Criteria(newCriteria);
@@ -589,6 +596,108 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
     }, 600);
   }, [isLocked, item8Rows, item9Rows, checklist]);
+
+  const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
+    if (isLocked) return;
+    const subs = getSubItems(8) || {};
+    const sectionFiles = subs.sectionFiles || {};
+
+    if (!file) {
+      delete sectionFiles[sectionKey];
+      if (sectionKey === 'main') {
+        subs.file = null;
+      }
+      await saveStructuredItem(8, { ...subs, sectionFiles }, 'UPLOADED');
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    sectionFiles[sectionKey] = {
+      fileName: file.name,
+      fileUrl: dataUrl,
+      uploadDate: new Date().toISOString().split('T')[0]
+    };
+    if (sectionKey === 'main') {
+      subs.file = { fileName: file.name, fileUrl: dataUrl };
+    }
+
+    // Auto-parse if CSV
+    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length > 1) {
+          const header = lines[0].split(',').map(c => c.replace(/^["']|["']$/g, '').trim().toLowerCase());
+          const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
+          
+          if (enrolIdx !== -1) {
+            let updated = false;
+            const newRows = item8Rows.map(row => {
+              const enrol = String(row.enrolmentNumber || '').trim().toLowerCase();
+              const matchLine = lines.slice(1).find(l => {
+                const cols = l.split(',').map(c => c.replace(/^["']|["']$/g, '').trim());
+                return cols[enrolIdx] && cols[enrolIdx].toLowerCase() === enrol;
+              });
+              if (!matchLine) return row;
+              const cols = matchLine.split(',').map(c => c.replace(/^["']|["']$/g, '').trim());
+              const updatedRow = { ...row };
+
+              header.forEach((h, idx) => {
+                const val = Number(cols[idx]);
+                if (isNaN(val)) return;
+                if (/^p\d+$/i.test(h)) {
+                  const pNum = h.toUpperCase();
+                  updatedRow.practicals = { ...(updatedRow.practicals || {}), [pNum]: Math.min(10, Math.max(0, val)) };
+                  updated = true;
+                } else if (h.includes('viva') && (h.includes('int') || sectionKey === 'sec23')) {
+                  updatedRow.internalViva = Math.min(20, Math.max(0, val));
+                  updated = true;
+                } else if ((h.includes('perf') || h.includes('quiz')) && (h.includes('ese') || sectionKey === 'sec31')) {
+                  updatedRow.esePerformance = Math.min(30, Math.max(0, val));
+                  updated = true;
+                } else if (h.includes('ext') && (h.includes('viva') || sectionKey === 'sec32')) {
+                  updatedRow.eseExternalViva = Math.min(30, Math.max(0, val));
+                  updated = true;
+                }
+              });
+
+              return updatedRow;
+            });
+
+            if (updated) {
+              setItem8Rows(newRows);
+              subs.students = newRows;
+              setActionSuccess(`CSV parsed successfully! Marks populated for Item 8.`);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('CSV Parse Error:', err);
+      }
+    }
+
+    await saveStructuredItem(8, { ...subs, sectionFiles }, 'UPLOADED');
+  };
+
+  const handleDownloadStudentCsv = (students: any[], batchName?: string) => {
+    if (!students || students.length === 0) return;
+    const headers = ['Sr No', 'Student Name', 'Enrolment Number', 'Batch'];
+    const rows = students.map((s, idx) => [
+      idx + 1,
+      `"${(s.name || '').replace(/"/g, '""')}"`,
+      `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`,
+      `"${(s.batch || 'Unassigned').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `student_list_${batchName ? `batch_${batchName}` : 'all'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleCeGuidelineUpload = async (criterionId: string, file?: File) => {
     if (isLocked) return;
@@ -1009,10 +1118,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleLabTeacherSubmit = async () => {
     if (isLocked || submitLoading) return;
+    if (!labTeacherDeclared) {
+      setActionError('Please confirm the mandatory checklist declaration checkbox.');
+      return;
+    }
     setSubmitLoading(true);
     setActionError(''); setActionSuccess('');
     try {
-      const allowedItems = [2, 4, 8, 9, 14];
+      const allowedItems = [2, 4, 8, 9, 14, 20];
       for (const idx of allowedItems) {
         const subs = getSubItems(idx) || {};
         await saveStructuredItem(idx, subs, 'SUBMITTED');
@@ -1020,7 +1133,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionSuccess(`Batch ${access.batch} lab data submitted successfully to Course Teacher!`);
       fetchData();
     } catch (err: any) {
-      setActionError(err.message || 'Failed to submit lab data');
+      setActionError(err.message || 'Failed to submit lab data.');
     } finally {
       setSubmitLoading(false);
     }
@@ -1255,6 +1368,44 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         })
       });
       setActionSuccess(`Sub-item updated for Item #${itemIndex}.`);
+      fetchData();
+    } catch (err: any) { setActionError(err.message); }
+  };
+
+  // Item 6 Sub-upload Handler (coordinator-only; 6 sub-items: lecture/lab/tutorial plans + outcomes)
+  const handleItem6SubUpload = async (subKey: 'lessonPlanLecture' | 'lessonPlanLab' | 'lessonPlanTutorial' | 'outcomeLecture' | 'outcomeLab' | 'outcomeTutorial', file?: File) => {
+    if (isLocked) return;
+    const subs = getSubItems(6) || {
+      lessonPlanLecture: null, lessonPlanLab: null, lessonPlanTutorial: null,
+      outcomeLecture: null, outcomeLab: null, outcomeTutorial: null
+    };
+
+    if (!file) {
+      subs[subKey] = null;
+    } else {
+      const dataUrl = await readFileAsDataUrl(file);
+      subs[subKey] = {
+        fileName: file.name,
+        fileUrl: dataUrl,
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+    }
+
+    // Required: lessonPlanLecture + outcomeLecture; optional: lab + tutorial slots
+    const isComplete = !!(subs.lessonPlanLecture?.fileName && subs.outcomeLecture?.fileName);
+
+    try {
+      await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 6,
+          status: isComplete ? 'UPLOADED' : 'EMPTY',
+          fileName: 'course_delivery_details_package.pdf',
+          subItemsJson: JSON.stringify(subs)
+        })
+      });
+      setActionSuccess('Item 6 (Course Delivery Details) updated.');
       fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
@@ -1694,6 +1845,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     } catch (err: any) { setActionError(err.message); }
   };
 
+
+
   const handleSubmit = async () => {
     if (completedCount < 20) {
       setActionError('All 20 checklist items (including required sub-sections and Item 20 signature) must be complete before submission.');
@@ -1768,20 +1921,35 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
       {access.mode === 'LAB_BATCH' && (
         <Card className="mb-4 border-0 shadow-sm" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
-          <Card.Body className="d-flex align-items-center justify-content-between flex-wrap gap-2 py-3">
-            <div>
-              <h6 className="fw-bold text-success mb-1">Batch {access.batch} Lab Teacher Submission Portal</h6>
-              <p className="small text-secondary mb-0">Manage your assigned lab items (Items 2, 4, 8, 9, 14). Submitting will send your lab data & rubrics directly to the Course Teacher.</p>
+          <Card.Body className="py-3">
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+              <div>
+                <h6 className="fw-bold text-success mb-1">Batch {access.batch} Lab Teacher Submission Portal</h6>
+                <p className="small text-secondary mb-0">Manage your assigned lab items (Items 2, 4, 8, 9, 14, and 20). Submitting will send your lab data & rubrics directly to the Course Teacher.</p>
+              </div>
+              <Button
+                variant="success"
+                size="sm"
+                className="fw-bold px-3 py-2"
+                disabled={isLocked || submitLoading || !labTeacherDeclared}
+                onClick={handleLabTeacherSubmit}
+              >
+                {submitLoading ? <Spinner animation="border" size="sm" /> : `✓ Submit Batch ${access.batch} Data`}
+              </Button>
             </div>
-            <Button
-              variant="success"
-              size="sm"
-              className="fw-bold px-3 py-2"
-              disabled={isLocked || submitLoading}
-              onClick={handleLabTeacherSubmit}
-            >
-              {submitLoading ? <Spinner animation="border" size="sm" /> : `✓ Submit Batch ${access.batch} Data`}
-            </Button>
+            <div className="pt-2 border-top border-success-subtle">
+              <Form.Check
+                type="checkbox"
+                id="lab-teacher-declaration-check"
+                checked={labTeacherDeclared}
+                onChange={(e) => setLabTeacherDeclared(e.target.checked)}
+                label={
+                  <span className="small fw-semibold text-dark">
+                    I confirm all required documents are uploaded correctly <span className="text-danger">*</span>
+                  </span>
+                }
+              />
+            </div>
           </Card.Body>
         </Card>
       )}
@@ -1858,6 +2026,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 className="py-1"
               />
             </Col>
+            <Col xs={12} md={4}>
+              <Form.Label className="small fw-semibold text-secondary mb-1">
+                Division
+                <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(from subject allocation)</span>
+              </Form.Label>
+              <Form.Control
+                type="text"
+                value={headerEdit.division}
+                readOnly
+                disabled
+                className="py-1 bg-light text-secondary font-mono-ppsu fw-bold"
+                placeholder="—"
+                title="Division is set by Admin in Subject Allocation"
+              />
+            </Col>
           </Row>
 
           <div className="mt-4">
@@ -1893,6 +2076,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             const dbItem = checklist.find((c) => c.itemIndex === item.index) ?? { status: 'EMPTY' };
             const complete = isItemComplete(item.index);
             const isItem1 = item.index === 1;
+            const isItem6 = item.index === 6;
             const isItem8 = item.index === 8;
             const isIA = item.index === 11 || item.index === 12;
             const isUniv = item.index === 15;
@@ -2117,7 +2301,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         </div>
 
                         {/* 2. CONTINUOUS EVALUATION (CE) SECTION */}
-                        <div className="mb-4 border rounded p-3 bg-white shadow-sm">
+<div className="mb-4 border rounded p-3 bg-white shadow-sm">
                           <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
                             <h5 className="fw-bold text-primary mb-0 d-flex align-items-center gap-2">
                               <span className="badge bg-primary">CE</span> Continuous Evaluation (Laboratory)
@@ -2127,9 +2311,44 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                           {/* 2.1 Practical Marks Table */}
                           <div className="mb-4">
-                            <h6 className="fw-bold text-secondary small mb-2">
-                              2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
-                            </h6>
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                              <h6 className="fw-bold text-secondary small mb-0">
+                                2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
+                              </h6>
+                              {(() => {
+                                const secFile = subs.sectionFiles?.sec21;
+                                return (
+                                  <div className="d-flex align-items-center gap-1.5">
+                                    {secFile?.fileName ? (
+                                      <div className="d-flex align-items-center gap-1 small">
+                                        <span className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 10 }}>✓ {secFile.fileName}</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: '2.1 Practical Marks', fileName: secFile.fileName, fileUrl: secFile.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                        {!isLocked && (
+                                          <>
+                                            <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 9 }}>
+                                              Replace
+                                              <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec21', f); e.currentTarget.value = ''; }} />
+                                            </label>
+                                            <Button size="sm" variant="outline-danger" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => handleItem8SectionFileUpload('sec21', undefined)}>
+                                              Remove
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      !isLocked && (
+                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                          Upload CSV / PDF
+                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec21', f); e.currentTarget.value = ''; }} />
+                                        </label>
+                                      )
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                             <div className="table-responsive border rounded">
                               <Table bordered hover size="sm" className="small align-middle text-center mb-0">
                                 <thead className="bg-light">
@@ -2239,7 +2458,42 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               <h6 className="fw-bold text-dark small mb-0">
                                 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
                               </h6>
-                              <span className="badge bg-secondary">Auto-Calculated from Avg of 20 (Max 5 per criterion)</span>
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="badge bg-secondary">Auto-Calculated from Avg of 20 (Max 5 per criterion)</span>
+                                {(() => {
+                                  const secFile = subs.sectionFiles?.sec22;
+                                  return (
+                                    <div className="d-flex align-items-center gap-1">
+                                      {secFile?.fileName ? (
+                                        <div className="d-flex align-items-center gap-1 small">
+                                          <span className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 10 }}>✓ {secFile.fileName}</span>
+                                          <Button size="sm" variant="outline-info" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: '2.2 Practicals Breakdown', fileName: secFile.fileName, fileUrl: secFile.fileUrl })}>
+                                            👁️ View
+                                          </Button>
+                                          {!isLocked && (
+                                            <>
+                                              <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 9 }}>
+                                                Replace
+                                                <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec22', f); e.currentTarget.value = ''; }} />
+                                              </label>
+                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => handleItem8SectionFileUpload('sec22', undefined)}>
+                                                Remove
+                                              </Button>
+                                            </>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        !isLocked && (
+                                          <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                            Upload CSV / PDF
+                                            <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec22', f); e.currentTarget.value = ''; }} />
+                                          </label>
+                                        )
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
                             <div className="table-responsive border rounded bg-white">
                               <Table bordered size="sm" className="small align-middle text-center mb-0">
@@ -2277,11 +2531,46 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </div>
                           </div>
 
-                          {/* 2.4 Internal Viva Evaluation & Breakdown */}
+                          {/* 2.3 Internal Viva Evaluation & Breakdown */}
                           <div className="p-3 bg-light rounded border">
-                            <h6 className="fw-bold text-dark small mb-2">
-                              2.4 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
-                            </h6>
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                              <h6 className="fw-bold text-dark small mb-0">
+                                2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
+                              </h6>
+                              {(() => {
+                                const secFile = subs.sectionFiles?.sec23;
+                                return (
+                                  <div className="d-flex align-items-center gap-1">
+                                    {secFile?.fileName ? (
+                                      <div className="d-flex align-items-center gap-1 small">
+                                        <span className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 10 }}>✓ {secFile.fileName}</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: '2.3 Internal Viva', fileName: secFile.fileName, fileUrl: secFile.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                        {!isLocked && (
+                                          <>
+                                            <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 9 }}>
+                                              Replace
+                                              <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec23', f); e.currentTarget.value = ''; }} />
+                                            </label>
+                                            <Button size="sm" variant="outline-danger" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => handleItem8SectionFileUpload('sec23', undefined)}>
+                                              Remove
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      !isLocked && (
+                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                          Upload CSV / PDF
+                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec23', f); e.currentTarget.value = ''; }} />
+                                        </label>
+                                      )
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                             <Row className="g-3">
                               <Col md={5}>
                                 <div className="border rounded bg-white p-2">
@@ -2364,18 +2653,53 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                           {/* 3.1 Performance / Quiz Evaluation & Breakdown */}
                           <div className="mb-4 p-3 bg-light rounded border">
-                            <h6 className="fw-bold text-dark small mb-2">
-                              3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 20)
-                            </h6>
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                              <h6 className="fw-bold text-dark small mb-0">
+                                3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)
+                              </h6>
+                              {(() => {
+                                const secFile = subs.sectionFiles?.sec31;
+                                return (
+                                  <div className="d-flex align-items-center gap-1">
+                                    {secFile?.fileName ? (
+                                      <div className="d-flex align-items-center gap-1 small">
+                                        <span className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 10 }}>✓ {secFile.fileName}</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: '3.1 Performance / Quiz', fileName: secFile.fileName, fileUrl: secFile.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                        {!isLocked && (
+                                          <>
+                                            <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 9 }}>
+                                              Replace
+                                              <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec31', f); e.currentTarget.value = ''; }} />
+                                            </label>
+                                            <Button size="sm" variant="outline-danger" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => handleItem8SectionFileUpload('sec31', undefined)}>
+                                              Remove
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      !isLocked && (
+                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                          Upload CSV / PDF
+                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec31', f); e.currentTarget.value = ''; }} />
+                                        </label>
+                                      )
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                             <Row className="g-3">
                               <Col md={5}>
                                 <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 30)</div>
                                   <Table bordered size="sm" className="small align-middle text-center mb-0">
                                     <thead className="bg-light">
                                       <tr>
                                         <th>Student</th>
-                                        <th style={{ width: '130px' }}>Perf / Quiz (20)</th>
+                                        <th style={{ width: '130px' }}>Perf / Quiz (30)</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -2388,7 +2712,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                               <Form.Control
                                                 type="number"
                                                 min={0}
-                                                max={20}
+                                                max={30}
                                                 step={0.5}
                                                 size="sm"
                                                 className="text-center font-mono-ppsu px-1"
@@ -2419,7 +2743,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     </thead>
                                     <tbody>
                                       {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.esePerformance ?? 0, `${row.studentId}-ese-pq`);
+                                        const bd = generateBreakdown(row.esePerformance ?? 0, `${row.studentId}-ese-pq`, 30);
                                         return (
                                           <tr key={`pq-bd-${row.studentId}`}>
                                             <td className="font-mono-ppsu">{bd.a}</td>
@@ -2439,18 +2763,53 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                           {/* 3.2 External Viva Evaluation & Breakdown */}
                           <div className="p-3 bg-light rounded border">
-                            <h6 className="fw-bold text-dark small mb-2">
-                              3.2 External Viva Evaluation & Auto-Breakdown (Score out of 20)
-                            </h6>
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                              <h6 className="fw-bold text-dark small mb-0">
+                                3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)
+                              </h6>
+                              {(() => {
+                                const secFile = subs.sectionFiles?.sec32;
+                                return (
+                                  <div className="d-flex align-items-center gap-1">
+                                    {secFile?.fileName ? (
+                                      <div className="d-flex align-items-center gap-1 small">
+                                        <span className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 10 }}>✓ {secFile.fileName}</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: '3.2 External Viva', fileName: secFile.fileName, fileUrl: secFile.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                        {!isLocked && (
+                                          <>
+                                            <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 9 }}>
+                                              Replace
+                                              <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec32', f); e.currentTarget.value = ''; }} />
+                                            </label>
+                                            <Button size="sm" variant="outline-danger" style={{ fontSize: 9, padding: '1px 5px' }} onClick={() => handleItem8SectionFileUpload('sec32', undefined)}>
+                                              Remove
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      !isLocked && (
+                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                          Upload CSV / PDF
+                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec32', f); e.currentTarget.value = ''; }} />
+                                        </label>
+                                      )
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                             <Row className="g-3">
                               <Col md={5}>
                                 <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
+                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 30)</div>
                                   <Table bordered size="sm" className="small align-middle text-center mb-0">
                                     <thead className="bg-light">
                                       <tr>
                                         <th>Student</th>
-                                        <th style={{ width: '130px' }}>Ext Viva (20)</th>
+                                        <th style={{ width: '130px' }}>Ext Viva (30)</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -2463,7 +2822,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                               <Form.Control
                                                 type="number"
                                                 min={0}
-                                                max={20}
+                                                max={30}
                                                 step={0.5}
                                                 size="sm"
                                                 className="text-center font-mono-ppsu px-1"
@@ -2494,7 +2853,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     </thead>
                                     <tbody>
                                       {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.eseExternalViva ?? 0, `${row.studentId}-ese-ev`);
+                                        const bd = generateBreakdown(row.eseExternalViva ?? 0, `${row.studentId}-ese-ev`, 30);
                                         return (
                                           <tr key={`ev-bd-${row.studentId}`}>
                                             <td className="font-mono-ppsu">{bd.a}</td>
@@ -2513,19 +2872,30 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </div>
                         </div>
 
-                        {/* File upload for Item 8 */}
-                        <div className="d-flex align-items-center gap-2 mt-2 small">
+                        {/* Single Attached Document upload slot for Item 8 (CSV or PDF) */}
+                        <div className="d-flex align-items-center gap-2 mt-3 p-3 bg-light rounded border">
+                          <span className="small text-secondary fw-semibold">
+                            Item 8 Attached Document (CSV or PDF):
+                          </span>
                           {subs.file?.fileName ? (
-                            <>
-                              <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
-                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Laboratory Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
-                              {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(8)}>Remove</Button>}
-                            </>
+                            <div className="d-flex align-items-center gap-2 small ms-auto">
+                              <span className="text-success fw-bold font-mono-ppsu">✓ {subs.file.fileName}</span>
+                              <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Laboratory Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
+                              {!isLocked && (
+                                <>
+                                  <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                    Replace
+                                    <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem8SectionFileUpload('main', file); e.currentTarget.value = ''; }} />
+                                  </label>
+                                  <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => handleItem8SectionFileUpload('main', undefined)}>Remove</Button>
+                                </>
+                              )}
+                            </div>
                           ) : (
                             !isLocked && (
-                              <label className="btn btn-outline-secondary btn-sm">
-                                Upload File
-                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(8, file); }} />
+                              <label className="btn btn-outline-secondary btn-sm ms-auto m-0" style={{ fontSize: 11 }}>
+                                Upload Laboratory Rubrics File (CSV / PDF)
+                                <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem8SectionFileUpload('main', file); e.currentTarget.value = ''; }} />
                               </label>
                             )
                           )}
@@ -2675,7 +3045,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               <div className="d-flex flex-wrap gap-1 mt-2">
                                 {selectedCriteria.map((c: any) => (
                                   <span key={c.id} className="badge" style={{ background: '#e8f0fe', color: '#1a73e8', fontSize: 11, fontWeight: 500 }}>
-                                    {c.label} ({c.max})
+                                    {toTitleCase(c.label)} ({c.max})
                                     {!isLocked && (
                                       <button
                                         className="btn btn-link p-0 ms-1 text-danger"
@@ -2705,7 +3075,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 <th className="bg-info bg-opacity-10" style={{ minWidth: 110 }}>Avg of Internals <span className="text-muted">(30)</span></th>
                                 {selectedCriteria.map((c: any) => (
                                   <th key={c.id} style={{ minWidth: 100 }}>
-                                    {c.label.toUpperCase()} <span className="text-muted">({c.max})</span>
+                                    {toTitleCase(c.label)} <span className="text-muted">({c.max})</span>
                                   </th>
                                 ))}
                                 <th className="bg-warning-subtle fw-bold" style={{ minWidth: 90 }}>Total</th>
@@ -2841,12 +3211,24 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               </span>
                             )}
                           </span>
-                          {!isLocked && !isLabBatchView && (
-                            <label className="btn btn-outline-secondary btn-sm" style={{ fontSize: 11 }}>
-                              {uploadedFile ? 'Replace CSV' : '↑ Upload CSV / PDF'}
-                              <input type="file" className="d-none" accept=".csv,.txt,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(4, 'Student Name List', f); e.currentTarget.value = ''; }} />
-                            </label>
-                          )}
+                          <div className="d-flex align-items-center gap-2">
+                            {mergedStudents.length > 0 && (
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                style={{ fontSize: 11 }}
+                                onClick={() => handleDownloadStudentCsv(mergedStudents, isLabBatchView ? access.batch : undefined)}
+                              >
+                                ⬇ Download as CSV
+                              </Button>
+                            )}
+                            {!isLocked && !isLabBatchView && (
+                              <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
+                                {uploadedFile ? 'Replace CSV' : '↑ Upload CSV / PDF'}
+                                <input type="file" className="d-none" accept=".csv,.txt,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(4, 'Student Name List', f); e.currentTarget.value = ''; }} />
+                              </label>
+                            )}
+                          </div>
                         </div>
 
                         {uploadedFile && (
@@ -2975,7 +3357,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   )}
 
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && (
+                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {false && item.index === 9 && (
                         <Button
@@ -3007,7 +3389,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 htmlFor={`file-replace-${item.index}`}
                               >
                                 Replace
-                                <input id={`file-replace-${item.index}`} type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                                <input id={`file-replace-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                               </label>
                               <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
                                 Remove
@@ -3026,7 +3408,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           htmlFor={`file-upload-${item.index}`}
                         >
                           {isSigItem ? 'Upload Signature File' : 'Upload File'}
-                          <input id={`file-upload-${item.index}`} type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                          <input id={`file-upload-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                         </label>
                       )}
                     </div>
@@ -3072,7 +3454,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       <>
                                         <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
                                           Replace
-                                          <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
+                                          <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
                                         </label>
                                         <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleItem1SubUpload(sub.key as any, undefined)}>
                                           Remove
@@ -3089,7 +3471,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 ) : (
                                   <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
                                     Choose Document
-                                    <input type="file" className="d-none" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
+                                    <input type="file" className="d-none" accept=".pdf" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
                                   </label>
                                 )
                               )}
@@ -3101,6 +3483,86 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   </div>
                 )}
 
+                {/* SECTION 6: Item 6 — Course Delivery Details (6 Coordinator-Managed Sub-items) */}
+                {isItem6 && !isRestricted && (() => {
+                  const subs = getSubItems(6) || {};
+                  const isCoordinatorUser = access.mode !== 'LAB_BATCH';
+                  const subDefs = [
+                    { key: 'lessonPlanLecture',   label: '(a) Lesson Plan — Lecture',         required: true,  section: 'planning' },
+                    { key: 'lessonPlanLab',       label: '(b) Lesson Plan — Lab',             required: false, section: 'planning' },
+                    { key: 'lessonPlanTutorial',  label: '(c) Lesson Plan — Tutorial',        required: false, section: 'planning' },
+                    { key: 'outcomeLecture',      label: '(d) Outcome of Lesson (Lecture)',   required: true,  section: 'outcomes' },
+                    { key: 'outcomeLab',          label: '(e) Outcome of Lab',                required: false, section: 'outcomes' },
+                    { key: 'outcomeTutorial',     label: '(f) Outcome of Tutorial',           required: false, section: 'outcomes' },
+                  ];
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-primary ms-2">
+                      <div className="small text-secondary mb-2 fw-semibold d-flex align-items-center gap-2">
+                        6 Sub-uploads (Planning + Outcomes)
+                        <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style={{ fontSize: 9 }}>Course Coordinator Upload</span>
+                      </div>
+                      {['planning', 'outcomes'].map((section) => (
+                        <div key={section} className="mb-3">
+                          <div className="small fw-bold text-uppercase text-secondary mb-2" style={{ letterSpacing: 1 }}>
+                            {section === 'planning' ? '📋 Planning' : '📊 Outcomes'}
+                          </div>
+                          <Row className="g-2 small">
+                            {subDefs.filter(s => s.section === section).map((sub) => {
+                              const subData = subs[sub.key as keyof typeof subs];
+                              const isCoordLocked = dbItem.isCoordinatorShared && !isCoordinatorUser;
+                              return (
+                                <Col xs={12} md={6} lg={4} key={sub.key}>
+                                  <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                                    <div>
+                                      <div className="fw-bold mb-1 d-flex align-items-center gap-1 flex-wrap">
+                                        <span>{sub.label}</span>
+                                        {sub.required
+                                          ? <span className="text-danger">*</span>
+                                          : <span className="text-muted" style={{ fontSize: 9 }}>(optional)</span>
+                                        }
+                                        {dbItem.isCoordinatorShared && <span className="ms-1 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>}
+                                      </div>
+                                      {subData?.fileName ? (
+                                        <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
+                                      ) : (
+                                        <div className="text-muted mb-1" style={{ fontSize: 11 }}>
+                                          {(dbItem.isCoordinatorShared && !isCoordinatorUser) ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="d-flex gap-1 mt-2 flex-wrap">
+                                      {subData?.fileName && (
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }}
+                                          onClick={() => setViewingDoc({ title: `Item 6 — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                      )}
+                                      {!isLocked && isCoordinatorUser && !isCoordLocked && (
+                                        <>
+                                          <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                            {subData?.fileName ? 'Replace' : 'Choose File'}
+                                            <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem6SubUpload(sub.key as any, f); }} />
+                                          </label>
+                                          {subData?.fileName && (
+                                            <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                              onClick={() => handleItem6SubUpload(sub.key as any, undefined)}>
+                                              Remove
+                                            </Button>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Col>
+                              );
+                            })}
+                          </Row>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 {/* SECTION 26: IA 1 & 2 */}
                 {isIA && !isRestricted && (
                   <div className="mt-3 ps-4 border-start border-2 border-primary ms-2">
@@ -3111,7 +3573,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         { key: 'sampleAnswerSheet', label: '(c) Sample Answer Sheet *' },
                       ].map((sub) => {
                         const subData = getSubItems(item.index)?.[sub.key];
-                        const isSubLockedByCoord = dbItem.isCoordinatorShared && ['timetable', 'questionPaper', 'sampleAnswerSheet'].includes(sub.key);
+                        const isSubLockedByCoord = dbItem.isCoordinatorShared && ['timetable', 'questionPaper'].includes(sub.key);
                         return (
                           <Col xs={12} md={6} key={sub.key}>
                             <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
@@ -3373,13 +3835,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   );
                 })()}
 
-                {/* Item 13: Assignment Topics, Sample Assignment, Marks Statement, and (d) CE Parameter Guidelines */}
+                {/* Item 13: Continuous Evaluation Parameters (Guidelines, Marks Statements, and Result Analysis per Item 9 Criterion) */}
                 {item.index === 13 && !isRestricted && (() => {
                   const subs = getSubItems(13) || {};
-                  const students = getStudentList();
-                  const marks = syncStudentRows(subs.marks, [{ id: 'assignment-marks', label: 'Marks', max: 100, fixed: true }]);
+                  const ceGuidelines = subs.ceGuidelines || {};
 
-                  // Extract Item 9 custom criteria
+                  // Extract Item 9 criteria
                   const item9Db = checklist.find((c: any) => c.itemIndex === 9);
                   let item9CriteriaList: any[] = [];
                   if (item9Db?.subItemsJson) {
@@ -3391,221 +3852,175 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   if (!item9CriteriaList.length && item9Criteria) {
                     item9CriteriaList = item9Criteria;
                   }
-                  const customCeCriteria = item9CriteriaList.filter((c: any) =>
+                  // Selected non-fixed criteria from Item 9
+                  const selectedCeCriteria = item9CriteriaList.filter((c: any) =>
                     c && c.id && !['internal-exam-1', 'internal-exam-2', 'internal-1', 'internal-2'].includes(String(c.id).toLowerCase())
                   );
-                  const ceGuidelines = subs.ceGuidelines || {};
+
+                  // Student rows from Item 9
+                  let studentRows: any[] = [];
+                  if (item9Rows && item9Rows.length > 0) {
+                    studentRows = item9Rows;
+                  } else if (item9Db?.subItemsJson) {
+                    try {
+                      const parsed = JSON.parse(item9Db.subItemsJson);
+                      if (Array.isArray(parsed.students)) studentRows = parsed.students;
+                    } catch (e) {}
+                  }
+                  if (!studentRows.length) {
+                    studentRows = getStudentList();
+                  }
 
                   return (
                     <div className="mt-3 ps-4 border-start border-2 border-info ms-2 w-100">
-                      {/* (a) Assignment Topics */}
-                      <div className="mb-3">
-                        <div className="small fw-bold text-navy-900 mb-1">(a) Assignment Topics</div>
-                        {(subs.assignmentTopics || []).map((topic: any) => (
-                          <div key={topic.id} className="d-flex gap-2 mb-1">
-                            <Form.Control size="sm" value={topic.title} disabled={isLocked} onChange={(e) => handleUpdateAssignmentTopic({ ...topic, title: e.target.value })} />
-                            {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleAssignmentTopic(topic, true)}>Remove</Button>}
-                          </div>
-                        ))}
-                        {!isLocked && (
-                          <Button size="sm" variant="outline-primary" style={{ fontSize: 11 }} onClick={() => { const title = window.prompt('Assignment topic/title', `Assignment ${(subs.assignmentTopics || []).length + 1}`); if (title?.trim()) handleAssignmentTopic({ id: `topic-${Date.now()}`, title: title.trim() }); }}>
-                            + Add Assignment Topic
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* (b) Sample Assignment */}
-                      <div className="mb-3">
-                        <div className="small fw-bold text-navy-900 mb-1">(b) Sample Assignment</div>
-                        <div className="d-flex align-items-center gap-2 small">
-                          {subs.sampleAssignment?.fileName ? (
-                            <>
-                              <span className="text-success fw-semibold">✓ {subs.sampleAssignment.fileName}</span>
-                              <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Sample Assignment', fileName: subs.sampleAssignment.fileName, fileUrl: subs.sampleAssignment.fileUrl })}>View</Button>
-                              {!isLocked && <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleSubFileUpload(13, 'sampleAssignment')}>Remove</Button>}
-                            </>
-                          ) : (
-                            !isLocked && (
-                              <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
-                                Upload File
-                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'sampleAssignment', file); }} />
-                              </label>
-                            )
-                          )}
+                      {selectedCeCriteria.length === 0 ? (
+                        <div className="alert alert-info small py-3 mb-0 d-flex align-items-center gap-2">
+                          <span>ℹ️ <strong>No Continuous Evaluation criteria selected in Item 9 yet.</strong> Select evaluation criteria in <strong>Item 9 (Theory Continuous Evaluation Rubrics)</strong> — such as Project, Assignment, Case Study, Field Visit, etc. — to automatically generate guidelines document upload slots, marks statements, and result analysis sections here.</span>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="d-flex flex-column gap-4">
+                          {selectedCeCriteria.map((crit: any, idx: number) => {
+                            const fileData = ceGuidelines[crit.id];
+                            const critLabel = toTitleCase(crit.label || 'Criterion');
+                            const maxMarks = crit.max || 10;
 
-                      {/* (c) Marks Statement & Result Analysis */}
-                      <div className="mb-3">
-                        <div className="small fw-bold text-navy-900 mb-1">(c) Assignment Marks Statement & Result Analysis</div>
-                        {!students.length ? (
-                          <div className="alert alert-info small py-2 mb-2">Student rows will appear automatically from Item 4.</div>
-                        ) : (
-                          <>
-                            <div className="table-responsive border rounded mb-3">
-                              <Table bordered size="sm" className="small mb-0 align-middle">
-                                <thead className="bg-light">
-                                  <tr><th>#</th><th>Student Name</th><th>Enrolment Number</th><th>Marks (/ 100)</th></tr>
-                                </thead>
-                                <tbody>
-                                  {marks.map((row: any, idx: number) => (
-                                    <tr key={row.studentId}>
-                                      <td className="text-muted font-mono-ppsu">{idx + 1}</td>
-                                      <td className="fw-semibold">{row.name}</td>
-                                      <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
-                                      <td>
-                                        <Form.Control type="number" min={0} max={100} size="sm" value={row.marks['assignment-marks'] || 0} disabled={isLocked} onChange={(e) => handleAssignmentMarkChange(row.studentId, Number(e.target.value))} style={{ maxWidth: 100 }} />
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </Table>
-                            </div>
+                            // Student marks for this criterion
+                            const critMarks = studentRows.map((r: any) => ({
+                              studentId: r.studentId || r.id,
+                              name: r.name || r.studentName || '',
+                              enrolmentNumber: r.enrolmentNumber || r.enrollmentNumber || '',
+                              batch: r.batch || '—',
+                              mark: Number(r.marks?.[crit.id] ?? 0)
+                            }));
 
-                            {/* Result Analysis Column Charts for Item 13(c) */}
-                            {(() => {
-                              const markValues = marks.map((r: any) => Number(r.marks?.['assignment-marks'] || 0));
-                              const mBands = ['<40', '41–50', '51–60', '61–70', '71–80', '81–90', '>90'];
-                              const mCounts = [
-                                markValues.filter(m => m <= 40).length,
-                                markValues.filter(m => m >= 41 && m <= 50).length,
-                                markValues.filter(m => m >= 51 && m <= 60).length,
-                                markValues.filter(m => m >= 61 && m <= 70).length,
-                                markValues.filter(m => m >= 71 && m <= 80).length,
-                                markValues.filter(m => m >= 81 && m <= 90).length,
-                                markValues.filter(m => m > 90).length,
-                              ];
-                              const pBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
-                              const maxValM = Math.max(...mCounts, 1);
+                            // Distribution for analysis chart
+                            const markValues = critMarks.map(r => r.mark);
+                            const mBands = ['<40%', '41–50%', '51–60%', '61–70%', '71–80%', '81–90%', '>90%'];
+                            const mCounts = [
+                              markValues.filter(m => (m / maxMarks) * 100 <= 40).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 40 && (m / maxMarks) * 100 <= 50).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 50 && (m / maxMarks) * 100 <= 60).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 60 && (m / maxMarks) * 100 <= 70).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 70 && (m / maxMarks) * 100 <= 80).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 80 && (m / maxMarks) * 100 <= 90).length,
+                              markValues.filter(m => (m / maxMarks) * 100 > 90).length,
+                            ];
+                            const maxValM = Math.max(...mCounts, 1);
 
-                              return (
-                                <Row className="g-3 mb-3">
-                                  <Col md={6}>
-                                    <Card className="border shadow-sm h-100">
-                                      <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
-                                        <span className="fw-bold text-navy-900 small">📊 Assignment Marks-Band Distribution</span>
-                                        <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {marks.length}</span>
-                                      </Card.Header>
-                                      <Card.Body className="p-3 d-flex flex-column justify-content-between">
-                                        <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-1 border-bottom" style={{ height: 130 }}>
-                                          {mBands.map((label, i) => {
-                                            const cnt = mCounts[i];
-                                            const barPct = Math.max(8, Math.round((cnt / maxValM) * 75));
-                                            return (
-                                              <div key={label} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
-                                                <div className="fw-bold font-mono-ppsu text-primary mb-1" style={{ fontSize: 11 }}>{cnt}</div>
-                                                <div className="rounded-top shadow-sm" style={{ height: `${barPct}%`, width: '70%', backgroundColor: cnt > 0 ? '#1E3A8A' : '#CBD5E1', minHeight: '4px' }} title={`${label}: ${cnt} students`} />
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                        <div className="d-flex gap-1 pt-2 px-1">
-                                          {mBands.map((label) => (
-                                            <div key={label} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>{label}</div>
-                                          ))}
-                                        </div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-                                  <Col md={6}>
-                                    <Card className="border shadow-sm h-100">
-                                      <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
-                                        <span className="fw-bold text-navy-900 small">📊 Assignment Percentage Distribution</span>
-                                        <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total: {marks.length}</span>
-                                      </Card.Header>
-                                      <Card.Body className="p-3 d-flex flex-column justify-content-between">
-                                        <div className="d-flex align-items-end gap-2 pt-4 pb-2 px-1 border-bottom" style={{ height: 130 }}>
-                                          {pBands.map((label, i) => {
-                                            const cnt = mCounts[i];
-                                            const barPct = Math.max(8, Math.round((cnt / maxValM) * 75));
-                                            return (
-                                              <div key={label} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
-                                                <div className="fw-bold font-mono-ppsu mb-1" style={{ fontSize: 11, color: '#0D9488' }}>{cnt}</div>
-                                                <div className="rounded-top shadow-sm" style={{ height: `${barPct}%`, width: '70%', backgroundColor: cnt > 0 ? '#0D9488' : '#CBD5E1', minHeight: '4px' }} title={`${label}: ${cnt} students`} />
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                        <div className="d-flex gap-1 pt-2 px-1">
-                                          {pBands.map((label) => (
-                                            <div key={label} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>{label}</div>
-                                          ))}
-                                        </div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-                                </Row>
-                              );
-                            })()}
-                          </>
-                        )}
-                        {subs.marksFile?.fileName ? (
-                          <div className="small d-flex align-items-center gap-2">
-                            <span className="text-success fw-semibold">✓ {subs.marksFile.fileName}</span>
-                            <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Assignment Marks Statement', fileName: subs.marksFile.fileName, fileUrl: subs.marksFile.fileUrl })}>View</Button>
-                            {!isLocked && <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleSubFileUpload(13, 'marksFile')}>Remove</Button>}
-                          </div>
-                        ) : (
-                          !isLocked && (
-                            <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
-                              Upload Marks Statement File
-                              <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubFileUpload(13, 'marksFile', file); }} />
-                            </label>
-                          )
-                        )}
-                      </div>
-
-                      {/* (d) Guidelines/Documents Related to Theory CE Parameters */}
-                      <div className="p-3 bg-light rounded border">
-                        <div className="fw-bold text-navy-900 small mb-2 d-flex align-items-center justify-content-between">
-                          <span>(d) Guidelines / Documents for Theory CE Parameters</span>
-                          <span className="badge bg-primary" style={{ fontSize: 10 }}>Auto-Generated from Item 9</span>
-                        </div>
-
-                        {!customCeCriteria.length ? (
-                          <div className="alert alert-light border small py-2 mb-0">
-                            ℹ️ Select additional Theory CE criteria in <strong>Item 9 (Continuous Evaluation Rubrics)</strong> — such as Project, Case Study, Field Visit, Assignment, etc. — to automatically generate guidelines document upload slots here.
-                          </div>
-                        ) : (
-                          <div className="d-flex flex-column gap-2">
-                            {customCeCriteria.map((crit: any) => {
-                              const fileData = ceGuidelines[crit.id];
-                              return (
-                                <div key={crit.id} className="p-2 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                  <div>
-                                    <div className="fw-bold small text-dark">Guidelines / Documents related to {crit.label}</div>
-                                    {fileData?.fileName ? (
-                                      <div className="text-success fw-semibold font-mono-ppsu" style={{ fontSize: 11 }}>✓ {fileData.fileName}</div>
-                                    ) : (
-                                      <div className="text-muted" style={{ fontSize: 11 }}>✗ Document not uploaded yet</div>
-                                    )}
+                            return (
+                              <Card key={crit.id} className="border shadow-sm">
+                                <Card.Header className="bg-light py-2 border-bottom d-flex align-items-center justify-content-between">
+                                  <div className="fw-bold text-navy-900 small d-flex align-items-center gap-2">
+                                    <span className="badge bg-primary">#{idx + 1}</span>
+                                    <span>{critLabel}</span>
+                                    <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Max Marks: {maxMarks}</span>
                                   </div>
-                                  <div className="d-flex align-items-center gap-1">
-                                    {fileData?.fileName && (
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Guidelines — ${crit.label}`, fileName: fileData.fileName, fileUrl: fileData.fileUrl })}>
-                                        👁️ View
-                                      </Button>
-                                    )}
-                                    {!isLocked && (
-                                      <>
-                                        <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
-                                          {fileData?.fileName ? 'Replace' : 'Upload Guidelines File'}
-                                          <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCeGuidelineUpload(crit.id, file); }} />
-                                        </label>
+                                  <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle" style={{ fontSize: 10 }}>Auto-driven from Item 9</span>
+                                </Card.Header>
+                                <Card.Body className="p-3">
+                                  {/* 1. Guidelines / Documents Upload Slot */}
+                                  <div className="p-2.5 bg-light rounded border mb-3">
+                                    <div className="fw-bold text-dark small mb-1">📋 Guidelines / Documents related to {critLabel}</div>
+                                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                      {fileData?.fileName ? (
+                                        <div className="text-success fw-semibold font-mono-ppsu small">✓ {fileData.fileName}</div>
+                                      ) : (
+                                        <div className="text-muted small">✗ Guidelines document not uploaded yet</div>
+                                      )}
+                                      <div className="d-flex align-items-center gap-1">
                                         {fileData?.fileName && (
-                                          <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleCeGuidelineUpload(crit.id, undefined)}>
-                                            Remove
+                                          <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Guidelines — ${critLabel}`, fileName: fileData.fileName, fileUrl: fileData.fileUrl })}>
+                                            👁️ View
                                           </Button>
                                         )}
-                                      </>
+                                        {!isLocked && (
+                                          <>
+                                            <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                              {fileData?.fileName ? 'Replace' : 'Upload Guidelines File (PDF)'}
+                                              <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCeGuidelineUpload(crit.id, file); }} />
+                                            </label>
+                                            {fileData?.fileName && (
+                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleCeGuidelineUpload(crit.id, undefined)}>
+                                                Remove
+                                              </Button>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* 2. Marks Statement (Read-only pull from Item 9) */}
+                                  <div className="mb-3">
+                                    <div className="fw-bold text-dark small mb-2 d-flex align-items-center justify-content-between">
+                                      <span>📝 Marks Statement ({critLabel})</span>
+                                      <span className="text-muted" style={{ fontSize: 11 }}>Read-only (auto-populated from Item 9 rubrics table)</span>
+                                    </div>
+                                    {critMarks.length === 0 ? (
+                                      <div className="alert alert-light border small py-2 mb-0">No student marks recorded in Item 9.</div>
+                                    ) : (
+                                      <div className="table-responsive border rounded" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                                        <Table bordered hover size="sm" className="small mb-0 align-middle text-center">
+                                          <thead className="bg-light sticky-top">
+                                            <tr>
+                                              <th style={{ width: 40 }}>#</th>
+                                              <th className="text-start">Student Name</th>
+                                              <th>Enrolment Number</th>
+                                              <th style={{ width: 70 }}>Batch</th>
+                                              <th style={{ width: 110 }} className="bg-primary-subtle text-primary fw-bold">Marks (/ {maxMarks})</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {critMarks.map((row, sIdx) => (
+                                              <tr key={row.studentId || sIdx}>
+                                                <td className="text-muted font-mono-ppsu">{sIdx + 1}</td>
+                                                <td className="text-start fw-semibold">{row.name}</td>
+                                                <td className="font-mono-ppsu">{row.enrolmentNumber}</td>
+                                                <td>{row.batch}</td>
+                                                <td className="fw-bold font-mono-ppsu text-primary">{row.mark}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </Table>
+                                      </div>
                                     )}
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+
+                                  {/* 3. Analysis (Result Distribution Chart) */}
+                                  <div>
+                                    <div className="fw-bold text-dark small mb-2">📊 Result Analysis ({critLabel})</div>
+                                    <Card className="border shadow-sm">
+                                      <Card.Header className="bg-light py-1.5 px-3 border-bottom d-flex align-items-center justify-content-between">
+                                        <span className="fw-semibold text-secondary small">Percentage Band Distribution</span>
+                                        <span className="badge bg-secondary font-mono-ppsu" style={{ fontSize: 10 }}>Total Students: {critMarks.length}</span>
+                                      </Card.Header>
+                                      <Card.Body className="p-3">
+                                        <div className="d-flex align-items-end gap-2 pt-3 pb-2 px-1 border-bottom" style={{ height: 120 }}>
+                                          {mBands.map((bLabel, bIdx) => {
+                                            const cnt = mCounts[bIdx];
+                                            const barPct = Math.max(8, Math.round((cnt / maxValM) * 75));
+                                            return (
+                                              <div key={bLabel} className="d-flex flex-column align-items-center flex-fill h-100 justify-content-end">
+                                                <div className="fw-bold font-mono-ppsu text-primary mb-1" style={{ fontSize: 11 }}>{cnt}</div>
+                                                <div className="rounded-top shadow-sm" style={{ height: `${barPct}%`, width: '70%', backgroundColor: cnt > 0 ? '#1E3A8A' : '#CBD5E1', minHeight: '4px' }} title={`${bLabel}: ${cnt} students`} />
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                        <div className="d-flex gap-1 pt-2 px-1">
+                                          {mBands.map((bLabel) => (
+                                            <div key={bLabel} className="flex-fill text-center text-muted fw-semibold" style={{ fontSize: 9, lineHeight: 1.1 }}>{bLabel}</div>
+                                          ))}
+                                        </div>
+                                      </Card.Body>
+                                    </Card>
+                                  </div>
+                                </Card.Body>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

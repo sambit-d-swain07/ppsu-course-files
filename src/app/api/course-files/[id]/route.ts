@@ -54,7 +54,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
       'Student Name List',
       'Department Academic Calendar',
       'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)',
-      'List of Laboratory (or Experiments)',
+      'List of Laboratory Experiments',
       'Laboratory Rubrics',
       'Theory Continuous Evaluation Rubrics',
       'Lab Manuals/Tutorials',
@@ -381,7 +381,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       reviewerSignatureName,
       reviewerSignatureUrl,
       reviewerSignedAt,
-      reviewerConfirmed
+      reviewerConfirmed,
+      division
     } = body;
 
     if (!isCoordinator && status !== 'SUBMITTED' && status !== undefined) {
@@ -399,6 +400,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     if (semester !== undefined) updates.semester = semester;
     if (courseCode !== undefined) updates.courseCode = courseCode;
     if (courseTitle !== undefined) updates.courseTitle = courseTitle;
+    if (division !== undefined) updates.division = division;
 
     if (facultySignatureName !== undefined) updates.facultySignatureName = facultySignatureName;
     if (facultySignatureUrl !== undefined) updates.facultySignatureUrl = facultySignatureUrl;
