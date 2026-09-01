@@ -12,7 +12,8 @@ const SHARED_ITEMS = [
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
   { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
   { index: 12, name: 'Item 12 — Internal Assessment 2 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
-  { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] }
+  { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] },
+  { index: 18, name: 'Item 18 — Action to be taken for next year based on CO Attainment', category: 'Institutional' }
 ];
 
 const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -100,7 +101,7 @@ export default function FacultyCourseCoordinatorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(itemIndex === 18 ? { school: activeSubject?.school || 'SOE' } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
@@ -111,7 +112,9 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(`Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
+      setActionSuccess(itemIndex === 18
+        ? `Shared Action Plan document for School ${activeSubject?.school || 'SOE'} (Item #18) uploaded and locked for all faculty.`
+        : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
       fetchData();
     } catch (err: any) {
       setActionError(err.message);
@@ -169,7 +172,7 @@ export default function FacultyCourseCoordinatorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(itemIndex === 18 ? { school: activeSubject?.school || 'SOE' } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'EMPTY',
           fileName: null,
@@ -181,7 +184,7 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Removal failed');
       }
-      setActionSuccess(`Shared document for Item #${itemIndex} removed.`);
+      setActionSuccess(itemIndex === 18 ? `Shared Item #18 document removed.` : `Shared document for Item #${itemIndex} removed.`);
       fetchData();
     } catch (err: any) {
       setActionError(err.message);

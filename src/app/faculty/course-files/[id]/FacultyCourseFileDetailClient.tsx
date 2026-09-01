@@ -833,10 +833,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
     if (!dbItem) return false;
 
-    if (itemIndex === 1) {
-      const subs = getSubItems(1);
-      return !!(subs?.vision?.fileName && subs?.mission?.fileName && subs?.peo?.fileName && subs?.pso?.fileName && subs?.po?.fileName);
+    // Coordinator-owned items and Admin-owned Item 5:
+    // Faculty is not responsible for uploading these items;
+    // they do not block the faculty's completion count or submission gate.
+    if (dbItem.isCoordinatorShared || itemIndex === 5) {
+      return true;
     }
+
     if (itemIndex === 4) {
       const subs = getSubItems(4);
       return Boolean(subs?.students?.length || dbItem.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
@@ -850,7 +853,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return Boolean(subs?.students?.length && subs?.criteria?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 11 || itemIndex === 12) {
-      return Boolean(getSubItems(9)?.students?.length || getSubItems(itemIndex)?.file?.fileName) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
+      const subs = getSubItems(itemIndex);
+      const hasSampleAnswer = Boolean(subs?.sampleAnswerSheet?.fileName);
+      const hasMarks = Boolean(getSubItems(9)?.students?.length || subs?.file?.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
+      return hasSampleAnswer || hasMarks || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
     }
     if (itemIndex === 13) {
       const subs = getSubItems(13);
@@ -858,7 +864,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     }
     if (itemIndex === 15) {
       const subs = getSubItems(15);
-      return Boolean(subs?.gradeSheet?.fileName && subs?.students?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
+      return Boolean((subs?.gradeSheet?.fileName || subs?.students?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
     }
     return dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || Boolean(dbItem.fileName);
   };
@@ -2140,9 +2146,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
 
                       {/* Single upload complete indicator */}
-                      {!isItem1 && !isItem8 && !isIA && !isUniv && complete && !isRestricted && (
+                      {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && item.index !== 18 && (dbItem.fileName || dbItem.sharedFileName) && !isRestricted && !dbItem.isCoordinatorShared && (
                         <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: 12, color: 'var(--ppsu-success-text)', overflow: 'hidden' }}>
-                          <span>✓ <strong className="font-mono-ppsu text-truncate d-inline-block" style={{ maxWidth: '360px', verticalAlign: 'bottom' }}>{dbItem.fileName}</strong></span>
+                          <span>✓ <strong className="font-mono-ppsu text-truncate d-inline-block" style={{ maxWidth: '360px', verticalAlign: 'bottom' }}>{dbItem.fileName || dbItem.sharedFileName}</strong></span>
                         </div>
                       )}
 
@@ -3334,82 +3340,74 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   {/* Item 10: Centrally Managed Course Coordinator Lab Manuals / Tutorials */}
                   {item.index === 10 && !isRestricted && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                      {dbItem.fileName || dbItem.sharedFileName ? (
-                        <>
-                          <span className="badge bg-success-subtle text-success border" style={{ fontSize: 11 }}>
-                            ✓ Published by Course Coordinator (Coordinator Upload)
-                          </span>
-                          <Button
-                            variant="outline-info"
-                            size="sm"
-                            style={{ fontSize: 12 }}
-                            onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || dbItem.sharedFileName || 'Lab_Manual.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
-                          >
-                            👁️ View
-                          </Button>
-                        </>
-                      ) : (
-                        <span className="badge bg-secondary-subtle text-secondary border" style={{ fontSize: 11 }}>
-                          ⏳ Not uploaded yet — pending Course Coordinator (Locked)
-                        </span>
+                      {(dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) && (
+                        <Button
+                          variant="outline-info"
+                          size="sm"
+                          style={{ fontSize: 12 }}
+                          onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || dbItem.sharedFileName || 'Lab_Manual.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
+                        >
+                          👁️ View
+                        </Button>
                       )}
                     </div>
                   )}
 
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && (
+                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && item.index !== 18 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                      {false && item.index === 9 && (
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          disabled={isLocked}
-                          style={{ fontSize: 12 }}
-                          onClick={() => setItem9ModalOpen(true)}
-                        >
-                          ✏️ Enter Marks Manually
-                        </Button>
-                      )}
-
-                      {complete ? (
-                        <>
+                      {dbItem.isCoordinatorShared ? (
+                        (dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) ? (
                           <Button
                             variant="outline-info"
                             size="sm"
                             style={{ fontSize: 12 }}
-                            onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}
+                            onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || dbItem.sharedFileName || 'document.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
                           >
                             👁️ View
                           </Button>
-                          {!isLocked && (
-                            <>
-                              <label
-                                className="btn btn-outline-secondary btn-sm m-0"
-                                style={{ fontSize: 12, cursor: 'pointer' }}
-                                htmlFor={`file-replace-${item.index}`}
-                              >
-                                Replace
-                                <input id={`file-replace-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
-                              </label>
-                              <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
-                                Remove
-                              </button>
-                            </>
-                          )}
-                        </>
+                        ) : null
                       ) : (
-                        <label
-                          className="btn btn-sm"
-                          style={{
-                            background: isLocked ? '#e9ecef' : 'var(--ppsu-accent)',
-                            color: isLocked ? '#6c757d' : '#fff',
-                            fontSize: 12, border: 'none', cursor: isLocked ? 'not-allowed' : 'pointer'
-                          }}
-                          htmlFor={`file-upload-${item.index}`}
-                        >
-                          {isSigItem ? 'Upload Signature File' : 'Upload File'}
-                          <input id={`file-upload-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
-                        </label>
+                        complete ? (
+                          <>
+                            <Button
+                              variant="outline-info"
+                              size="sm"
+                              style={{ fontSize: 12 }}
+                              onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}
+                            >
+                              👁️ View
+                            </Button>
+                            {!isLocked && (
+                              <>
+                                <label
+                                  className="btn btn-outline-secondary btn-sm m-0"
+                                  style={{ fontSize: 12, cursor: 'pointer' }}
+                                  htmlFor={`file-replace-${item.index}`}
+                                >
+                                  Replace
+                                  <input id={`file-replace-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                                </label>
+                                <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
+                                  Remove
+                                </button>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <label
+                            className="btn btn-sm"
+                            style={{
+                              background: isLocked ? '#e9ecef' : 'var(--ppsu-accent)',
+                              color: isLocked ? '#6c757d' : '#fff',
+                              fontSize: 12, border: 'none', cursor: isLocked ? 'not-allowed' : 'pointer'
+                            }}
+                            htmlFor={`file-upload-${item.index}`}
+                          >
+                            {isSigItem ? 'Upload Signature File' : 'Upload File'}
+                            <input id={`file-upload-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                          </label>
+                        )
                       )}
                     </div>
                   )}
@@ -3486,7 +3484,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 {/* SECTION 6: Item 6 — Course Delivery Details (6 Coordinator-Managed Sub-items) */}
                 {isItem6 && !isRestricted && (() => {
                   const subs = getSubItems(6) || {};
-                  const isCoordinatorUser = access.mode !== 'LAB_BATCH';
+                  const isCoordShared = Boolean(dbItem.isCoordinatorShared);
                   const subDefs = [
                     { key: 'lessonPlanLecture',   label: '(a) Lesson Plan — Lecture',         required: true,  section: 'planning' },
                     { key: 'lessonPlanLab',       label: '(b) Lesson Plan — Lab',             required: false, section: 'planning' },
@@ -3509,7 +3507,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           <Row className="g-2 small">
                             {subDefs.filter(s => s.section === section).map((sub) => {
                               const subData = subs[sub.key as keyof typeof subs];
-                              const isCoordLocked = dbItem.isCoordinatorShared && !isCoordinatorUser;
                               return (
                                 <Col xs={12} md={6} lg={4} key={sub.key}>
                                   <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
@@ -3520,13 +3517,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           ? <span className="text-danger">*</span>
                                           : <span className="text-muted" style={{ fontSize: 9 }}>(optional)</span>
                                         }
-                                        {dbItem.isCoordinatorShared && <span className="ms-1 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>}
+                                        {isCoordShared && <span className="ms-1 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>}
                                       </div>
                                       {subData?.fileName ? (
                                         <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
                                       ) : (
                                         <div className="text-muted mb-1" style={{ fontSize: 11 }}>
-                                          {(dbItem.isCoordinatorShared && !isCoordinatorUser) ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                          {isCoordShared ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
                                         </div>
                                       )}
                                     </div>
@@ -3537,7 +3534,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           👁️ View
                                         </Button>
                                       )}
-                                      {!isLocked && isCoordinatorUser && !isCoordLocked && (
+                                      {!isLocked && !isCoordShared && (
                                         <>
                                           <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
                                             {subData?.fileName ? 'Replace' : 'Choose File'}

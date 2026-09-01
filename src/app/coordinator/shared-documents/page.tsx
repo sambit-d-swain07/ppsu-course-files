@@ -81,7 +81,7 @@ export default function CoordinatorSharedDocumentsPage() {
   );
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
-    if (!selectedSubjectId || !file) return;
+    if ((itemIndex === 18 ? !selectedSchool : !selectedSubjectId) || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -89,7 +89,7 @@ export default function CoordinatorSharedDocumentsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(itemIndex === 18 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
@@ -100,7 +100,9 @@ export default function CoordinatorSharedDocumentsPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(`Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
+      setActionSuccess(itemIndex === 18
+        ? `Shared Action Plan document for School ${selectedSchool} (Item #18) uploaded and locked for all faculty.`
+        : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
       fetchSubjects();
     } catch (err: any) {
       setActionError(err.message);
@@ -150,14 +152,14 @@ export default function CoordinatorSharedDocumentsPage() {
   };
 
   const handleClearDoc = async (itemIndex: number) => {
-    if (itemIndex === 1 ? !selectedSchool : !selectedSubjectId) return;
+    if (([1, 18].includes(itemIndex)) ? !selectedSchool : !selectedSubjectId) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
+          ...([1, 18].includes(itemIndex) ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'EMPTY',
           fileName: null,
@@ -166,7 +168,7 @@ export default function CoordinatorSharedDocumentsPage() {
         })
       });
       if (!res.ok) throw new Error('Failed to remove shared document');
-      setActionSuccess(itemIndex === 1 ? `Shared Item 1 documents for ${selectedSchool} removed.` : `Shared document for Item #${itemIndex} removed.`);
+      setActionSuccess([1, 18].includes(itemIndex) ? `Shared Item #${itemIndex} document for ${selectedSchool} removed.` : `Shared document for Item #${itemIndex} removed.`);
       fetchSubjects();
     } catch (err: any) {
       setActionError(err.message);
@@ -350,7 +352,7 @@ export default function CoordinatorSharedDocumentsPage() {
 
                   <div className="d-flex flex-column gap-4">
                     {SHARED_ITEMS.map((item) => {
-                      const doc = item.index === 1 ? schoolSharedMap.get(item.index) : sharedMap.get(item.index);
+                      const doc = (item.index === 1 || item.index === 18) ? schoolSharedMap.get(item.index) : sharedMap.get(item.index);
                       const isUploaded = doc?.status === 'UPLOADED';
                       let subParsed: any = {};
                       try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
