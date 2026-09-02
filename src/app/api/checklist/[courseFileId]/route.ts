@@ -66,6 +66,43 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     if (score !== undefined) updates.score = score;
     if (remarks !== undefined) updates.remarks = remarks;
 
+    if (Number(itemIndex) === 8 && subItemsJson && !labBatch) {
+      const userAssignedBatches: string[] = [];
+      if (subject) {
+        if (subject.labTeacherAId === payload.userId || (!subject.labTeacherAId && (courseFile.facultyId === payload.userId || subject.courseTeacherId === payload.userId))) {
+          userAssignedBatches.push('A');
+        }
+        if (subject.labTeacherBId === payload.userId) userAssignedBatches.push('B');
+        if (subject.labTeacherCId === payload.userId) userAssignedBatches.push('C');
+      }
+      if (userAssignedBatches.length === 0) userAssignedBatches.push('A');
+
+      try {
+        const parsedNew = JSON.parse(subItemsJson);
+        if (Array.isArray(parsedNew.students)) {
+          const dbItem = (courseFile as any).checklistItems?.find((c: any) => c.itemIndex === 8);
+          let existingStudents: any[] = [];
+          if (dbItem?.subItemsJson) {
+            try {
+              const parsedExisting = JSON.parse(dbItem.subItemsJson);
+              if (Array.isArray(parsedExisting.students)) existingStudents = parsedExisting.students;
+            } catch (e) {}
+          }
+          const existingMap = new Map(existingStudents.map((s: any) => [s.studentId || s.id || s.enrolmentNumber, s]));
+
+          parsedNew.students = parsedNew.students.map((newRow: any) => {
+            const rowBatch = String(newRow.batch || 'A').toUpperCase();
+            if (!userAssignedBatches.includes(rowBatch)) {
+              const origRow = existingMap.get(newRow.studentId || newRow.id || newRow.enrolmentNumber);
+              return origRow || newRow;
+            }
+            return newRow;
+          });
+          updates.subItemsJson = JSON.stringify(parsedNew);
+        }
+      } catch (e) {}
+    }
+
     if (labBatch) {
       let taggedSubItems = subItemsJson;
       if (typeof taggedSubItems === 'string') {

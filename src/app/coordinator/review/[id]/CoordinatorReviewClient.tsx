@@ -19,7 +19,7 @@ const CHECKLIST_ITEMS = [
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
-  { index: 13, name: 'Assignment topics, sample assignment, marks statements', maxScore: 10 },
+  { index: 13, name: 'Guidelines / Documents related to Evaluation Criteria', maxScore: 10 },
   { index: 14, name: 'Attendance register (ERP)', maxScore: 10 },
   { index: 15, name: 'University exam', maxScore: 10 },
   { index: 16, name: 'CO Attainment output sheet', maxScore: 10 },

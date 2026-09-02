@@ -19,7 +19,7 @@ const CHECKLIST_ITEMS = [
   { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
   { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
   { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
-  { index: 13, name: 'Assignment topics, sample assignment, marks statements', maxScore: 10 },
+  { index: 13, name: 'Guidelines / Documents related to Evaluation Criteria', maxScore: 10 },
   { index: 14, name: 'Attendance register (ERP)', maxScore: 10 },
   { index: 15, name: 'University exam', maxScore: 10 },
   { index: 16, name: 'CO Attainment output sheet', maxScore: 10 },
@@ -441,13 +441,40 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status);
 
+  const isRowEditableByCurrentFaculty = useCallback((rowBatch?: string) => {
+    if (isLocked) return false;
+    const targetBatch = String(rowBatch || 'A').toUpperCase();
+    const isLabTeacherMode = access?.mode === 'LAB_BATCH';
+
+    if (isLabTeacherMode) {
+      return targetBatch === String(access.batch || 'A').toUpperCase();
+    }
+
+    const assignedBatches: string[] = (access as any)?.assignedBatches;
+    if (Array.isArray(assignedBatches) && assignedBatches.length > 0) {
+      return assignedBatches.includes(targetBatch);
+    }
+
+    const hasLabTeacherB = Boolean(courseFile?.subject?.labTeacherBId);
+    const hasLabTeacherC = Boolean(courseFile?.subject?.labTeacherCId);
+
+    if (targetBatch === 'B' && hasLabTeacherB) return false;
+    if (targetBatch === 'C' && hasLabTeacherC) return false;
+
+    return true;
+  }, [isLocked, access, courseFile]);
+
   const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
     if (isLocked) return;
+    const targetRow = item8Rows.find(r => r.studentId === studentId || r.id === studentId);
+    if (targetRow && !isRowEditableByCurrentFaculty(targetRow.batch)) return;
+
     const numVal = Math.max(0, Number(value) || 0);
 
     setItem8Rows(prev => {
       const updated = prev.map(row => {
-        if (row.studentId !== studentId) return row;
+        if (row.studentId !== studentId && row.id !== studentId) return row;
+        if (!isRowEditableByCurrentFaculty(row.batch)) return row;
         if (pKey) {
           const practicals = { ...(row.practicals || {}) };
           practicals[pKey] = Math.min(10, numVal);
@@ -465,7 +492,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }, 600);
       return updated;
     });
-  }, [isLocked, numPracticals]);
+  }, [isLocked, numPracticals, item8Rows, isRowEditableByCurrentFaculty]);
 
   const handleNumPracticalsChange = useCallback((val: number) => {
     if (isLocked || access.mode === 'LAB_BATCH') return;
@@ -581,21 +608,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
+    if (itemIndex === 8) {
+      const targetRow = item8Rows.find(r => r.studentId === studentId || r.id === studentId);
+      if (targetRow && !isRowEditableByCurrentFaculty(targetRow.batch)) return;
+    }
     const clamped = Math.max(0, value || 0);
     if (itemIndex === 8) {
-      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+      setItem8Rows(prev => prev.map(r => (r.studentId === studentId || r.id === studentId) ? (isRowEditableByCurrentFaculty(r.batch) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r) : r));
     } else if (itemIndex === 9) {
-      setItem9Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+      setItem9Rows(prev => prev.map(r => (r.studentId === studentId || r.id === studentId) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
     }
     const saveRows = itemIndex === 8 ? item8Rows : item9Rows;
-    const updatedRows = saveRows.map(r => r.studentId === studentId ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r);
+    const updatedRows = saveRows.map(r => (r.studentId === studentId || r.id === studentId) ? (itemIndex === 8 && !isRowEditableByCurrentFaculty(r.batch) ? r : { ...r, marks: { ...r.marks, [criterionId]: clamped } }) : r);
     if (saveTimeoutsRef.current[itemIndex]) clearTimeout(saveTimeoutsRef.current[itemIndex]);
     saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
       const subs = getSubItems(itemIndex) || {};
       subs.students = updatedRows;
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
     }, 600);
-  }, [isLocked, item8Rows, item9Rows, checklist]);
+  }, [isLocked, item8Rows, item9Rows, checklist, isRowEditableByCurrentFaculty]);
 
   const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
     if (isLocked) return;
@@ -731,19 +762,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     await saveStructuredItem(15, subs, 'UPLOADED');
   };
 
-  const isRowEditableByCurrentFaculty = (rowBatch?: string) => {
-    if (isLocked) return false;
-    if (isLabTeacher) {
-      return rowBatch === access.batch || (!rowBatch && access.batch === 'A');
-    }
-    const hasLabTeacherB = Boolean(courseFile?.subject?.labTeacherBId);
-    const hasLabTeacherC = Boolean(courseFile?.subject?.labTeacherCId);
 
-    if (rowBatch === 'B' && hasLabTeacherB) return false;
-    if (rowBatch === 'C' && hasLabTeacherC) return false;
-
-    return true;
-  };
 
   if (loading) return (
     <div className="d-flex justify-content-center py-5">
@@ -1043,7 +1062,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const handleManualStudentFieldChange = (itemIndex: number, studentId: string, field: 'name' | 'enrolmentNumber', value: string) => {
     if (isLocked) return;
     if (itemIndex === 8) {
-      setItem8Rows(prev => prev.map(r => r.studentId === studentId ? { ...r, [field]: value } : r));
+      const targetRow = item8Rows.find(r => r.studentId === studentId || r.id === studentId);
+      if (targetRow && !isRowEditableByCurrentFaculty(targetRow.batch)) return;
+      setItem8Rows(prev => prev.map(r => (r.studentId === studentId || r.id === studentId) ? { ...r, [field]: value } : r));
     }
     const subs = getSubItems(itemIndex) || {};
     if (!subs.students) subs.students = [];
@@ -1928,7 +1949,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       {access.mode === 'LAB_BATCH' && (
         <Card className="mb-4 border-0 shadow-sm" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
           <Card.Body className="py-3">
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
                 <h6 className="fw-bold text-success mb-1">Batch {access.batch} Lab Teacher Submission Portal</h6>
                 <p className="small text-secondary mb-0">Manage your assigned lab items (Items 2, 4, 8, 9, 14, and 20). Submitting will send your lab data & rubrics directly to the Course Teacher.</p>
@@ -1942,19 +1963,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               >
                 {submitLoading ? <Spinner animation="border" size="sm" /> : `✓ Submit Batch ${access.batch} Data`}
               </Button>
-            </div>
-            <div className="pt-2 border-top border-success-subtle">
-              <Form.Check
-                type="checkbox"
-                id="lab-teacher-declaration-check"
-                checked={labTeacherDeclared}
-                onChange={(e) => setLabTeacherDeclared(e.target.checked)}
-                label={
-                  <span className="small fw-semibold text-dark">
-                    I confirm all required documents are uploaded correctly <span className="text-danger">*</span>
-                  </span>
-                }
-              />
             </div>
           </Card.Body>
         </Card>
@@ -4413,6 +4421,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             <p className="text-secondary small mb-3">
               Submit your Batch {access.batch} lab data (Items 2, 8, 9, 14). Item 4 is view-only and automatically filtered from the Course Teacher's combined list.
             </p>
+            <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
+              <Form.Check
+                type="checkbox"
+                id="chk-lab-teacher-declaration"
+                label={
+                  <span className="fw-bold text-dark" style={{ fontSize: '0.95rem' }}>
+                    I confirm all required documents are uploaded correctly <span className="text-danger fw-bold">*</span>
+                  </span>
+                }
+                checked={labTeacherDeclared}
+                onChange={(e) => setLabTeacherDeclared(e.target.checked)}
+                style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
+              />
+            </div>
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
               <div className="small text-secondary">
                 <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/5</span> assigned lab items completed.
@@ -4421,7 +4443,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 id="btn-submit-lab-batch-bottom"
                 variant="success"
                 className="px-4 py-2 fw-bold"
-                disabled={submitLoading}
+                disabled={submitLoading || !labTeacherDeclared}
                 onClick={handleLabTeacherSubmit}
               >
                 {submitLoading

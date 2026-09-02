@@ -60,7 +60,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
       'Lab Manuals/Tutorials',
       'Internal Assessment 1',
       'Internal Assessment 2',
-      'Assignment topics, sample assignment, marks statements',
+      'Guidelines / Documents related to Evaluation Criteria',
       'Attendance register (ERP)',
       'University exam',
       'CO Attainment output sheet',
@@ -303,11 +303,33 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           : null,
         subject: subject ? {
           division: subject.division,
+          labTeacherAId: subject.labTeacherAId,
+          labTeacherBId: subject.labTeacherBId,
+          labTeacherCId: subject.labTeacherCId,
           labTeacherA: subject.labTeacherA ? { name: subject.labTeacherA.name, department: subject.labTeacherA.department } : null,
           labTeacherB: subject.labTeacherB ? { name: subject.labTeacherB.name, department: subject.labTeacherB.department } : null,
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] } : { mode: 'OWNER' }
+        access: (() => {
+          const assignedBatches: string[] = [];
+          if (subject) {
+            if (subject.labTeacherAId === payload.userId || (!subject.labTeacherAId && (courseFile.facultyId === payload.userId || subject.courseTeacherId === payload.userId))) {
+              assignedBatches.push('A');
+            }
+            if (subject.labTeacherBId === payload.userId) {
+              assignedBatches.push('B');
+            }
+            if (subject.labTeacherCId === payload.userId) {
+              assignedBatches.push('C');
+            }
+          }
+          if (assignedBatches.length === 0) assignedBatches.push('A');
+          return isSubjectCoordinator
+            ? { mode: 'COURSE_COORDINATOR', assignedBatches }
+            : labBatch
+            ? { mode: 'LAB_BATCH', batch: labBatch, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] }
+            : { mode: 'OWNER', assignedBatches };
+        })()
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
     });
