@@ -1942,6 +1942,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         </button>
 
         <div className="d-flex align-items-center gap-2">
+          <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
+            👁️ Preview Merged Course File
+          </Link>
           <Link href={`/report/${courseFileId}`} className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
             🖨️ View / Print Form
           </Link>
@@ -2003,7 +2006,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         <Card.Body>
           <Row className="g-3">
             <Col xs={12} md={4}>
-              <Form.Label className="small fw-semibold text-secondary mb-1">Faculty Name</Form.Label>
+              <Form.Label className="small fw-semibold text-secondary mb-1">Course Faculty</Form.Label>
               <Form.Control
                 type="text"
                 value={headerEdit.facultyName}
@@ -4424,16 +4427,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   : `⚠️ ${20 - completedCount} item(s) remaining before submission.`}
               </div>
 
-              <Button
-                id="btn-submit-checklist"
-                className="btn-ppsu-accent px-4 py-2"
-                disabled={completedCount < 20 || !facultyConfirmed || submitLoading}
-                onClick={handleSubmit}
-              >
-                {submitLoading
-                  ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
-                  : courseFile.status === 'NEEDS_REVISION' ? 'Resubmit for Review' : 'Submit for Review'}
-              </Button>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <Link
+                  href={`/faculty/course-files/${courseFileId}/preview`}
+                  target="_blank"
+                  className="btn btn-warning px-3 py-2 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                >
+                  👁️ Preview Merged Course File
+                </Link>
+                <Button
+                  id="btn-submit-checklist"
+                  className="btn-ppsu-accent px-4 py-2"
+                  disabled={completedCount < 20 || !facultyConfirmed || submitLoading}
+                  onClick={handleSubmit}
+                >
+                  {submitLoading
+                    ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
+                    : courseFile.status === 'NEEDS_REVISION' ? 'Resubmit for Review' : 'Submit for Review'}
+                </Button>
+              </div>
             </div>
           </Card.Body>
         </Card>

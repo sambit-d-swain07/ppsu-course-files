@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   try {
     const token = req.cookies.get('ppsu_auth_token')?.value;
     const payload = token ? await verifyToken(token) : null;
-    if (!payload || !['COORDINATOR', 'ADMIN'].includes(payload.role)) return noStoreJson({ error: 'Only the evaluator or Admin can download the merged report.' }, { status: 403 });
+    if (!payload || !['FACULTY', 'COORDINATOR', 'ADMIN'].includes(payload.role)) return noStoreJson({ error: 'Unauthorized' }, { status: 403 });
     const { id } = await props.params;
     const courseFile = await getCourseFileById(id);
     if (!courseFile) return noStoreJson({ error: 'Course file not found' }, { status: 404 });

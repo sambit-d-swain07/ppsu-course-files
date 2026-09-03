@@ -107,7 +107,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
           <div className="report-table-scroll"><table className="table table-bordered border-dark text-center align-middle mb-0" style={{ fontSize: '12px' }}>
             <tbody>
               <tr>
-                <td className="bg-light fw-bold text-start" style={{ width: '20%' }}>Faculty Name:</td>
+                <td className="bg-light fw-bold text-start" style={{ width: '20%' }}>Course Faculty:</td>
                 <td className="text-start" style={{ width: '30%' }}>{courseFile.facultyName || courseFile.faculty?.name || 'N/A'}</td>
                 <td className="bg-light fw-bold text-start" style={{ width: '20%' }}>Department:</td>
                 <td className="text-start" style={{ width: '30%' }}>{courseFile.department || courseFile.faculty?.department || 'N/A'}</td>

@@ -289,7 +289,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
         </Card.Header>
         <Card.Body>
           <Row className="g-3 small text-secondary">
-            <Col xs={6} md={4}><span className="fw-bold">Faculty Name:</span><br />{courseFile.facultyName || courseFile.faculty?.name}</Col>
+            <Col xs={6} md={4}><span className="fw-bold">Course Faculty:</span><br />{courseFile.facultyName || courseFile.faculty?.name}</Col>
             <Col xs={6} md={4}><span className="fw-bold">Department:</span><br />{courseFile.department || courseFile.faculty?.department}</Col>
             <Col xs={6} md={4}><span className="fw-bold">School:</span><br />{courseFile.school || 'School of Engineering'}</Col>
             <Col xs={6} md={4}><span className="fw-bold">Semester:</span><br />{courseFile.semester}</Col>

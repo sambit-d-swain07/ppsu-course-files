@@ -116,7 +116,7 @@ async function generateEvaluationReport(courseFileId: string): Promise<string | 
             }),
             new Paragraph({ text: '' }),
             new Paragraph({ text: 'Faculty & Course Details', heading: HeadingLevel.HEADING_2 }),
-            new Paragraph({ children: [new TextRun({ text: `Faculty Name: `, bold: true }), new TextRun(cf.facultyName ?? faculty?.name ?? 'N/A')] }),
+            new Paragraph({ children: [new TextRun({ text: `Course Faculty: `, bold: true }), new TextRun(cf.facultyName ?? faculty?.name ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `Employee ID: `, bold: true }), new TextRun(faculty?.employeeId ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `Department: `, bold: true }), new TextRun(cf.department ?? faculty?.department ?? 'N/A')] }),
             new Paragraph({ children: [new TextRun({ text: `School: `, bold: true }), new TextRun(cf.school ?? faculty?.school ?? 'N/A')] }),

@@ -196,7 +196,7 @@ export default function AdminDashboard() {
                   <thead className="bg-light small text-secondary">
                     <tr>
                       <th className="px-4" style={{ minWidth: 260 }}>Course File</th>
-                      <th style={{ minWidth: 160 }}>Faculty</th>
+                      <th style={{ minWidth: 160 }}>Course Faculty</th>
                       <th style={{ minWidth: 170 }}>Course Coordinator</th>
                       <th style={{ minWidth: 170 }}>Assigned Evaluator</th>
                       <th style={{ minWidth: 130 }}>Status</th>

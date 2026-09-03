@@ -60,7 +60,7 @@ export default function CourseTable({ courseFiles, emptyMessage = "No course fil
           <thead>
             <tr>
               <th>Employee ID</th>
-              <th>Faculty</th>
+              <th>Course Faculty</th>
               <th>Course</th>
               <th>Status</th>
               <th>Last Updated</th>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, Table, Nav, Tab } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
@@ -56,7 +57,8 @@ export default function FacultyCourseCoordinatorPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('shared');
+  const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('faculty');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -516,72 +518,129 @@ export default function FacultyCourseCoordinatorPage() {
         </Card>
       )}
 
-      {/* TAB 2: Faculty Under Me */}
+      {/* TAB 2: Assigned Faculty & Document Access */}
       {activeTab === 'faculty' && (
         <Card className="shadow-sm border-0 mb-4">
-          <Card.Header className="bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+          <Card.Header className="bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
-              <h5 className="fw-bold text-navy-900 mb-0">Assigned Faculty Members</h5>
-              <small className="text-muted">Teachers and Lab Instructors assigned to subject(s) you coordinate.</small>
+              <h5 className="fw-bold text-navy-900 mb-0">Assigned Course & Lab Faculty Members</h5>
+              <small className="text-muted">Faculty and Lab Instructors assigned to subject(s) you coordinate.</small>
             </div>
-            <Badge bg="primary" className="px-3 py-2">
-              {facultyUnderMe.length} Faculty Members
-            </Badge>
+            <div className="d-flex align-items-center gap-2">
+              <Form.Control
+                type="text"
+                size="sm"
+                placeholder="🔍 Search faculty, employee ID, or subject..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '260px' }}
+              />
+              <Badge bg="primary" className="px-3 py-2">
+                {facultyUnderMe.length} Faculty Members
+              </Badge>
+            </div>
           </Card.Header>
           <Card.Body className="p-0">
             {facultyUnderMe.length === 0 ? (
               <div className="p-5 text-center text-muted">
-                No faculty members found for this subject.
+                <div className="fs-2 mb-2">👨‍🏫</div>
+                <h6 className="fw-bold">No Assigned Faculty Found</h6>
+                <p className="small text-secondary mb-0">No teachers or lab instructors are currently assigned under your coordinated subject(s).</p>
               </div>
             ) : (
               <Table hover responsive className="mb-0 align-middle">
                 <thead className="table-light text-muted small text-uppercase">
                   <tr>
-                    <th className="ps-4">Faculty Name</th>
+                    <th className="ps-4">Course Faculty / Lab Faculty</th>
                     <th>Employee ID</th>
                     <th>Department</th>
                     <th>Role on Subject</th>
-                    <th>Subject</th>
-                    <th className="pe-4 text-end">Course File Status</th>
+                    <th>Subject / Course</th>
+                    <th>Course File Status</th>
+                    <th className="pe-4 text-end">Document Access & Review</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {facultyUnderMe.map((fac) => {
-                    const assignments = fac.assignments || [];
-                    return assignments.map((asgn: any, aIdx: number) => (
-                      <tr key={`${fac.id}-${asgn.subjectId}-${aIdx}`}>
-                        {aIdx === 0 && (
-                          <td rowSpan={assignments.length} className="ps-4 fw-bold text-dark">
-                            <div>{fac.name}</div>
-                            <small className="text-muted fw-normal">{fac.designation || 'Faculty'}</small>
+                  {facultyUnderMe.flatMap((fac) => {
+                    const assignments = fac.assignments || (fac.courseFiles ? fac.courseFiles.map((cf: any) => ({
+                      subjectId: cf.id,
+                      subjectCode: cf.courseCode,
+                      subjectName: cf.courseTitle,
+                      semester: cf.semester,
+                      roleOnSubject: 'Course Faculty',
+                      courseFileStatus: cf.status,
+                      courseFileId: cf.id
+                    })) : []);
+
+                    const filteredAssignments = assignments.filter((asgn: any) => {
+                      if (!searchQuery) return true;
+                      const q = searchQuery.toLowerCase();
+                      return fac.name?.toLowerCase().includes(q) ||
+                             fac.employeeId?.toLowerCase().includes(q) ||
+                             asgn.subjectCode?.toLowerCase().includes(q) ||
+                             asgn.subjectName?.toLowerCase().includes(q);
+                    });
+
+                    return filteredAssignments.map((asgn: any, aIdx: number) => {
+                      const isCourseFac = asgn.roleOnSubject === 'Course Teacher' || asgn.roleOnSubject === 'Course Faculty';
+                      const targetFileId = asgn.courseFileId;
+
+                      return (
+                        <tr key={`${fac.id}-${asgn.subjectId || aIdx}-${aIdx}`}>
+                          {aIdx === 0 && (
+                            <td rowSpan={filteredAssignments.length} className="ps-4 fw-bold text-dark">
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="fs-5">👨‍🏫</span>
+                                <div>
+                                  <div className="text-navy-900">{fac.name}</div>
+                                  <small className="text-muted fw-normal">{fac.designation || 'Faculty Member'}</small>
+                                </div>
+                              </div>
+                            </td>
+                          )}
+                          {aIdx === 0 && (
+                            <td rowSpan={filteredAssignments.length} className="font-mono-ppsu text-secondary">
+                              {fac.employeeId || '—'}
+                            </td>
+                          )}
+                          {aIdx === 0 && (
+                            <td rowSpan={filteredAssignments.length} className="text-secondary">
+                              {fac.department || '—'}
+                            </td>
+                          )}
+                          <td>
+                            <Badge
+                              bg={isCourseFac ? 'primary' : 'info'}
+                              text={isCourseFac ? 'white' : 'dark'}
+                              className="px-2.5 py-1.5 fw-semibold"
+                            >
+                              {isCourseFac ? 'Course Faculty' : asgn.roleOnSubject}
+                            </Badge>
                           </td>
-                        )}
-                        {aIdx === 0 && (
-                          <td rowSpan={assignments.length} className="font-mono-ppsu text-secondary">
-                            {fac.employeeId || '—'}
+                          <td>
+                            <span className="fw-bold font-mono-ppsu text-navy-900">{asgn.subjectCode}</span>
+                            <div className="small text-muted">{asgn.subjectName}</div>
                           </td>
-                        )}
-                        {aIdx === 0 && (
-                          <td rowSpan={assignments.length} className="text-secondary">
-                            {fac.department || '—'}
+                          <td>
+                            <span className={`badge px-3 py-1.5 rounded-pill ${statusBadgeClass(asgn.courseFileStatus)}`}>
+                              {statusLabel(asgn.courseFileStatus)}
+                            </span>
                           </td>
-                        )}
-                        <td>
-                          <Badge bg="light" text="dark" className="border fw-semibold">
-                            {asgn.roleOnSubject}
-                          </Badge>
-                        </td>
-                        <td>
-                          <span className="fw-bold font-mono-ppsu">{asgn.subjectCode}</span>
-                          <div className="small text-muted">{asgn.subjectName}</div>
-                        </td>
-                        <td className="pe-4 text-end">
-                          <span className={`badge px-3 py-1.5 rounded-pill ${statusBadgeClass(asgn.courseFileStatus)}`}>
-                            {statusLabel(asgn.courseFileStatus)}
-                          </span>
-                        </td>
-                      </tr>
-                    ));
+                          <td className="pe-4 text-end">
+                            {targetFileId ? (
+                              <Link
+                                href={`/coordinator/review/${targetFileId}`}
+                                className="btn btn-sm btn-primary fw-bold px-3 py-1.5 d-inline-flex align-items-center gap-1 shadow-sm"
+                              >
+                                👁️ View Uploaded Documents
+                              </Link>
+                            ) : (
+                              <span className="small text-muted fst-italic">No Course File Created</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
                   })}
                 </tbody>
               </Table>
