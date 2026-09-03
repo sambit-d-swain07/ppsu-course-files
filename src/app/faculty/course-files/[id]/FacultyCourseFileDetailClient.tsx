@@ -131,6 +131,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [item9CustomLabel, setItem9CustomLabel] = useState('');
   const [item9CustomMax, setItem9CustomMax] = useState<number>(10);
   const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
+  const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
 
   const hashString = (str: string): number => {
     let hash = 0;
@@ -746,7 +747,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     await saveStructuredItem(13, { ...subs, ceGuidelines: updatedGuidelines }, 'UPLOADED');
   };
 
-  const handleGradeChange = async (studentId: string, field: 'theoryGrade' | 'practicalGrade', value: string) => {
+  const handleGradeChange = (studentId: string, field: 'theoryGrade' | 'practicalGrade', value: string) => {
     if (isLocked) return;
     const subs = getSubItems(15) || { questionPaper: null, gradeSheet: null, hasSeparatePracticalGrade: false, students: [] };
     const currentStudents = Array.isArray(subs.students) ? [...subs.students] : [];
@@ -759,7 +760,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     }
 
     subs.students = currentStudents;
-    await saveStructuredItem(15, subs, 'UPLOADED');
+    setChecklist((prev) => prev.map((item) => item.itemIndex === 15 ? { ...item, status: 'UPLOADED', subItemsJson: JSON.stringify(subs) } : item));
+    debouncedSaveStructuredItem(15, subs, 'UPLOADED');
   };
 
 
@@ -1226,6 +1228,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setActionError(''); setActionSuccess('');
     if (!selectedFile) return;
 
+    setUploadingItem(itemIndex);
     try {
       const dataUrl = await readFileAsDataUrl(selectedFile);
       const isSig = itemIndex === 20 && access.mode !== 'LAB_BATCH';
@@ -1250,6 +1253,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         studentListJson = JSON.stringify({ students: rows });
       }
 
+      setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? {
+        ...item,
+        status: 'UPLOADED',
+        fileName: selectedFile.name,
+        fileUrl: dataUrl,
+        ...(studentListJson ? { subItemsJson: studentListJson } : {})
+      } : item));
+
       const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1261,7 +1272,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           ...(studentListJson ? { subItemsJson: studentListJson } : {})
         })
       });
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) {
+        fetchData();
+        throw new Error('Upload failed');
+      }
 
       if (isSig) {
         await fetch(`/api/course-files/${courseFileId}`, {
@@ -1273,9 +1287,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         });
       }
 
-      setActionSuccess(`Item #${itemIndex} (${selectedFile.name}) uploaded.`);
-      fetchData();
-    } catch (err: any) { setActionError(err.message); }
+      setActionSuccess(`Item #${itemIndex} (${selectedFile.name}) uploaded successfully.`);
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
   };
 
   const handleRemove = async (itemIndex: number) => {
@@ -3407,6 +3424,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               </>
                             )}
                           </>
+                        ) : uploadingItem === item.index ? (
+                          <Button variant="secondary" size="sm" disabled style={{ fontSize: 12 }}>
+                            <Spinner animation="border" size="sm" className="me-1" /> Uploading…
+                          </Button>
                         ) : (
                           <label
                             className="btn btn-sm"
