@@ -201,6 +201,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const callerUser = await getUserById(payload.userId);
+    const callerName: string | null = callerUser?.name || faculty?.name || null;
     const subjectSharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
     const schoolSharedDocs = subject?.school ? await getSchoolSharedDocuments(subject.school) : [];
     const mergedChecklist = mergeChecklistItemsInMemory(
@@ -327,7 +329,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             }
           }
           if (assignedBatches.length === 0) assignedBatches.push('A');
-          const callerName = payload.name || (payload.userId === faculty?.id ? faculty.name : null);
           return isSubjectCoordinator
             ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName }
             : labBatch

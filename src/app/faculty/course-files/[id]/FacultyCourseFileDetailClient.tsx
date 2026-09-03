@@ -102,7 +102,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   });
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
-  const [access, setAccess] = useState<{ mode: string; batch?: string; allowedItems?: number[]; editableItems?: number[] }>({ mode: 'OWNER' });
+  const [access, setAccess] = useState<{ mode: string; batch?: string; facultyName?: string; allowedItems?: number[]; editableItems?: number[] }>({ mode: 'OWNER' });
   const saveTimeoutsRef = useRef<Record<number, NodeJS.Timeout>>({});
   const [activeIaItem, setActiveIaItem] = useState<number | null>(null);
   const [addDocName, setAddDocName] = useState('Mark Statement & Result Analysis');
