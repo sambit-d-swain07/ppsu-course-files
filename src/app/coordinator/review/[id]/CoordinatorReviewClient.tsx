@@ -971,6 +971,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
           {(() => {
             const url = viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:') ? viewingDoc.fileUrl : SAMPLE_PDF_DATA_URL;
             const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || (viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:image/'));
+            const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (viewingDoc?.fileUrl && (viewingDoc.fileUrl.includes('data:text/csv') || viewingDoc.fileUrl.includes('data:text/plain') || viewingDoc.fileUrl.includes('data:application/vnd.ms-excel')));
 
             if (isImage) {
               return (
@@ -980,6 +981,94 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                     alt={viewingDoc?.fileName}
                     style={{ maxWidth: '100%', maxHeight: '520px', objectFit: 'contain', borderRadius: '6px' }}
                   />
+                </div>
+              );
+            }
+
+            if (isCsv) {
+              const parseCsvContent = (rawUrl?: string): string[][] => {
+                if (!rawUrl) return [];
+                try {
+                  let text = '';
+                  if (rawUrl.startsWith('data:')) {
+                    const b64Idx = rawUrl.indexOf(';base64,');
+                    if (b64Idx !== -1) {
+                      text = atob(rawUrl.slice(b64Idx + 8));
+                    } else {
+                      const cIdx = rawUrl.indexOf(',');
+                      if (cIdx !== -1) text = decodeURIComponent(rawUrl.slice(cIdx + 1));
+                    }
+                  } else if (rawUrl.includes(',') || rawUrl.includes('\n')) {
+                    text = rawUrl;
+                  }
+
+                  if (text) {
+                    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                    return lines.map(line => {
+                      const row: string[] = [];
+                      let cur = '';
+                      let inQ = false;
+                      for (let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if (char === '"') inQ = !inQ;
+                        else if (char === ',' && !inQ) { row.push(cur.trim()); cur = ''; }
+                        else cur += char;
+                      }
+                      row.push(cur.trim());
+                      return row;
+                    });
+                  }
+                } catch (e) {
+                  console.error('CSV Parse Error:', e);
+                }
+                return [];
+              };
+
+              const parsedRows = parseCsvContent(viewingDoc?.fileUrl);
+
+              return (
+                <div className="bg-white rounded border p-3 shadow-sm" style={{ minHeight: '480px' }}>
+                  <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                    <h6 className="fw-bold text-primary mb-0 d-flex align-items-center gap-2">
+                      <span>📊 CSV Table Data Preview</span>
+                      {parsedRows.length > 0 && <span className="badge bg-primary font-mono-ppsu">{parsedRows.length - 1} Rows</span>}
+                    </h6>
+                    <span className="small text-muted font-mono-ppsu">{viewingDoc?.fileName}</span>
+                  </div>
+
+                  {parsedRows.length > 0 ? (
+                    <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                      <Table bordered hover striped size="sm" className="small align-middle text-center mb-0">
+                        <thead className="bg-light sticky-top">
+                          <tr>
+                            {parsedRows[0].map((headerCol, hIdx) => (
+                              <th key={hIdx} className="bg-light fw-bold text-navy-900 border-bottom border-2">{headerCol}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedRows.slice(1).map((rowItems, rIdx) => (
+                            <tr key={rIdx}>
+                              {rowItems.map((cellVal, cIdx) => (
+                                <td key={cIdx} className={cIdx === 0 ? 'fw-semibold text-start' : 'font-mono-ppsu'}>{cellVal}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-5 text-muted">
+                      <div className="fs-1 mb-2">📄</div>
+                      <p className="fw-semibold mb-1">CSV file data is ready for inspection.</p>
+                      <p className="small text-secondary mb-3 font-mono-ppsu">{viewingDoc?.fileName}</p>
+                      {viewingDoc?.fileUrl && (
+                        <a href={viewingDoc.fileUrl} download={viewingDoc.fileName || 'data.csv'} className="btn btn-primary btn-sm px-3">
+                          ⬇ Download CSV File
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             }
