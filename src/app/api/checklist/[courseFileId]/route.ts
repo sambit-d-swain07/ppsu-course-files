@@ -32,8 +32,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
       return noStoreJson({ error: 'Invalid item index' }, { status: 400 });
     }
 
+    const isOwner = courseFile.facultyId === payload.userId;
+    const isCourseTeacher = subject?.courseTeacherId === payload.userId;
+    const isCourseCoordinator = subject?.courseCoordinatorId === payload.userId;
+    const isLabTeacherRole = Boolean(
+      subject && (
+        subject.labTeacherAId === payload.userId ||
+        subject.labTeacherBId === payload.userId ||
+        subject.labTeacherCId === payload.userId
+      )
+    );
+
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
-    if (!isCoordinator && courseFile.facultyId !== payload.userId && !labBatch) {
+    if (!isCoordinator && !isOwner && !isCourseTeacher && !isCourseCoordinator && !isLabTeacherRole && !labBatch) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
     if (!isCoordinator && !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status)) {
@@ -48,8 +59,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const isSubjectCoordinator = subject?.courseCoordinatorId === payload.userId || payload.role === 'ADMIN';
     const isSharedCoordinatorItem = [1, 3, 6, 7, 10, 11, 12, 15].includes(Number(itemIndex));
     if (isSharedCoordinatorItem && !isSubjectCoordinator) {
-      // Allow faculty to update teacher-specific sub-fields (11c/12c sample answer sheets, 15b/c grade sheet)
-      const isTeacherSubFieldOnly = [11, 12, 15].includes(Number(itemIndex)) && subItemsJson && !fileName && !fileUrl;
+      // Allow faculty to update teacher-specific sub-fields (6d/e/f outcomes, 11c/12c sample answer sheets, 15b/c grade sheet)
+      const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(Number(itemIndex)) && subItemsJson && !fileName && !fileUrl;
       if (!isTeacherSubFieldOnly) {
         return noStoreJson({ error: 'This item is centrally managed by the Course Coordinator.' }, { status: 403 });
       }
