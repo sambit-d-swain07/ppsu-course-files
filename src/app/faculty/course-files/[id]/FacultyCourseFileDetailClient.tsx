@@ -2006,11 +2006,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         <Card.Body>
           <Row className="g-3">
             <Col xs={12} md={4}>
-              <Form.Label className="small fw-semibold text-secondary mb-1">Course Faculty</Form.Label>
+              <Form.Label className="small fw-semibold text-secondary mb-1">
+                {access.mode === 'LAB_BATCH' ? 'Faculty Name' : 'Course Faculty'}
+              </Form.Label>
               <Form.Control
                 type="text"
-                value={headerEdit.facultyName}
-                disabled={isLocked}
+                value={access.mode === 'LAB_BATCH' ? (access.facultyName || headerEdit.facultyName) : headerEdit.facultyName}
+                disabled={isLocked || access.mode === 'LAB_BATCH'}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, facultyName: e.target.value })}
                 className="py-1"
               />
@@ -2065,7 +2067,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 className="py-1"
               />
             </Col>
-            <Col xs={12} md={4}>
+            <Col xs={12} md={access.mode === 'LAB_BATCH' ? 2 : 4}>
               <Form.Label className="small fw-semibold text-secondary mb-1">
                 Division
                 <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(from subject allocation)</span>
@@ -2080,6 +2082,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 title="Division is set by Admin in Subject Allocation"
               />
             </Col>
+            {access.mode === 'LAB_BATCH' && (
+              <Col xs={12} md={2}>
+                <Form.Label className="small fw-semibold text-secondary mb-1">
+                  Batch
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  value={access.batch || 'B'}
+                  readOnly
+                  disabled
+                  className="py-1 font-mono-ppsu fw-bold text-success bg-success-subtle border-success-subtle"
+                />
+              </Col>
+            )}
           </Row>
 
           <div className="mt-4">
@@ -4458,9 +4474,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             <h5 className="fw-bold text-success mb-0">Batch {access.batch} Lab Teacher Submission Gate</h5>
           </Card.Header>
           <Card.Body>
-            <p className="text-secondary small mb-3">
-              Submit your Batch {access.batch} lab data (Items 2, 8, 9, 14). Item 4 is view-only and automatically filtered from the Course Teacher's combined list.
-            </p>
             <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
               <Form.Check
                 type="checkbox"

@@ -568,21 +568,27 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                                                           p > 90;
                             }).length
                           );
-                          const miniChart = (labels: string[], counts: number[]) => (
-                            <div className="d-flex align-items-end gap-1 mt-2" style={{ height: 72 }}>
-                              {labels.map((label, i) => (
-                                <div key={label} className="text-center flex-fill">
-                                  <div
-                                    className="bg-primary mx-auto"
-                                    style={{ height: `${Math.max(4, counts[i] * 14)}px`, width: '70%' }}
-                                    title={`${counts[i]} students`}
-                                  />
-                                  <div style={{ fontSize: 8, lineHeight: 1.2, marginTop: 2 }}>{label}</div>
-                                  <div className="fw-bold font-mono-ppsu" style={{ fontSize: 9 }}>{counts[i]}</div>
-                                </div>
-                              ))}
-                            </div>
-                          );
+                          const miniChart = (labels: string[], counts: number[]) => {
+                            const maxC = Math.max(...counts, 1);
+                            return (
+                              <div className="d-flex align-items-end justify-content-between gap-1 mt-2 p-2 border bg-light rounded" style={{ height: 95, overflow: 'hidden' }}>
+                                {labels.map((label, i) => {
+                                  const heightPct = counts[i] > 0 ? Math.max(12, Math.round((counts[i] / maxC) * 100)) : 4;
+                                  return (
+                                    <div key={label} className="text-center flex-fill d-flex flex-column justify-content-end align-items-center h-100">
+                                      <div className="text-primary fw-bold font-mono-ppsu" style={{ fontSize: 9 }}>{counts[i]}</div>
+                                      <div
+                                        className="bg-primary rounded-top w-100"
+                                        style={{ height: `${heightPct}%`, minHeight: '4px', maxHeight: '55px', transition: 'height 0.3s ease' }}
+                                        title={`${label}: ${counts[i]} students`}
+                                      />
+                                      <div className="text-secondary text-truncate w-100 mt-1" style={{ fontSize: 8, lineHeight: 1.1 }}>{label}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          };
 
                           return (
                             <div className="mt-2 small text-secondary">

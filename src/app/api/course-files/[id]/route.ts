@@ -189,10 +189,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       )
     );
 
-    // Coordinator assignment guard
+    // Coordinator assignment guard & DRAFT submission gate
     if (payload.role === 'COORDINATOR') {
       if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
         return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
+      }
+      if (['DRAFT', 'NOT_SUBMITTED'].includes(courseFile.status) && !isOwner && !isCourseTeacher) {
+        return noStoreJson({ error: 'This course file is still in draft mode and has not been submitted by the Course Faculty for review yet.' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && !isOwner && !isCourseTeacher && !isSubjectCoordinator && !isLabTeacher) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
@@ -324,11 +327,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             }
           }
           if (assignedBatches.length === 0) assignedBatches.push('A');
+          const callerName = payload.name || (payload.userId === faculty?.id ? faculty.name : null);
           return isSubjectCoordinator
-            ? { mode: 'COURSE_COORDINATOR', assignedBatches }
+            ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName }
             : labBatch
-            ? { mode: 'LAB_BATCH', batch: labBatch, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] }
-            : { mode: 'OWNER', assignedBatches };
+            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] }
+            : { mode: 'OWNER', assignedBatches, facultyName: callerName };
         })()
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)

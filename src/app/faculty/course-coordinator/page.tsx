@@ -627,7 +627,7 @@ export default function FacultyCourseCoordinatorPage() {
                             </span>
                           </td>
                           <td className="pe-4 text-end">
-                            {targetFileId ? (
+                            {targetFileId && !['DRAFT', 'NOT_SUBMITTED'].includes(asgn.courseFileStatus) ? (
                               <Link
                                 href={`/coordinator/review/${targetFileId}`}
                                 className="btn btn-sm btn-primary fw-bold px-3 py-1.5 d-inline-flex align-items-center gap-1 shadow-sm"
@@ -635,7 +635,9 @@ export default function FacultyCourseCoordinatorPage() {
                                 👁️ View Uploaded Documents
                               </Link>
                             ) : (
-                              <span className="small text-muted fst-italic">No Course File Created</span>
+                              <span className="badge bg-secondary-subtle text-secondary border px-3 py-1.5" style={{ fontSize: 11 }}>
+                                🔒 Pending Faculty Submission
+                              </span>
                             )}
                           </td>
                         </tr>

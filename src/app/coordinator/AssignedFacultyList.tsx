@@ -112,22 +112,28 @@ export default function AssignedFacultyList({ faculty }: { faculty: any[] }) {
                           <span className={`badge-custom ${statusBadge(file.status)}`} style={{ fontSize: 10 }}>
                             {file.status === 'SUBMITTED' || file.status === 'UNDER_REVIEW' ? 'Pending' : file.status}
                           </span>
-                          <Link
-                            href={`/coordinator/review/${file.id}`}
-                            prefetch={false}
-                            className="btn btn-sm py-0.5 px-2 fw-semibold"
-                            style={{
-                              background: 'var(--ppsu-accent)',
-                              color: '#fff',
-                              fontSize: 11,
-                              borderRadius: 5,
-                              border: 'none',
-                              textDecoration: 'none',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            Review →
-                          </Link>
+                          {['DRAFT', 'NOT_SUBMITTED'].includes(file.status) ? (
+                            <span className="badge bg-secondary-subtle text-secondary border px-2 py-1" style={{ fontSize: 10 }}>
+                              🔒 Not Submitted
+                            </span>
+                          ) : (
+                            <Link
+                              href={`/coordinator/review/${file.id}`}
+                              prefetch={false}
+                              className="btn btn-sm py-0.5 px-2 fw-semibold"
+                              style={{
+                                background: 'var(--ppsu-accent)',
+                                color: '#fff',
+                                fontSize: 11,
+                                borderRadius: 5,
+                                border: 'none',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Review →
+                            </Link>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -89,9 +89,15 @@ export default function CourseTable({ courseFiles, emptyMessage = "No course fil
                 </td>
                 <td className="text-secondary small">{formatDate(cf.lastUpdated)}</td>
                 <td className="text-center">
-                  <Link href={`/coordinator/review/${cf.id}`} className="btn btn-sm btn-ppsu-navy py-1.5 px-3">
-                    Open Review
-                  </Link>
+                  {['DRAFT', 'NOT_SUBMITTED'].includes(cf.status) ? (
+                    <span className="badge bg-secondary-subtle text-secondary border px-3 py-1.5" style={{ fontSize: 11 }}>
+                      🔒 Pending Faculty Submission
+                    </span>
+                  ) : (
+                    <Link href={`/coordinator/review/${cf.id}`} className="btn btn-sm btn-ppsu-navy py-1.5 px-3">
+                      Open Review
+                    </Link>
+                  )}
                 </td>
               </tr>
             ))}
