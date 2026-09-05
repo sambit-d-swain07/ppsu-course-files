@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
-import { Spinner, Alert, Button, Table, Badge, Card } from 'react-bootstrap';
-import Link from 'next/link';
+import { Spinner, Alert, Button } from 'react-bootstrap';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO' },
@@ -27,414 +26,280 @@ const CHECKLIST_ITEMS = [
   { index: 20, name: 'Course Faculty Signature' }
 ];
 
+const TH: React.CSSProperties = { border: '1px solid #000', padding: '6px 10px', background: '#f5f5f5', fontWeight: 'bold', textAlign: 'center', fontSize: '12px' };
+const TD: React.CSSProperties = { border: '1px solid #000', padding: '5px 10px', verticalAlign: 'middle', fontSize: '12px' };
+const TDC: React.CSSProperties = { ...TD, textAlign: 'center' };
+const TBLSTYLE: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' };
+const PAGE: React.CSSProperties = { padding: '60px 70px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: 'Arial, sans-serif', color: '#000', background: '#fff' };
+
+function PageHeader({ cf }: { cf: any }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '22px' }}>
+      <img src="/PPSUNAACA+Logo.png" alt="PPSU" style={{ height: '58px', objectFit: 'contain' }} />
+      <div>
+        <div style={{ fontWeight: 'bold', fontSize: '15px' }}>P P SAVANI UNIVERSITY</div>
+        <div style={{ fontSize: '12px', color: '#555' }}>{cf.school || cf.faculty?.school || 'School of Engineering'}</div>
+        <div style={{ fontSize: '12px' }}>Dept. of {cf.department || cf.faculty?.department || 'Computer Engineering'}</div>
+      </div>
+    </div>
+  );
+}
+
+function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string; height?: string }) {
+  if (name?.match(/\.(png|jpg|jpeg|gif|webp)$/i))
+    return <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: height, objectFit: 'contain', display: 'block', margin: '0 auto' }} />;
+  return <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none' }} />;
+}
+
+function Pending({ name }: { name: string }) {
+  return (
+    <div style={{ padding: '60px 20px', textAlign: 'center', border: '1px dashed #bbb', borderRadius: '6px', color: '#999' }}>
+      <div style={{ fontSize: '32px', marginBottom: '8px' }}>—</div>
+      <div style={{ fontWeight: 'bold' }}>Document not yet uploaded</div>
+      <div style={{ fontSize: '11px', marginTop: '4px' }}>{name}</div>
+    </div>
+  );
+}
+
 export default function MergedCourseFilePreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseFileId } = use(params);
-
-  const [courseFile, setCourseFile] = useState<any>(null);
+  const [cf, setCf] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`/api/course-files/${courseFileId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load course file details');
-        return res.json();
-      })
-      .then((data) => {
-        setCourseFile(data.courseFile);
-        setChecklist(data.checklistItems || []);
-      })
-      .catch((err) => setError(err.message))
+      .then((r) => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
+      .then((d) => { setCf(d.courseFile); setChecklist(d.checklistItems || []); })
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [courseFileId]);
 
-  if (loading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center flex-column py-5" style={{ minHeight: '60vh' }}>
-        <Spinner animation="border" variant="primary" className="mb-3" />
-        <h6 className="fw-bold text-navy-900">Assembling Merged Course File Preview…</h6>
-        <small className="text-muted">Parsing 20 checklist particulars and uploaded documents</small>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="d-flex justify-content-center align-items-center flex-column py-5" style={{ minHeight: '60vh' }}>
+      <Spinner animation="border" variant="primary" className="mb-3" />
+      <h6 className="fw-bold">Assembling Merged Course File Preview…</h6>
+    </div>
+  );
+  if (error || !cf) return <Alert variant="danger" className="m-4">{error || 'Not found'}</Alert>;
 
-  if (error || !courseFile) {
-    return <Alert variant="danger" className="m-4">{error || 'Course file not found'}</Alert>;
-  }
-
-  const parseSubItems = (itemIndex: number) => {
-    const item = checklist.find((c) => c.itemIndex === itemIndex);
-    if (!item?.subItemsJson) return null;
-    try {
-      return JSON.parse(item.subItemsJson);
-    } catch (e) {
-      return null;
-    }
+  const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
+  const subs = (idx: number): any => {
+    const it = dbi(idx);
+    if (!it?.subItemsJson) return null;
+    try { return JSON.parse(it.subItemsJson); } catch { return null; }
   };
 
-  const getItemByIdx = (index: number) => checklist.find((c) => c.itemIndex === index);
+  const dept   = cf.department || cf.faculty?.department || 'Computer Engineering';
+  const school = cf.school || cf.faculty?.school || 'School of Engineering';
+  const faculty = cf.facultyName || cf.faculty?.name || '';
+  const code   = cf.courseCode || '';
+  const title  = cf.courseTitle || '';
 
   return (
     <div style={{ background: '#525659', minHeight: '100vh', paddingBottom: '40px' }}>
-      {/* Top Floating Control Bar (Hidden in Print) */}
-      <div className="no-print sticky-top bg-dark text-white p-3 shadow border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2" style={{ zIndex: 1050 }}>
+      <div className="no-print sticky-top bg-dark text-white p-3 shadow d-flex justify-content-between align-items-center flex-wrap gap-2" style={{ zIndex: 1050 }}>
         <div>
-          <h6 className="fw-bold mb-0 text-white d-flex align-items-center gap-2">
-            <span>📄 Merged Course File Preview</span>
-            <span className="badge bg-gold text-dark font-mono-ppsu">PRE-SUBMISSION VERIFICATION</span>
-          </h6>
-          <small className="text-white-50">
-            Course: <strong className="text-white">{courseFile.courseCode} — {courseFile.courseTitle}</strong> · Course Faculty: <strong className="text-white">{courseFile.facultyName || courseFile.faculty?.name}</strong>
-          </small>
+          <h6 className="fw-bold mb-0 text-white">Merged Course File Preview</h6>
+          <small className="text-white-50">{code} — {title} · {faculty}</small>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>
-            ← Back to Checklist
-          </Button>
-          <a
-            href={`/api/course-files/${courseFileId}/merged-report`}
-            download={`merged-course-file-${courseFile.courseCode}.docx`}
-            className="btn btn-outline-success btn-sm font-mono-ppsu"
-          >
-            ⬇ Download DOCX
-          </a>
-          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={() => window.print()}>
-            🖨️ Print / Save PDF
-          </Button>
+          <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
+          <a href={`/api/course-files/${courseFileId}/merged-report`} download={`merged-course-file-${code}.docx`} className="btn btn-outline-success btn-sm">Download DOCX</a>
+          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={() => window.print()}>Print / Save PDF</Button>
         </div>
       </div>
 
-      {/* Main Print & View Document Container */}
-      <div className="mx-auto my-4 bg-white shadow-lg rounded" style={{ maxWidth: '920px', minHeight: '1100px', color: '#000', fontFamily: 'Arial, sans-serif' }}>
-        
-        {/* ==================== PAGE 1: COVER PAGE ==================== */}
-        <div className="p-5 d-flex flex-column justify-content-between text-center page-break border-bottom" style={{ minHeight: '1050px', position: 'relative' }}>
-          <div>
-            <div className="d-flex justify-content-center mb-4">
-              <img src="/PPSUNAACA+Logo.png" alt="P P Savani University Logo" style={{ height: '90px', objectFit: 'contain' }} />
-            </div>
+      <div className="mx-auto my-4 shadow-lg" style={{ maxWidth: '920px' }}>
 
-            <h1 className="fw-bold mb-1" style={{ fontSize: '32px', letterSpacing: '1px', color: '#1B2A6B' }}>
-              P P SAVANI UNIVERSITY
-            </h1>
-            <h5 className="fw-semibold text-secondary mb-2" style={{ letterSpacing: '0.5px' }}>
-              ({courseFile.school || courseFile.faculty?.school || 'School of Engineering'})
-            </h5>
-            <div className="d-inline-block border border-dark rounded px-3 py-1 mb-4 font-mono-ppsu small fw-bold">
-              NAAC A+ GRADE ACCREDITED UNIVERSITY
-            </div>
-
-            <hr className="my-4 border-2 border-dark mx-auto" style={{ width: '80%' }} />
-
-            <div className="my-5 py-3">
-              <h5 className="fw-bold text-uppercase text-muted mb-2">Department of</h5>
-              <h3 className="fw-bold text-navy-900 mb-4">{courseFile.department || courseFile.faculty?.department || 'COMPUTER ENGINEERING'}</h3>
-
-              <div className="bg-light border border-dark rounded p-4 mx-auto text-start" style={{ maxWidth: '650px' }}>
-                <div className="row g-3 fs-6">
-                  <div className="col-12 border-bottom pb-2">
-                    <strong className="text-secondary">Course Faculty:</strong>{' '}
-                    <span className="fw-bold text-navy-900 fs-5 ms-2">{courseFile.facultyName || courseFile.faculty?.name}</span>
-                  </div>
-                  <div className="col-12 border-bottom pb-2">
-                    <strong className="text-secondary">Subject:</strong>{' '}
-                    <span className="fw-bold font-mono-ppsu text-primary ms-2">{courseFile.courseCode}</span> — <span className="fw-bold">{courseFile.courseTitle}</span>
-                  </div>
-                  <div className="col-6">
-                    <strong className="text-secondary">Semester:</strong> <span className="fw-semibold ms-1">{courseFile.semester}</span>
-                  </div>
-                  <div className="col-6">
-                    <strong className="text-secondary">Division:</strong> <span className="fw-semibold ms-1">{courseFile.division || courseFile.subject?.division || 'N/A'}</span>
-                  </div>
-                  <div className="col-12 pt-2 border-top">
-                    <strong className="text-secondary">Academic Year:</strong> <span className="fw-semibold ms-1">{courseFile.academicYear || '2025-26'}</span>
-                  </div>
-                </div>
+        {/* PAGE 1: COVER PAGE */}
+        <div style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1100px' }}>
+          <img src="/PPSUNAACA+Logo.png" alt="PPSU" style={{ height: '100px', objectFit: 'contain', marginBottom: '20px' }} />
+          <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '1px', marginBottom: '4px' }}>P P SAVANI UNIVERSITY</div>
+          <div style={{ fontSize: '14px', marginBottom: '8px' }}>({school})</div>
+          <div style={{ fontSize: '11px', border: '1px solid #000', padding: '2px 12px', display: 'inline-block', marginBottom: '36px' }}>NAAC A+ GRADE ACCREDITED UNIVERSITY</div>
+          <div style={{ borderTop: '2px solid #000', width: '70%', marginBottom: '36px' }} />
+          <div style={{ fontSize: '13px', marginBottom: '6px', textTransform: 'uppercase', color: '#555' }}>Department of</div>
+          <div style={{ fontWeight: 'bold', fontSize: '18px', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '52px' }}>{dept}</div>
+          <div style={{ textAlign: 'left', width: '65%' }}>
+            {([['Faculty Name', faculty], ['Subject', `${code} — ${title}`], ['Semester', cf.semester || '—'], ['Division', cf.division || cf.subject?.division || '—'], ['Academic Year', cf.academicYear || '2025-26']] as [string, string][]).map(([label, val]) => (
+              <div key={label} style={{ marginBottom: '14px', fontSize: '14px' }}>
+                <span style={{ fontWeight: 'bold' }}>{label}:</span>{' '}<span>{val}</span>
               </div>
-            </div>
+            ))}
           </div>
-
-          <div className="py-4">
-            <h2 className="fw-bold text-uppercase" style={{ letterSpacing: '2px', color: '#1B2A6B' }}>
-              (COURSE FILE)
-            </h2>
-            <div className="small text-muted font-mono-ppsu mt-2">
-              Generated via PPSU Official Course Files Portal
-            </div>
-          </div>
+          <div style={{ borderTop: '2px solid #000', width: '70%', marginTop: '44px', marginBottom: '24px' }} />
+          <div style={{ fontWeight: 'bold', fontSize: '20px', letterSpacing: '2px', textTransform: 'uppercase' }}>(COURSE FILE)</div>
         </div>
 
-        {/* ==================== PAGE 2: TABLE OF CONTENTS ==================== */}
-        <div className="p-5 page-break border-bottom" style={{ minHeight: '1050px' }}>
-          <div className="text-center mb-4 pb-2 border-bottom border-2 border-dark">
-            <h3 className="fw-bold text-navy-900 mb-1">TABLE OF CONTENTS</h3>
-            <small className="text-muted font-mono-ppsu">Checklist Index of Particulars (Items 1 to 20)</small>
+        {/* PAGE 2: TABLE OF CONTENTS — plain 2-column, no Status */}
+        <div style={{ ...PAGE }}>
+          <PageHeader cf={cf} />
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '16px', textDecoration: 'underline', textTransform: 'uppercase', letterSpacing: '1px' }}>Table of Contents</div>
           </div>
-
-          <Table bordered hover striped className="align-middle border-dark mb-0">
-            <thead className="bg-light text-center border-dark">
+          <table style={TBLSTYLE}>
+            <thead>
               <tr>
-                <th style={{ width: '12%', fontSize: '14px' }} className="fw-bold border-dark">Sr. No.</th>
-                <th style={{ fontSize: '14px' }} className="text-start fw-bold border-dark">Particulars / Content Title</th>
-                <th style={{ width: '22%', fontSize: '14px' }} className="text-center fw-bold border-dark">Status</th>
+                <th style={{ ...TH, width: '80px' }}>Sr. No.</th>
+                <th style={{ ...TH, textAlign: 'left' }}>Content</th>
               </tr>
             </thead>
             <tbody>
-              {CHECKLIST_ITEMS.map((item) => {
-                const dbItem = getItemByIdx(item.index);
-                const isUploaded = dbItem?.status === 'UPLOADED' || dbItem?.status === 'APPROVED' || dbItem?.fileName || dbItem?.subItemsJson;
-                return (
-                  <tr key={item.index}>
-                    <td className="text-center fw-bold font-mono-ppsu border-dark">{item.index}</td>
-                    <td className="fw-semibold border-dark" style={{ fontSize: '13px' }}>{item.name}</td>
-                    <td className="text-center border-dark">
-                      {isUploaded ? (
-                        <span className="badge bg-success px-2 py-1">✓ Uploaded</span>
-                      ) : (
-                        <span className="badge bg-warning text-dark px-2 py-1">⏳ Pending</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {CHECKLIST_ITEMS.map((item) => (
+                <tr key={item.index}>
+                  <td style={TDC}>{item.index}</td>
+                  <td style={TD}>{item.name}</td>
+                </tr>
+              ))}
             </tbody>
-          </Table>
+          </table>
         </div>
 
-        {/* ==================== PAGES 3+: CHECKLIST ITEMS (1 to 20) ==================== */}
+        {/* PAGES 3+: ONE PER CHECKLIST ITEM */}
         {CHECKLIST_ITEMS.map((item) => {
-          const dbItem = getItemByIdx(item.index);
-          const subs = parseSubItems(item.index);
-          const fileUrl = dbItem?.fileUrl;
-          const fileName = dbItem?.fileName;
+          const db = dbi(item.index);
+          const sb = subs(item.index);
+          const url = db?.fileUrl;
+          const fn  = db?.fileName;
+          let content: React.ReactNode;
 
-          return (
-            <div key={item.index} className="page-break border-bottom">
-              {/* Divider Page */}
-              <div className="p-5 d-flex flex-column justify-content-center align-items-center text-center bg-light border-bottom" style={{ minHeight: '350px' }}>
-                <Badge bg="primary" className="mb-3 px-3 py-2 fs-6 font-mono-ppsu">
-                  ITEM #{item.index}
-                </Badge>
-                <h2 className="fw-bold text-navy-900 text-uppercase max-w-75 mb-2" style={{ letterSpacing: '0.5px' }}>
-                  {item.name}
-                </h2>
-                {fileName && (
-                  <div className="small text-muted font-mono-ppsu border bg-white rounded px-3 py-1.5 shadow-sm mt-2">
-                    📁 Attached Document: <strong>{fileName}</strong>
-                  </div>
-                )}
-              </div>
-
-              {/* Item Content Section */}
-              <div className="p-4" style={{ minHeight: '650px' }}>
-                {/* 1. Item 1 Sub-uploads */}
-                {item.index === 1 && (
-                  <div>
-                    {['vision', 'mission', 'peo', 'pso', 'po'].map((subKey) => {
-                      const subData = subs?.[subKey];
-                      return (
-                        <Card key={subKey} className="mb-3 border">
-                          <Card.Header className="bg-light fw-bold text-uppercase py-2 small">
-                            {subKey.toUpperCase()} Upload
-                          </Card.Header>
-                          <Card.Body className="p-3">
-                            {subData?.fileUrl ? (
-                              subData.fileName?.match(/\.(png|jpg|jpeg|gif)$/i) ? (
-                                <img src={subData.fileUrl} alt={subKey} style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain' }} />
-                              ) : (
-                                <iframe src={subData.fileUrl} title={subKey} width="100%" height="450px" style={{ border: 'none' }} />
-                              )
-                            ) : (
-                              <div className="text-muted small text-center py-3">No file uploaded for {subKey.toUpperCase()} yet.</div>
-                            )}
-                          </Card.Body>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* 2. Item 4 Student List Table */}
-                {item.index === 4 && (
-                  <div>
-                    {subs?.students?.length > 0 ? (
-                      <Table bordered hover striped size="sm" className="align-middle text-center small">
-                        <thead className="bg-light">
-                          <tr>
-                            <th>Sr No</th>
-                            <th>Student Name</th>
-                            <th>Enrolment Number</th>
-                            <th>Batch</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {subs.students.map((st: any, idx: number) => (
-                            <tr key={idx}>
-                              <td>{idx + 1}</td>
-                              <td className="fw-semibold text-start">{st.name || st.studentName}</td>
-                              <td className="font-mono-ppsu">{st.enrolmentNumber || st.rollNo}</td>
-                              <td><span className="badge bg-secondary">{st.batch || 'A'}</span></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : fileUrl ? (
-                      <iframe src={fileUrl} title="Student List" width="100%" height="600px" style={{ border: 'none' }} />
-                    ) : (
-                      <Alert variant="warning" className="text-center">Student Name List not uploaded yet.</Alert>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. Items 8 & 9 Rubrics */}
-                {(item.index === 8 || item.index === 9) && (
-                  <div>
-                    {subs?.students?.length > 0 ? (
-                      <Table bordered hover striped size="sm" className="align-middle text-center small">
-                        <thead className="bg-light">
-                          <tr>
-                            <th>Sr No</th>
-                            <th>Enrolment No</th>
-                            <th>Student Name</th>
-                            <th>Marks / Evaluation Data</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {subs.students.map((st: any, idx: number) => (
-                            <tr key={idx}>
-                              <td>{idx + 1}</td>
-                              <td className="font-mono-ppsu">{st.enrolmentNumber || st.rollNo || st.studentId}</td>
-                              <td className="fw-semibold text-start">{st.name || st.studentName}</td>
-                              <td className="font-mono-ppsu">{JSON.stringify(st.marks || st)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : fileUrl ? (
-                      <iframe src={fileUrl} title={item.name} width="100%" height="600px" style={{ border: 'none' }} />
-                    ) : (
-                      <Alert variant="warning" className="text-center">Rubrics data not uploaded yet.</Alert>
-                    )}
-                  </div>
-                )}
-
-                {/* 4. Item 15 University Exam Grade Sheet */}
-                {item.index === 15 && (
-                  <div>
-                    {subs?.students?.length > 0 ? (
-                      <Table bordered hover striped size="sm" className="align-middle text-center small">
-                        <thead className="bg-light">
-                          <tr>
-                            <th>Sr No</th>
-                            <th>Enrolment No</th>
-                            <th>Theory Grade</th>
-                            <th>Practical Grade</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {subs.students.map((st: any, idx: number) => (
-                            <tr key={idx}>
-                              <td>{idx + 1}</td>
-                              <td className="font-mono-ppsu">{st.studentId || st.enrolmentNumber}</td>
-                              <td className="fw-bold text-primary">{st.theoryGrade || '—'}</td>
-                              <td className="fw-bold text-success">{st.practicalGrade || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : fileUrl ? (
-                      <iframe src={fileUrl} title="University Exam" width="100%" height="600px" style={{ border: 'none' }} />
-                    ) : (
-                      <Alert variant="warning" className="text-center">University Exam data not uploaded yet.</Alert>
-                    )}
-                  </div>
-                )}
-
-                {/* 5. Item 20 Signature */}
-                {item.index === 20 && (
-                  <div className="text-center py-4 border rounded bg-light">
-                    <h6 className="fw-bold text-navy-900 mb-3">Course Faculty Signature Scan</h6>
-                    {fileUrl || courseFile.facultySignatureUrl ? (
-                      <img
-                        src={fileUrl || courseFile.facultySignatureUrl}
-                        alt="Faculty Signature"
-                        style={{ maxHeight: '180px', maxWidth: '350px', objectFit: 'contain' }}
-                        className="border bg-white rounded p-2 shadow-sm"
-                      />
-                    ) : (
-                      <div className="text-muted small">✍️ Verified Course Faculty Signature</div>
-                    )}
-                    <div className="small text-muted font-mono-ppsu mt-2">
-                      Signed By: {courseFile.facultySignatureName || courseFile.facultyName || courseFile.faculty?.name}
-                    </div>
-                  </div>
-                )}
-
-                {/* Item 19: Lecture Notes Multi-document rendering */}
-                {item.index === 19 && (() => {
-                  let docs: any[] = [];
-                  if (dbItem?.subItemsJson) {
-                    try {
-                      const parsed = JSON.parse(dbItem.subItemsJson);
-                      if (Array.isArray(parsed.documents)) docs = parsed.documents;
-                    } catch (e) {}
-                  }
-                  if (docs.length === 0 && fileUrl) {
-                    docs = [{ id: 'doc-legacy', name: 'Lecture Notes', fileName, fileUrl }];
-                  }
-
-                  if (docs.length === 0) {
-                    return (
-                      <div className="p-5 text-center text-muted border rounded bg-light">
-                        <div className="fs-1 mb-2">⏳</div>
-                        <h6 className="fw-semibold mb-1">Document Not Uploaded Yet</h6>
-                        <p className="small text-secondary mb-0">This checklist item has not been uploaded by the faculty yet.</p>
-                      </div>
-                    );
-                  }
-
+          if (item.index === 1) {
+            content = (
+              <div>
+                {(['vision', 'mission', 'peo', 'pso', 'po'] as const).map((key) => {
+                  const sub = sb?.[key];
                   return (
-                    <div className="d-flex flex-column gap-4">
-                      {docs.map((doc: any) => (
-                        <div key={doc.id} className="border rounded p-3 bg-white">
-                          <h6 className="fw-bold text-navy-900 mb-2">📄 {doc.name} ({doc.fileName})</h6>
-                          {doc.fileUrl?.match(/\.(png|jpg|jpeg|gif)$/i) ? (
-                            <img src={doc.fileUrl} alt={doc.fileName} style={{ maxWidth: '100%', maxHeight: '650px', objectFit: 'contain' }} />
-                          ) : (
-                            <iframe src={doc.fileUrl} title={doc.name} width="100%" height="650px" style={{ border: 'none' }} />
-                          )}
-                        </div>
-                      ))}
+                    <div key={key} style={{ marginBottom: '32px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{key.toUpperCase()}</div>
+                      {sub?.fileUrl ? <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" /> : <Pending name={key.toUpperCase()} />}
                     </div>
                   );
-                })()}
-
-                {/* General File Fallback for other items */}
-                {![1, 4, 8, 9, 15, 19, 20].includes(item.index) && (
-                  <div>
-                    {fileUrl ? (
-                      fileName?.match(/\.(png|jpg|jpeg|gif)$/i) ? (
-                        <div className="text-center p-3">
-                          <img src={fileUrl} alt={fileName} style={{ maxWidth: '100%', maxHeight: '650px', objectFit: 'contain' }} />
-                        </div>
-                      ) : (
-                        <iframe src={fileUrl} title={item.name} width="100%" height="650px" style={{ border: 'none' }} />
-                      )
-                    ) : (
-                      <div className="p-5 text-center text-muted border rounded bg-light">
-                        <div className="fs-1 mb-2">⏳</div>
-                        <h6 className="fw-semibold mb-1">Document Not Uploaded Yet</h6>
-                        <p className="small text-secondary mb-0">This checklist item has not been uploaded by the faculty yet.</p>
+                })}
+              </div>
+            );
+          } else if (item.index === 4) {
+            const students = sb?.students;
+            if (students?.length > 0) {
+              content = (
+                <table style={TBLSTYLE}>
+                  <thead><tr><th style={{ ...TH, width: '50px' }}>Sr No</th><th style={TH}>Student Name</th><th style={TH}>Enrolment Number</th><th style={{ ...TH, width: '80px' }}>Batch</th></tr></thead>
+                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.enrolmentNumber || st.rollNo || '—'}</td><td style={TDC}>{st.batch || 'A'}</td></tr>))}</tbody>
+                </table>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 8) {
+            const batches = sb?.batches;
+            if (batches?.length > 0) {
+              content = (
+                <div>
+                  {batches.map((batch: any) => {
+                    const students = batch.students || [];
+                    return (
+                      <div key={batch.id} style={{ marginBottom: '36px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '12px' }}>{batch.name || batch.id}</div>
+                        {batch.fileUrl ? <FileEmbed url={batch.fileUrl} name={batch.fileName} /> : students.length > 0 ? (
+                          <table style={TBLSTYLE}>
+                            <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th><th style={TH}>P.Key</th><th style={TH}>Term Work</th><th style={TH}>Int Viva</th><th style={TH}>ESE Perf</th><th style={TH}>ESE Ext Viva</th><th style={TH}>Total</th></tr></thead>
+                            <tbody>
+                              {students.map((st: any, i: number) => {
+                                const m = st.marks || st;
+                                return (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{m.pKey ?? '—'}</td><td style={TDC}>{m.termWork ?? m.tw ?? '—'}</td><td style={TDC}>{m.internalViva ?? m.iv ?? '—'}</td><td style={TDC}>{m.esePerformance ?? '—'}</td><td style={TDC}>{m.eseExternalViva ?? '—'}</td><td style={{ ...TDC, fontWeight: 'bold' }}>{m.total ?? '—'}</td></tr>);
+                              })}
+                            </tbody>
+                          </table>
+                        ) : <Pending name={`${batch.name} Rubrics`} />}
                       </div>
-                    )}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 9) {
+            const sheets = sb?.sheets;
+            if (sheets?.length > 0) {
+              content = (
+                <div>
+                  {sheets.map((sheet: any, si: number) => {
+                    const students = sheet.students || [];
+                    const criteria = sheet.criteria || [];
+                    return (
+                      <div key={si} style={{ marginBottom: '36px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '12px' }}>Experiment {si + 1}{sheet.name ? `: ${sheet.name}` : ''}</div>
+                        <table style={TBLSTYLE}>
+                          <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}<th style={TH}>Total</th></tr></thead>
+                          <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{criteria.map((cr: any) => <td key={cr.id} style={TDC}>{st.marks?.[cr.id] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 11 || item.index === 12) {
+            const students = sb?.students;
+            if (students?.length > 0) {
+              const qKeys = Object.keys(students[0]).filter((k) => /^q\d+$/i.test(k));
+              content = (
+                <table style={TBLSTYLE}>
+                  <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{qKeys.map((q) => <th key={q} style={TH}>{q.toUpperCase()}</th>)}<th style={TH}>Total</th></tr></thead>
+                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{qKeys.map((q) => <td key={q} style={TDC}>{st[q] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
+                </table>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 15) {
+            const students = sb?.students;
+            if (students?.length > 0) {
+              content = (
+                <table style={TBLSTYLE}>
+                  <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th><th style={TH}>Theory Grade</th><th style={TH}>Practical Grade</th></tr></thead>
+                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.studentId || st.enrolmentNumber || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.theoryGrade || '—'}</td><td style={TDC}>{st.practicalGrade || '—'}</td></tr>))}</tbody>
+                </table>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 19) {
+            let docs: any[] = [];
+            if (db?.subItemsJson) { try { const p = JSON.parse(db.subItemsJson); if (Array.isArray(p.documents)) docs = p.documents; } catch {} }
+            if (docs.length === 0 && url) docs = [{ id: 'leg', name: 'Lecture Notes', fileName: fn, fileUrl: url }];
+            content = docs.length === 0 ? <Pending name={item.name} /> : (
+              <div>{docs.map((doc: any) => (<div key={doc.id} style={{ marginBottom: '36px' }}><div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{doc.name}</div><FileEmbed url={doc.fileUrl} name={doc.fileName} height="650px" /></div>))}</div>
+            );
+          } else if (item.index === 20) {
+            const sigUrl = url || cf.facultySignatureUrl;
+            content = (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '16px', fontSize: '14px' }}>Course Faculty Signature</div>
+                {sigUrl
+                  ? <img src={sigUrl} alt="Signature" style={{ maxHeight: '150px', maxWidth: '300px', objectFit: 'contain', border: '1px solid #ccc', padding: '8px' }} />
+                  : <div style={{ height: '80px', width: '280px', margin: '0 auto', border: '1px solid #ccc', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '8px', fontSize: '12px', color: '#888' }}>{faculty}</div>
+                }
+                <div style={{ marginTop: '10px', fontSize: '12px', color: '#555' }}>Signed by: {cf.facultySignatureName || faculty}</div>
+              </div>
+            );
+          } else {
+            content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />;
+          }
+
+          return (
+            <div key={item.index}>
+              {/* Section divider — plain centered title, no badge, no colored background */}
+              <div style={{ ...PAGE, minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '22px', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: '80%', lineHeight: 1.4 }}>
+                  {item.name}
+                </div>
+              </div>
+              {/* Content page */}
+              <div style={{ ...PAGE }}>
+                <PageHeader cf={cf} />
+                <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                  {item.index}. {item.name}
+                </div>
+                {content}
               </div>
             </div>
           );
         })}
-
       </div>
     </div>
   );

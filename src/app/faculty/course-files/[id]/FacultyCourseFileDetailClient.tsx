@@ -7,27 +7,30 @@ import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const CHECKLIST_ITEMS = [
-  { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO', maxScore: 10 },
-  { index: 2,  name: 'Time Table of the Faculty', maxScore: 10 },
-  { index: 3,  name: 'Course information sheet (objectives, pre-requisites, outcomes / Syllabus)', maxScore: 10 },
-  { index: 4,  name: 'Student Name List', maxScore: 10 },
-  { index: 5,  name: 'Department Academic Calendar', maxScore: 10 },
-  { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)', maxScore: 10 },
-  { index: 7,  name: 'List of Laboratory Experiments', maxScore: 10 },
-  { index: 8,  name: 'Laboratory Rubrics', maxScore: 10 },
-  { index: 9,  name: 'Theory Continuous Evaluation Rubrics', maxScore: 10 },
-  { index: 10, name: 'Lab Manuals / Tutorials', maxScore: 10 },
-  { index: 11, name: 'Internal Assessment 1', maxScore: 10 },
-  { index: 12, name: 'Internal Assessment 2', maxScore: 10 },
-  { index: 13, name: 'Guidelines / Documents related to Evaluation Criteria', maxScore: 10 },
-  { index: 14, name: 'Attendance register (ERP)', maxScore: 10 },
-  { index: 15, name: 'University exam', maxScore: 10 },
-  { index: 16, name: 'CO Attainment output sheet', maxScore: 10 },
-  { index: 17, name: 'PO Attainment output sheet', maxScore: 10 },
-  { index: 18, name: 'Action to be taken for next year based on CO attainment', maxScore: 10 },
-  { index: 19, name: 'Lecture notes', maxScore: 20 },
-  { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
+  { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
+  { index: 2,  name: 'Time Table of the Faculty',                                             maxScore: 10, required: true  },
+  { index: 3,  name: 'Course information sheet (objectives, pre-requisites, outcomes / Syllabus)', maxScore: 10, required: true  },
+  { index: 4,  name: 'Student Name List',                                                    maxScore: 10, required: true  },
+  { index: 5,  name: 'Department Academic Calendar',                                         maxScore: 10, required: true  },
+  { index: 6,  name: 'Course delivery details (Lesson Plan of Lecture & Lab/Tutorials)',     maxScore: 10, required: true  },
+  { index: 7,  name: 'List of Laboratory Experiments',                                       maxScore: 10, required: true  },
+  { index: 8,  name: 'Laboratory Rubrics',                                                   maxScore: 10, required: true  },
+  { index: 9,  name: 'Theory Continuous Evaluation Rubrics',                                 maxScore: 10, required: true  },
+  { index: 10, name: 'Lab Manuals / Tutorials',                                              maxScore: 10, required: true  },
+  { index: 11, name: 'Internal Assessment 1',                                                maxScore: 10, required: true  },
+  { index: 12, name: 'Internal Assessment 2',                                                maxScore: 10, required: true  },
+  { index: 13, name: 'Guidelines / Documents related to Evaluation Criteria',                maxScore: 10, required: true  },
+  { index: 14, name: 'Attendance register (ERP)',                                            maxScore: 10, required: true  },
+  { index: 15, name: 'University exam',                                                      maxScore: 10, required: true  },
+  { index: 16, name: 'CO Attainment output sheet',                                           maxScore: 10, required: false },
+  { index: 17, name: 'PO Attainment output sheet',                                           maxScore: 10, required: false },
+  { index: 18, name: 'Action to be taken for next year based on CO attainment',              maxScore: 10, required: true  },
+  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  },
+  { index: 20, name: 'Course Faculty Signature',                                             maxScore: 10, required: true  }
 ];
+
+/** Indices of checklist items that are required — derived from CHECKLIST_ITEMS to keep in sync. */
+const REQUIRED_ITEM_INDICES = CHECKLIST_ITEMS.filter((i) => i.required).map((i) => i.index);
 
 const PREDEFINED_THEORY_CRITERIA = [
   { id: 'predef-project',      label: 'Project' },
@@ -2099,8 +2102,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
 
   const handleSubmit = async () => {
-    if (completedCount < 20) {
-      setActionError('All 20 checklist items (including required sub-sections and Item 20 signature) must be complete before submission.');
+    // Gate: only required items must be complete
+    const missingRequired = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
+    if (missingRequired.length > 0) {
+      const missingNames = missingRequired
+        .map((idx) => `Item ${idx}: ${CHECKLIST_ITEMS.find((i) => i.index === idx)?.name ?? ''}`)
+        .join('; ');
+      setActionError(`${missingRequired.length} required item(s) still incomplete — ${missingNames}.`);
       return;
     }
     if (!facultyConfirmed) {
@@ -2324,13 +2332,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Col xs={12} md={2}>
                 <Form.Label className="small fw-semibold text-secondary mb-1">
                   Batch
+                  <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(assigned)</span>
                 </Form.Label>
                 <Form.Control
                   type="text"
                   value={access.batch || 'B'}
                   readOnly
                   disabled
-                  className="py-1 font-mono-ppsu fw-bold text-success bg-success-subtle border-success-subtle"
+                  className="py-1 bg-light text-secondary font-mono-ppsu fw-bold"
+                  title="Batch is assigned by the Course Faculty"
                 />
               </Col>
             )}
@@ -2405,7 +2415,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </span>
                     <div className="flex-grow-1" style={{ minWidth: 0, overflow: 'hidden', wordBreak: 'break-word' }}>
                       <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: 14, color: 'var(--ppsu-navy-900)' }}>
-                        <span>{item.name}</span>
+                        <span>{item.name}{item.required && <span className="text-danger ms-1" title="Required">*</span>}</span>
                         {isResumed && (
                           <Badge bg="primary" className="fw-semibold px-2 py-1" style={{ fontSize: 11 }}>
                             📍 Next to Complete
@@ -4793,7 +4803,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         const item18Doc = checklist.find((c) => c.itemIndex === 18);
         const item18Done = Boolean(item18Doc?.status === 'UPLOADED' || item18Doc?.fileName);
         const isCoordinatorReady = item1Done && item18Done;
-        const isAllReady = completedCount === 20 && isCoordinatorReady;
+        const missingRequiredItems = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
+        const isAllReady = missingRequiredItems.length === 0 && isCoordinatorReady;
 
         return (
           <Card className="card-custom border-0 shadow-sm mb-4">
@@ -4806,9 +4817,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 <h6 className="fw-bold text-navy-900 mb-2" style={{ fontSize: 13 }}>Multi-Role Contribution Completion Status:</h6>
                 <div className="d-flex flex-wrap gap-3 small">
                   <div className="d-flex align-items-center gap-1.5">
-                    <span>👨‍🏫 Course Faculty Items:</span>
-                    <Badge bg={completedCount === 20 ? 'success' : 'warning'} text={completedCount === 20 ? 'white' : 'dark'}>
-                      {completedCount === 20 ? '✓ Complete (20/20)' : `${completedCount}/20 Complete`}
+                    <span>👨‍🏫 Required Items:</span>
+                    <Badge bg={missingRequiredItems.length === 0 ? 'success' : 'warning'} text={missingRequiredItems.length === 0 ? 'white' : 'dark'}>
+                      {missingRequiredItems.length === 0
+                        ? `✓ All required items complete (${REQUIRED_ITEM_INDICES.length}/${REQUIRED_ITEM_INDICES.length})`
+                        : `${REQUIRED_ITEM_INDICES.length - missingRequiredItems.length}/${REQUIRED_ITEM_INDICES.length} complete — ${missingRequiredItems.length} remaining`}
                     </Badge>
                   </div>
                   <div className="d-flex align-items-center gap-1.5">
@@ -4838,10 +4851,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
                 <div className="small text-secondary">
                   {isAllReady
-                    ? '✓ All required contributions (Course Faculty + Course Coordinator) are complete. Ready to submit.'
+                    ? '✓ All required items complete. Ready to submit.'
                     : !isCoordinatorReady
                     ? '⚠️ Course Coordinator must upload Item 1 (Vision/Mission/PEO/PSO/PO) and Item 18 before submission.'
-                    : `⚠️ ${20 - completedCount} item(s) remaining before submission.`}
+                    : `⚠️ ${missingRequiredItems.length} required item(s) still incomplete: ${missingRequiredItems.map((idx) => `Item ${idx}`).join(', ')}.`}
                 </div>
 
                 <div className="d-flex align-items-center gap-2 flex-wrap">
