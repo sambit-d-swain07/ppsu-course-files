@@ -416,6 +416,29 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'Faculty may only submit a completed course file.' }, { status: 403 });
     }
 
+    if (status === 'SUBMITTED') {
+      const items = (courseFile as any).checklistItems || [];
+      const missingShared: string[] = [];
+
+      const item1 = items.find((i: any) => i.itemIndex === 1);
+      let parsedItem1: any = {};
+      try { if (item1?.subItemsJson) parsedItem1 = JSON.parse(item1.subItemsJson); } catch (e) {}
+      if (!parsedItem1.vision || !parsedItem1.mission || !parsedItem1.peo || !parsedItem1.pso || !parsedItem1.po) {
+        missingShared.push('Item 1 (Vision/Mission/PEO/PSO/PO)');
+      }
+
+      const item18 = items.find((i: any) => i.itemIndex === 18);
+      if (!item18 || (item18.status !== 'UPLOADED' && !item18.fileName)) {
+        missingShared.push('Item 18 (CO Attainment Action Plan)');
+      }
+
+      if (missingShared.length > 0) {
+        return noStoreJson({
+          error: `Cannot submit course file: The Course Coordinator has not completed all required shared uploads. Missing: ${missingShared.join(', ')}.`
+        }, { status: 400 });
+      }
+    }
+
     const updates: any = {};
     if (status) updates.status = status;
     if (totalScore !== undefined) updates.totalScore = totalScore;

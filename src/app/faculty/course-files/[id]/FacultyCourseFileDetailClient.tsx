@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, use, memo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab } from 'react-bootstrap';
+import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab, Badge } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const CHECKLIST_ITEMS = [
@@ -72,10 +72,45 @@ function statusLabel(status: string) {
 
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1600;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+            return;
+          }
+          resolve(e.target?.result as string);
+        };
+        img.onerror = () => resolve(e.target?.result as string);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    }
   });
 };
 
@@ -95,6 +130,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [resumedItemIndex, setResumedItemIndex] = useState<number | null>(null);
+  const hasAutoScrolledRef = useRef(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerEdit, setHeaderEdit] = useState({
@@ -247,6 +284,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setCourseFile(data.courseFile);
       const checklistItems = Array.isArray(data.checklistItems) ? data.checklistItems.filter(Boolean) : [];
       setChecklist(checklistItems);
+      if (!hasAutoScrolledRef.current && checklistItems.length > 0) {
+        hasAutoScrolledRef.current = true;
+        const firstIncomplete = CHECKLIST_ITEMS.find((item) => {
+          const dbItem = checklistItems.find((c: any) => c.itemIndex === item.index);
+          if (!dbItem) return true;
+          if (dbItem.isCoordinatorShared || item.index === 5) return false;
+          return dbItem.status !== 'UPLOADED' && dbItem.status !== 'SUBMITTED' && !dbItem.fileName;
+        });
+        if (firstIncomplete && firstIncomplete.index > 1) {
+          setResumedItemIndex(firstIncomplete.index);
+          setTimeout(() => {
+            document.getElementById(`checklist-item-${firstIncomplete.index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 500);
+        }
+      }
       const loadedAccess = data.courseFile.access || { mode: 'OWNER' };
       setAccess(loadedAccess);
 
@@ -1942,6 +1994,19 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         </button>
 
         <div className="d-flex align-items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline-success"
+            className="fw-bold d-flex align-items-center gap-1 shadow-sm"
+            onClick={() => {
+              setActionSuccess('✓ Progress Saved! You can safely exit and return anytime to continue where you left off.');
+              setTimeout(() => {
+                router.push('/faculty/my-courses');
+              }, 1200);
+            }}
+          >
+            💾 Save &amp; Continue Later
+          </Button>
           <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
             👁️ Preview Merged Course File
           </Link>
@@ -1970,6 +2035,29 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         </Alert>
       )}
       {actionSuccess && <Alert variant="success" dismissible onClose={() => setActionSuccess('')}>{actionSuccess}</Alert>}
+
+      {resumedItemIndex && (
+        <div className="alert alert-info py-2.5 px-3 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2 rounded-3 shadow-sm border-0" style={{ background: '#EFF6FF', borderLeft: '4px solid #2563EB', color: '#1E40AF' }}>
+          <div className="d-flex align-items-center gap-2">
+            <span className="fs-5">📍</span>
+            <div>
+              <strong className="d-block" style={{ fontSize: 13 }}>Resumed from where you left off</strong>
+              <span className="small opacity-90">Auto-scrolled to your first incomplete item: <strong>Item #{resumedItemIndex}</strong></span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="primary"
+            className="fw-semibold shadow-sm"
+            style={{ fontSize: 12 }}
+            onClick={() => {
+              document.getElementById(`checklist-item-${resumedItemIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          >
+            Jump to Item #{resumedItemIndex} ↓
+          </Button>
+        </div>
+      )}
 
       {access.mode === 'LAB_BATCH' && (
         <Card className="mb-4 border-0 shadow-sm" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
@@ -2138,13 +2226,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             const isSigItem = item.index === 20;
             const isRestricted = access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(item.index);
             const isLockedByStudentList = false;
+            const isResumed = item.index === resumedItemIndex;
 
             return (
               <div
                 key={item.index}
-                className={`px-4 py-3 ${idx < CHECKLIST_ITEMS.length - 1 ? 'border-bottom' : ''}`}
+                id={`checklist-item-${item.index}`}
+                className={`px-4 py-3 ${idx < CHECKLIST_ITEMS.length - 1 ? 'border-bottom' : ''} ${isResumed ? 'border border-2 border-primary rounded-3 shadow-sm my-2' : ''}`}
                 style={{
-                  background: isRestricted ? '#f8fafc' : (complete ? 'rgba(22,163,74,0.03)' : 'transparent'),
+                  background: isResumed ? '#F0F9FF' : (isRestricted ? '#f8fafc' : (complete ? 'rgba(22,163,74,0.03)' : 'transparent')),
                   opacity: isRestricted ? 0.6 : 1
                 }}
               >
@@ -2164,8 +2254,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       {item.index}
                     </span>
                     <div className="flex-grow-1" style={{ minWidth: 0, overflow: 'hidden', wordBreak: 'break-word' }}>
-                      <div className="fw-semibold" style={{ fontSize: 14, color: 'var(--ppsu-navy-900)' }}>
-                        {item.name}
+                      <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: 14, color: 'var(--ppsu-navy-900)' }}>
+                        <span>{item.name}</span>
+                        {isResumed && (
+                          <Badge bg="primary" className="fw-semibold px-2 py-1" style={{ fontSize: 11 }}>
+                            📍 Next to Complete
+                          </Badge>
+                        )}
                       </div>
 
                       {/* Locked banner for restricted items for Lab Teachers */}
@@ -4415,57 +4510,89 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       </div>
 
       {/* SECTION 7: Faculty Submission Gate & Declaration */}
-      {!isLocked && !isLabTeacher && (
-        <Card className="card-custom border-0 shadow-sm mb-4">
-          <Card.Header className="bg-white py-3 border-bottom">
-            <h5 className="fw-bold text-navy-900 mb-0">Faculty Declaration & Submission Gate</h5>
-          </Card.Header>
-          <Card.Body>
-            <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
-              <Form.Check
-                type="checkbox"
-                id="chk-faculty-declaration"
-                label={
-                  <span className="fw-bold text-dark" style={{ fontSize: '0.95rem' }}>
-                    I confirm all the documents uploaded are correct and relevant as required. <span className="text-danger fw-bold">*</span>
-                  </span>
-                }
-                checked={facultyConfirmed}
-                onChange={(e) => setFacultyConfirmed(e.target.checked)}
-                style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
-              />
-            </div>
+      {!isLocked && !isLabTeacher && (() => {
+        const item1Doc = checklist.find((c) => c.itemIndex === 1);
+        let parsedItem1: any = {};
+        try { if (item1Doc?.subItemsJson) parsedItem1 = JSON.parse(item1Doc.subItemsJson); } catch (e) {}
+        const item1Done = Boolean(parsedItem1.vision && parsedItem1.mission && parsedItem1.peo && parsedItem1.pso && parsedItem1.po);
+        const item18Doc = checklist.find((c) => c.itemIndex === 18);
+        const item18Done = Boolean(item18Doc?.status === 'UPLOADED' || item18Doc?.fileName);
+        const isCoordinatorReady = item1Done && item18Done;
+        const isAllReady = completedCount === 20 && isCoordinatorReady;
 
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
-              <div className="small text-secondary">
-                {completedCount === 20
-                  ? '✓ All 20 checklist items (including Item 20 signature upload) complete. Ready to submit.'
-                  : `⚠️ ${20 - completedCount} item(s) remaining before submission.`}
+        return (
+          <Card className="card-custom border-0 shadow-sm mb-4">
+            <Card.Header className="bg-white py-3 border-bottom">
+              <h5 className="fw-bold text-navy-900 mb-0">Faculty Declaration &amp; Multi-Role Submission Gate</h5>
+            </Card.Header>
+            <Card.Body>
+              {/* Multi-Role Readiness Breakdown */}
+              <div className="p-3 bg-light rounded border mb-3">
+                <h6 className="fw-bold text-navy-900 mb-2" style={{ fontSize: 13 }}>Multi-Role Contribution Completion Status:</h6>
+                <div className="d-flex flex-wrap gap-3 small">
+                  <div className="d-flex align-items-center gap-1.5">
+                    <span>👨‍🏫 Course Faculty Items:</span>
+                    <Badge bg={completedCount === 20 ? 'success' : 'warning'} text={completedCount === 20 ? 'white' : 'dark'}>
+                      {completedCount === 20 ? '✓ Complete (20/20)' : `${completedCount}/20 Complete`}
+                    </Badge>
+                  </div>
+                  <div className="d-flex align-items-center gap-1.5">
+                    <span>📋 Course Coordinator Shared Docs:</span>
+                    <Badge bg={isCoordinatorReady ? 'success' : 'warning'} text={isCoordinatorReady ? 'white' : 'dark'}>
+                      {isCoordinatorReady ? '✓ Complete (Items 1 & 18 Uploaded)' : '⏳ Pending Coordinator (Items 1 & 18)'}
+                    </Badge>
+                  </div>
+                </div>
               </div>
 
-              <div className="d-flex align-items-center gap-2 flex-wrap">
-                <Link
-                  href={`/faculty/course-files/${courseFileId}/preview`}
-                  target="_blank"
-                  className="btn btn-warning px-3 py-2 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
-                >
-                  👁️ Preview Merged Course File
-                </Link>
-                <Button
-                  id="btn-submit-checklist"
-                  className="btn-ppsu-accent px-4 py-2"
-                  disabled={completedCount < 20 || !facultyConfirmed || submitLoading}
-                  onClick={handleSubmit}
-                >
-                  {submitLoading
-                    ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
-                    : courseFile.status === 'NEEDS_REVISION' ? 'Resubmit for Review' : 'Submit for Review'}
-                </Button>
+              <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
+                <Form.Check
+                  type="checkbox"
+                  id="chk-faculty-declaration"
+                  label={
+                    <span className="fw-bold text-dark" style={{ fontSize: '0.95rem' }}>
+                      I confirm all the documents uploaded are correct and relevant as required. <span className="text-danger fw-bold">*</span>
+                    </span>
+                  }
+                  checked={facultyConfirmed}
+                  onChange={(e) => setFacultyConfirmed(e.target.checked)}
+                  style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
+                />
               </div>
-            </div>
-          </Card.Body>
-        </Card>
-      )}
+
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
+                <div className="small text-secondary">
+                  {isAllReady
+                    ? '✓ All required contributions (Course Faculty + Course Coordinator) are complete. Ready to submit.'
+                    : !isCoordinatorReady
+                    ? '⚠️ Course Coordinator must upload Item 1 (Vision/Mission/PEO/PSO/PO) and Item 18 before submission.'
+                    : `⚠️ ${20 - completedCount} item(s) remaining before submission.`}
+                </div>
+
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <Link
+                    href={`/faculty/course-files/${courseFileId}/preview`}
+                    target="_blank"
+                    className="btn btn-warning px-3 py-2 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                  >
+                    👁️ Preview Merged Course File
+                  </Link>
+                  <Button
+                    id="btn-submit-checklist"
+                    className="btn-ppsu-accent px-4 py-2"
+                    disabled={!isAllReady || !facultyConfirmed || submitLoading}
+                    onClick={handleSubmit}
+                  >
+                    {submitLoading
+                      ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
+                      : courseFile.status === 'NEEDS_REVISION' ? 'Resubmit for Review' : 'Submit for Review'}
+                  </Button>
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+        );
+      })()}
 
       {/* Lab Teacher Submission Gate */}
       {!isLocked && isLabTeacher && (

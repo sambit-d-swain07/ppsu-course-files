@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const isSharedCoordinatorItem = [1, 3, 6, 7, 10, 11, 12, 15].includes(Number(itemIndex));
     if (isSharedCoordinatorItem && !isSubjectCoordinator) {
       // Allow faculty to update teacher-specific sub-fields (6d/e/f outcomes, 11c/12c sample answer sheets, 15b/c grade sheet)
-      const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(Number(itemIndex)) && subItemsJson && !fileName && !fileUrl;
+      const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(Number(itemIndex)) && Boolean(subItemsJson);
       if (!isTeacherSubFieldOnly) {
         return noStoreJson({ error: 'This item is centrally managed by the Course Coordinator.' }, { status: 403 });
       }

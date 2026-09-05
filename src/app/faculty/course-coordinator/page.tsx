@@ -19,10 +19,45 @@ const SHARED_ITEMS = [
 
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1600;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+            return;
+          }
+          resolve(e.target?.result as string);
+        };
+        img.onerror = () => resolve(e.target?.result as string);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    }
   });
 };
 
@@ -44,12 +79,13 @@ function statusLabel(status: string) {
     case 'UNDER_REVIEW':   return 'Under Review';
     case 'NEEDS_REVISION': return 'Needs Revision';
     case 'DRAFT':          return 'Draft';
-    default:               return 'Not Submitted';
+    default:               return status;
   }
 }
 
 export default function FacultyCourseCoordinatorPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [schoolSharedDocs, setSchoolSharedDocs] = useState<any[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [facultyUnderMe, setFacultyUnderMe] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,17 +99,16 @@ export default function FacultyCourseCoordinatorPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch subjects this user coordinates
       const subjRes = await fetch('/api/coordinator/shared-documents');
       if (!subjRes.ok) throw new Error('Failed to load coordinator subjects');
       const subjData = await subjRes.json();
       const list = Array.isArray(subjData.subjects) ? subjData.subjects : [];
       setSubjects(list);
+      setSchoolSharedDocs(Array.isArray(subjData.schoolSharedDocuments) ? subjData.schoolSharedDocuments : []);
       if (list.length > 0 && !selectedSubjectId) {
         setSelectedSubjectId(list[0].id);
       }
 
-      // 2. Fetch assigned faculty under this coordinator
       const facRes = await fetch('/api/coordinator/faculty');
       if (facRes.ok) {
         const facData = await facRes.json();
@@ -93,17 +128,25 @@ export default function FacultyCourseCoordinatorPage() {
   const activeSubject = subjects.find((s) => s.id === selectedSubjectId);
   const sharedDocsList: any[] = activeSubject?.sharedDocuments || [];
   const sharedMap = new Map(sharedDocsList.map((d: any) => [d.itemIndex, d]));
+  const schoolSharedMap = new Map(
+    schoolSharedDocs
+      .filter((d: any) => d.school === (activeSubject?.school || 'SOE'))
+      .map((d: any) => [d.itemIndex, d])
+  );
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      const isSchoolItem = [1, 18].includes(itemIndex);
+      const schoolCode = activeSubject?.school || 'SOE';
+
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(itemIndex === 18 ? { school: activeSubject?.school || 'SOE' } : { subjectId: selectedSubjectId }),
+          ...(isSchoolItem ? { school: schoolCode } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
@@ -114,8 +157,8 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(itemIndex === 18
-        ? `Shared Action Plan document for School ${activeSubject?.school || 'SOE'} (Item #18) uploaded and locked for all faculty.`
+      setActionSuccess(isSchoolItem
+        ? `Shared Action Plan document for School ${schoolCode} (Item #${itemIndex}) uploaded and locked for all faculty.`
         : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
       fetchData();
     } catch (err: any) {
@@ -130,7 +173,10 @@ export default function FacultyCourseCoordinatorPage() {
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const existingDoc = sharedMap.get(itemIndex);
+      const isSchoolItem = [1, 18].includes(itemIndex);
+      const schoolCode = activeSubject?.school || 'SOE';
+      const existingDoc = isSchoolItem ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
+
       let existingSubJson: any = {};
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
@@ -144,7 +190,7 @@ export default function FacultyCourseCoordinatorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(isSchoolItem ? { school: schoolCode } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'UPLOADED',
           fileName: existingDoc?.fileName || file.name,
@@ -170,11 +216,13 @@ export default function FacultyCourseCoordinatorPage() {
     if (!confirm('Are you sure you want to remove this shared document? It will revert to pending for all faculty.')) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
+      const isSchoolItem = [1, 18].includes(itemIndex);
+      const schoolCode = activeSubject?.school || 'SOE';
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(itemIndex === 18 ? { school: activeSubject?.school || 'SOE' } : { subjectId: selectedSubjectId }),
+          ...(isSchoolItem ? { school: schoolCode } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: 'EMPTY',
           fileName: null,
@@ -186,7 +234,7 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Removal failed');
       }
-      setActionSuccess(itemIndex === 18 ? `Shared Item #18 document removed.` : `Shared document for Item #${itemIndex} removed.`);
+      setActionSuccess(isSchoolItem ? `Shared Item #${itemIndex} document removed.` : `Shared document for Item #${itemIndex} removed.`);
       fetchData();
     } catch (err: any) {
       setActionError(err.message);
@@ -200,7 +248,9 @@ export default function FacultyCourseCoordinatorPage() {
     if (!confirm(`Are you sure you want to remove sub-item (${subKey})?`)) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const existingDoc = sharedMap.get(itemIndex);
+      const isSchoolItem = [1, 18].includes(itemIndex);
+      const schoolCode = activeSubject?.school || 'SOE';
+      const existingDoc = isSchoolItem ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
       let existingSubJson: any = {};
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
@@ -211,7 +261,7 @@ export default function FacultyCourseCoordinatorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
+          ...(isSchoolItem ? { school: schoolCode } : { subjectId: selectedSubjectId }),
           itemIndex,
           status: hasRemaining ? 'UPLOADED' : 'EMPTY',
           fileName: hasRemaining ? existingDoc?.fileName : null,
@@ -381,7 +431,7 @@ export default function FacultyCourseCoordinatorPage() {
               </thead>
               <tbody>
                 {SHARED_ITEMS.map((item) => {
-                  const doc = sharedMap.get(item.index);
+                  const doc = [1, 18].includes(item.index) ? schoolSharedMap.get(item.index) : sharedMap.get(item.index);
                   const isUploaded = doc && doc.status === 'UPLOADED';
                   const isUploading = uploadingItem === item.index;
 
