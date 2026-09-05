@@ -272,30 +272,6 @@ export default function LoginPage() {
               )}
             </Button>
 
-            {/* Quick Demo Logins */}
-            <div className="pt-3 border-top text-center">
-              <p className="small text-secondary mb-2 fw-semibold">Quick Demo Logins (Single-Click):</p>
-              <div className="d-flex justify-content-center gap-2 flex-wrap">
-                <span
-                  className="demo-chip"
-                  onClick={() => fillCredentials('FACULTY')}
-                >
-                  👨‍🏫 Faculty Demo
-                </span>
-                <span
-                  className="demo-chip"
-                  onClick={() => fillCredentials('COORDINATOR')}
-                >
-                  📋 Evaluator Demo
-                </span>
-                <span
-                  className="demo-chip"
-                  onClick={() => fillCredentials('ADMIN')}
-                >
-                  🛡️ Admin Demo
-                </span>
-              </div>
-            </div>
 
             {/* ERP Footer Note */}
             <div className="erp-footer-note">
