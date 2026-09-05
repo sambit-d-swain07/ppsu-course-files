@@ -170,6 +170,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
   const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
 
+  // Item 19 Lecture Notes Multi-document state
+  const [item19ModalOpen, setItem19ModalOpen] = useState(false);
+  const [item19DocName, setItem19DocName] = useState('');
+  const [item19DocFile, setItem19DocFile] = useState<File | null>(null);
+
   const hashString = (str: string): number => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -191,9 +196,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     }
 
     const hash = hashString(`${seedKey}-${roundedTotal}`);
-    const scaleFactor = 20 / maxMark;
-    const targetUnits = Math.round(roundedTotal * scaleFactor * 2);
-    const maxUnitsPerCol = 10;
+    const targetUnits = Math.round(roundedTotal * 2);
+    const maxUnitsPerCol = Math.round((maxMark / 4) * 2);
     
     const baseAvg = Math.floor(targetUnits / 4);
     let units = [baseAvg, baseAvg, baseAvg, baseAvg];
@@ -533,7 +537,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           practicals[pKey] = Math.min(10, numVal);
           return { ...row, practicals };
         } else {
-          return { ...row, [field]: Math.min(20, numVal) };
+          const maxCap = (field === 'esePerformance' || field === 'eseExternalViva') ? 30 : 20;
+          return { ...row, [field]: Math.min(maxCap, numVal) };
         }
       });
       if (saveTimeoutsRef.current[8]) clearTimeout(saveTimeoutsRef.current[8]);
@@ -943,6 +948,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (itemIndex === 15) {
       const subs = getSubItems(15);
       return Boolean((subs?.gradeSheet?.fileName || subs?.students?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
+    }
+    if (itemIndex === 19) {
+      const subs = getSubItems(19);
+      return Boolean(subs?.documents?.length || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || dbItem.fileName);
     }
     return dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || Boolean(dbItem.fileName);
   };
@@ -1709,6 +1718,147 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         })
       });
       setActionSuccess('Additional document removed.');
+      fetchData();
+    } catch (err: any) { setActionError(err.message); }
+  };
+
+  // Item 19 Lecture Notes Multi-document handlers
+  const handleAddItem19Doc = async () => {
+    if (isLocked) return;
+    if (!item19DocName.trim()) { setActionError('Document name is required'); return; }
+    if (!item19DocFile) { setActionError('Please select a file to upload'); return; }
+
+    const subs = getSubItems(19) || {};
+    let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
+    
+    const dbItem19 = checklist.find(c => c.itemIndex === 19);
+    if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+      docs.push({
+        id: 'doc-legacy',
+        name: 'Combined Lecture Notes',
+        fileName: dbItem19.fileName,
+        fileUrl: dbItem19.fileUrl,
+        fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+        uploadDate: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    const dataUrl = await readFileAsDataUrl(item19DocFile);
+    const newDoc = {
+      id: `doc-${Date.now()}`,
+      name: item19DocName.trim(),
+      fileName: item19DocFile.name,
+      fileUrl: dataUrl,
+      fileType: item19DocFile.name.split('.').pop()?.toUpperCase() || 'PDF',
+      uploadDate: new Date().toISOString().split('T')[0]
+    };
+
+    docs.push(newDoc);
+    subs.documents = docs;
+
+    try {
+      await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 19,
+          status: 'UPLOADED',
+          fileName: docs[0].fileName,
+          fileUrl: docs[0].fileUrl,
+          subItemsJson: JSON.stringify(subs)
+        })
+      });
+      setActionSuccess(`Document "${newDoc.name}" added to Lecture Notes.`);
+      setItem19ModalOpen(false);
+      setItem19DocName('');
+      setItem19DocFile(null);
+      fetchData();
+    } catch (err: any) { setActionError(err.message); }
+  };
+
+  const handleRemoveItem19Doc = async (docId: string) => {
+    if (isLocked) return;
+    const subs = getSubItems(19) || {};
+    let docs = Array.isArray(subs.documents) ? subs.documents : [];
+    
+    const dbItem19 = checklist.find(c => c.itemIndex === 19);
+    if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+      docs = [{
+        id: 'doc-legacy',
+        name: 'Combined Lecture Notes',
+        fileName: dbItem19.fileName,
+        fileUrl: dbItem19.fileUrl,
+        fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+        uploadDate: new Date().toISOString().split('T')[0]
+      }];
+    }
+
+    const updatedDocs = docs.filter((d: any) => d.id !== docId);
+    subs.documents = updatedDocs;
+
+    try {
+      await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 19,
+          status: updatedDocs.length > 0 ? 'UPLOADED' : 'EMPTY',
+          fileName: updatedDocs.length > 0 ? updatedDocs[0].fileName : '',
+          fileUrl: updatedDocs.length > 0 ? updatedDocs[0].fileUrl : '',
+          subItemsJson: JSON.stringify(subs)
+        })
+      });
+      setActionSuccess('Document removed from Lecture Notes.');
+      fetchData();
+    } catch (err: any) { setActionError(err.message); }
+  };
+
+  const handleReplaceItem19Doc = async (docId: string, file: File) => {
+    if (isLocked || !file) return;
+    const subs = getSubItems(19) || {};
+    let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
+    
+    const dbItem19 = checklist.find(c => c.itemIndex === 19);
+    if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+      docs = [{
+        id: 'doc-legacy',
+        name: 'Combined Lecture Notes',
+        fileName: dbItem19.fileName,
+        fileUrl: dbItem19.fileUrl,
+        fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+        uploadDate: new Date().toISOString().split('T')[0]
+      }];
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    const updatedDocs = docs.map((d: any) => {
+      if (d.id === docId) {
+        return {
+          ...d,
+          fileName: file.name,
+          fileUrl: dataUrl,
+          fileType: file.name.split('.').pop()?.toUpperCase() || 'PDF',
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+      }
+      return d;
+    });
+
+    subs.documents = updatedDocs;
+
+    try {
+      await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 19,
+          status: 'UPLOADED',
+          fileName: updatedDocs[0].fileName,
+          fileUrl: updatedDocs[0].fileUrl,
+          subItemsJson: JSON.stringify(subs)
+        })
+      });
+      setActionSuccess('Document replaced successfully.');
       fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
@@ -3512,7 +3662,22 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </Button>
                         ) : null
                       ) : (
-                        complete ? (
+                        item.index === 19 ? (
+                        !isLocked && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            style={{ fontSize: 12 }}
+                            onClick={() => {
+                              setItem19DocName('');
+                              setItem19DocFile(null);
+                              setItem19ModalOpen(true);
+                            }}
+                          >
+                            + Add Document
+                          </Button>
+                        )
+                      ) : complete ? (
                           <>
                             <Button
                               variant="outline-info"
@@ -4498,6 +4663,116 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   );
                 })()}
+                {/* Item 19: Lecture Notes Multi-document Upload */}
+                {item.index === 19 && !isRestricted && (() => {
+                  const subs = getSubItems(19) || {};
+                  let docs = Array.isArray(subs.documents) ? subs.documents : [];
+                  if (docs.length === 0 && dbItem.fileName && dbItem.fileUrl) {
+                    docs = [{
+                      id: 'doc-legacy',
+                      name: 'Lecture Notes Document',
+                      fileName: dbItem.fileName,
+                      fileUrl: dbItem.fileUrl,
+                      fileType: dbItem.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+                      uploadDate: dbItem.updatedAt ? new Date(dbItem.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                    }];
+                  }
+
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
+                      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                        <div>
+                          <h6 className="fw-bold text-navy-900 mb-1">
+                            📚 Lecture Notes (Multiple Modules / Topics)
+                          </h6>
+                          <p className="text-muted small mb-0">
+                            Upload lecture notes broken down by module or topic (e.g., Module 1, Unit 3 - Recursion, Chapter 4 Notes, etc.).
+                          </p>
+                        </div>
+                        {!isLocked && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setItem19DocName('');
+                              setItem19DocFile(null);
+                              setItem19ModalOpen(true);
+                            }}
+                          >
+                            + Add Document
+                          </Button>
+                        )}
+                      </div>
+
+                      {docs.length === 0 ? (
+                        <div className="alert alert-info small py-3 mb-0">
+                          ℹ️ No lecture notes added yet. Click <strong>"+ Add Document"</strong> to upload notes for your course.
+                        </div>
+                      ) : (
+                        <Row className="g-3">
+                          {docs.map((doc: any) => (
+                            <Col xs={12} md={6} lg={4} key={doc.id}>
+                              <Card className="h-100 border shadow-sm">
+                                <Card.Header className="bg-light py-2 d-flex align-items-center justify-content-between">
+                                  <span className="fw-bold text-navy-900 text-truncate small" title={doc.name}>
+                                    📄 {doc.name}
+                                  </span>
+                                  <Badge bg="secondary" style={{ fontSize: 9 }}>
+                                    {doc.fileType || 'PDF'}
+                                  </Badge>
+                                </Card.Header>
+                                <Card.Body className="p-3 d-flex flex-column justify-content-between">
+                                  <div>
+                                    <div className="text-success fw-bold font-mono-ppsu small text-truncate mb-1" title={doc.fileName}>
+                                      ✓ {doc.fileName}
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: 10 }}>
+                                      Uploaded: {doc.uploadDate || '—'}
+                                    </div>
+                                  </div>
+                                  <div className="d-flex gap-1 mt-3">
+                                    <Button
+                                      variant="outline-info"
+                                      size="sm"
+                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                      onClick={() => setViewingDoc({ title: doc.name, fileName: doc.fileName, fileUrl: doc.fileUrl })}
+                                    >
+                                      👁️ View
+                                    </Button>
+                                    {!isLocked && (
+                                      <>
+                                        <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
+                                          Replace
+                                          <input
+                                            type="file"
+                                            className="d-none"
+                                            onChange={(e) => {
+                                              const f = e.target.files?.[0];
+                                              if (f) handleReplaceItem19Doc(doc.id, f);
+                                              e.currentTarget.value = '';
+                                            }}
+                                          />
+                                        </label>
+                                        <Button
+                                          variant="outline-danger"
+                                          size="sm"
+                                          style={{ fontSize: 11, padding: '2px 8px' }}
+                                          onClick={() => handleRemoveItem19Doc(doc.id)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </Card.Body>
+                              </Card>
+                            </Col>
+                          ))}
+                        </Row>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -4830,6 +5105,35 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         <Modal.Footer>
           <Button variant="secondary" size="sm" onClick={() => setActiveIaItem(null)}>Cancel</Button>
           <Button variant="primary" size="sm" onClick={handleAddIaCustomDoc}>Add Document</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Item 19 Lecture Notes Add Document Modal */}
+      <Modal show={item19ModalOpen} onHide={() => setItem19ModalOpen(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="h6 fw-bold">Add Document (Item 19 Lecture Notes)</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-semibold">Document Name / Module / Topic</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="e.g. Module 1, Unit 3 - Recursion, Chapter 4 Notes"
+              value={item19DocName}
+              onChange={(e) => setItem19DocName(e.target.value)}
+            />
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-semibold">Upload File</Form.Label>
+            <Form.Control
+              type="file"
+              onChange={(e: any) => setItem19DocFile(e.target.files?.[0] || null)}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setItem19ModalOpen(false)}>Cancel</Button>
+          <Button variant="primary" size="sm" onClick={handleAddItem19Doc}>Add Document</Button>
         </Modal.Footer>
       </Modal>
 

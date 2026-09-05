@@ -371,8 +371,47 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                   </div>
                 )}
 
+                {/* Item 19: Lecture Notes Multi-document rendering */}
+                {item.index === 19 && (() => {
+                  let docs: any[] = [];
+                  if (dbItem?.subItemsJson) {
+                    try {
+                      const parsed = JSON.parse(dbItem.subItemsJson);
+                      if (Array.isArray(parsed.documents)) docs = parsed.documents;
+                    } catch (e) {}
+                  }
+                  if (docs.length === 0 && fileUrl) {
+                    docs = [{ id: 'doc-legacy', name: 'Lecture Notes', fileName, fileUrl }];
+                  }
+
+                  if (docs.length === 0) {
+                    return (
+                      <div className="p-5 text-center text-muted border rounded bg-light">
+                        <div className="fs-1 mb-2">⏳</div>
+                        <h6 className="fw-semibold mb-1">Document Not Uploaded Yet</h6>
+                        <p className="small text-secondary mb-0">This checklist item has not been uploaded by the faculty yet.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="d-flex flex-column gap-4">
+                      {docs.map((doc: any) => (
+                        <div key={doc.id} className="border rounded p-3 bg-white">
+                          <h6 className="fw-bold text-navy-900 mb-2">📄 {doc.name} ({doc.fileName})</h6>
+                          {doc.fileUrl?.match(/\.(png|jpg|jpeg|gif)$/i) ? (
+                            <img src={doc.fileUrl} alt={doc.fileName} style={{ maxWidth: '100%', maxHeight: '650px', objectFit: 'contain' }} />
+                          ) : (
+                            <iframe src={doc.fileUrl} title={doc.name} width="100%" height="650px" style={{ border: 'none' }} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 {/* General File Fallback for other items */}
-                {![1, 4, 8, 9, 15, 20].includes(item.index) && (
+                {![1, 4, 8, 9, 15, 19, 20].includes(item.index) && (
                   <div>
                     {fileUrl ? (
                       fileName?.match(/\.(png|jpg|jpeg|gif)$/i) ? (

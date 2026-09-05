@@ -748,6 +748,33 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               );
                             })}
                           </div>
+                        ) : item.index === 19 && (subItems?.documents?.length > 0 || (uploaded && dbItem.fileName)) ? (
+                          <div className="mt-2 d-flex flex-column gap-1">
+                            {(() => {
+                              let docs = Array.isArray(subItems?.documents) ? subItems.documents : [];
+                              if (docs.length === 0 && dbItem.fileName && dbItem.fileUrl) {
+                                docs = [{
+                                  id: 'doc-legacy',
+                                  name: 'Lecture Notes Document',
+                                  fileName: dbItem.fileName,
+                                  fileUrl: dbItem.fileUrl,
+                                  fileType: dbItem.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+                                  uploadDate: dbItem.updatedAt ? new Date(dbItem.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                                }];
+                              }
+                              return docs.map((doc: any) => (
+                                <div key={doc.id} className="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                  <div className="d-flex align-items-center gap-2 overflow-hidden me-2">
+                                    <span className="fw-bold text-navy-900 small text-truncate" style={{ fontSize: 11 }}>📄 {doc.name}</span>
+                                    <span className="text-success font-mono-ppsu text-truncate" style={{ fontSize: 10 }}>({doc.fileName})</span>
+                                  </div>
+                                  <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: doc.name, fileName: doc.fileName, fileUrl: doc.fileUrl })}>
+                                    👁️ View
+                                  </Button>
+                                </div>
+                              ));
+                            })()}
+                          </div>
                         ) : uploaded ? (
                           <div className="d-flex align-items-center gap-2 mt-2" style={{ fontSize: 12 }}>
                             <span className="text-success fw-bold">✓ Uploaded</span>
