@@ -19,7 +19,7 @@ const CAMPUS_IMAGES = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<'FACULTY' | 'COORDINATOR' | 'ADMIN'>('FACULTY');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,20 +36,7 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const fillCredentials = (role: 'FACULTY' | 'COORDINATOR' | 'ADMIN') => {
-    setSelectedRole(role);
-    if (role === 'FACULTY') {
-      setEmail('aakash@ppsu.ac.in');
-      setPassword('123');
-    } else if (role === 'COORDINATOR') {
-      setEmail('s.iyer@ppsu.ac.in');
-      setPassword('123');
-    } else {
-      setEmail('admin@ppsu.ac.in');
-      setPassword('123');
-    }
-    setError('');
-  };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,30 +136,6 @@ export default function LoginPage() {
             <p className="text-secondary small mb-0">Course Management & Evaluation Portal</p>
           </div>
 
-          {/* Role Selector */}
-          <div className="erp-role-selector mb-3">
-            <button
-              type="button"
-              className={`erp-role-btn ${selectedRole === 'FACULTY' ? 'active' : ''}`}
-              onClick={() => fillCredentials('FACULTY')}
-            >
-              <span>👨‍🏫</span> Faculty
-            </button>
-            <button
-              type="button"
-              className={`erp-role-btn ${selectedRole === 'COORDINATOR' ? 'active' : ''}`}
-              onClick={() => fillCredentials('COORDINATOR')}
-            >
-              <span>📋</span> Evaluator
-            </button>
-            <button
-              type="button"
-              className={`erp-role-btn ${selectedRole === 'ADMIN' ? 'active' : ''}`}
-              onClick={() => fillCredentials('ADMIN')}
-            >
-              <span>🛡️</span> Admin
-            </button>
-          </div>
 
           {error && (
             <Alert variant="danger" className="py-2.5 px-3 mb-3 d-flex align-items-center gap-2 small border-0" style={{ background: '#FFF1F2', color: '#BE123C' }}>
