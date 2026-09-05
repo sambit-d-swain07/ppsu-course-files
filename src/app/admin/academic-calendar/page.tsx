@@ -54,8 +54,9 @@ export default function AdminAcademicCalendarPage() {
   const fetchPublishedCalendars = async () => {
     try {
       const res = await fetch('/api/admin/academic-calendar');
-      const data = await res.json();
-      if (res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
         setPublishedDocs(data.publishedCalendars || []);
       }
     } catch (e: any) {
@@ -167,7 +168,6 @@ export default function AdminAcademicCalendarPage() {
         } else if (commonFile) {
           semesterFilesMap[sem] = {
             fileName: commonFile.fileName,
-            fileUrl: commonFile.fileUrl,
             isOverride: false
           };
         }
@@ -185,7 +185,15 @@ export default function AdminAcademicCalendarPage() {
         })
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type');
+      let data: any = {};
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Server error (${res.status}): Failed to publish calendar`);
+      }
+
       if (!res.ok) throw new Error(data.error || 'Failed to publish academic calendar');
 
       setActionSuccess(`Academic Calendar published successfully for ${selectedSchool} (${selectedTermType})!`);
@@ -202,7 +210,12 @@ export default function AdminAcademicCalendarPage() {
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/academic-calendar?school=${school}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to clear calendar');
+      const contentType = res.headers.get('content-type');
+      let data: any = {};
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      }
+      if (!res.ok) throw new Error(data.error || 'Failed to clear calendar');
       setActionSuccess(`Academic Calendar cleared for ${school}.`);
       fetchPublishedCalendars();
     } catch (err: any) {
