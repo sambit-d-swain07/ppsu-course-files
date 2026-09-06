@@ -7,7 +7,7 @@ import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 const SHARED_ITEMS = [
   { index: 1,  name: 'Item 1 — Institute Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'peo', 'pso', 'po'] },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
-  { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching' },
+  { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
   { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable, Question Paper & Sample Answer Sheet)', category: 'Assessment', subKeys: ['timetable', 'questionPaper', 'sampleAnswerSheet'] },
@@ -15,6 +15,20 @@ const SHARED_ITEMS = [
   { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] },
   { index: 18, name: 'Item 18 — Action to be taken for next year based on CO Attainment', category: 'Institutional' }
 ];
+
+const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
+  vision: { label: 'Vision', required: true },
+  mission: { label: 'Mission', required: true },
+  peo: { label: 'PEO', required: true },
+  pso: { label: 'PSO', required: true },
+  po: { label: 'PO', required: true },
+  lessonPlanLecture: { label: '(a) Lesson Plan — Lecture', required: true },
+  lessonPlanLab: { label: '(b) Lesson Plan — Lab', required: false },
+  lessonPlanTutorial: { label: '(c) Lesson Plan — Tutorial', required: false },
+  timetable: { label: 'Timetable', required: true },
+  questionPaper: { label: 'Question Paper', required: true },
+  sampleAnswerSheet: { label: 'Sample Answer Sheet', required: true },
+};
 
 const SCHOOL_LABELS: Record<string, string> = {
   SOE: 'SOE (School of Engineering)',
@@ -43,8 +57,8 @@ export default function CoordinatorSharedDocumentsPage() {
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
 
-  const fetchSubjects = async () => {
-    setLoading(true);
+  const fetchSubjects = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const res = await fetch('/api/coordinator/shared-documents');
       if (!res.ok) throw new Error('Failed to load coordinator subjects');
@@ -63,7 +77,7 @@ export default function CoordinatorSharedDocumentsPage() {
     } catch (err: any) {
       setActionError(err.message || 'Failed to fetch shared documents data.');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -103,7 +117,7 @@ export default function CoordinatorSharedDocumentsPage() {
       setActionSuccess(itemIndex === 18
         ? `Shared Action Plan document for School ${selectedSchool} (Item #18) uploaded and locked for all faculty.`
         : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
-      fetchSubjects();
+      fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -140,10 +154,11 @@ export default function CoordinatorSharedDocumentsPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
+      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
       setActionSuccess(itemIndex === 1
-        ? `School ${selectedSchool} Item 1 ${subKey.toUpperCase()} document updated.`
-        : `Sub-document '${subKey.toUpperCase()}' for Item #${itemIndex} updated.`);
-      fetchSubjects();
+        ? `School ${selectedSchool} Item 1 ${label} document updated.`
+        : `Sub-document '${label}' for Item #${itemIndex} updated.`);
+      fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -169,7 +184,7 @@ export default function CoordinatorSharedDocumentsPage() {
       });
       if (!res.ok) throw new Error('Failed to remove shared document');
       setActionSuccess([1, 18].includes(itemIndex) ? `Shared Item #${itemIndex} document for ${selectedSchool} removed.` : `Shared document for Item #${itemIndex} removed.`);
-      fetchSubjects();
+      fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -206,7 +221,7 @@ export default function CoordinatorSharedDocumentsPage() {
         throw new Error(errData.error || 'School update failed');
       }
       setActionSuccess(`School updated to ${school} for Item #1.`);
-      fetchSubjects();
+      fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -401,34 +416,36 @@ export default function CoordinatorSharedDocumentsPage() {
                               </div>
                             )}
 
-                            {/* Render Sub-keys for Item 1, 11, 12, 13 */}
+                            {/* Render Sub-keys for multi-part shared items */}
                             {item.subKeys ? (
                               <div className="d-flex flex-column gap-2">
                                 {item.subKeys.map((subKey) => {
                                   const subDoc = subParsed[subKey];
                                   const hasSubFile = !!subDoc?.fileName;
+                                  const config = SUB_KEY_CONFIG[subKey] || { label: subKey };
                                   return (
                                     <div key={subKey} className="d-flex align-items-center justify-content-between p-2.5 bg-light rounded-2 border">
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className="fw-bold text-uppercase small text-secondary" style={{ width: '110px' }}>
-                                          {subKey}
+                                      <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ minWidth: 0 }}>
+                                        <span className="fw-bold small text-navy-900" style={{ minWidth: '180px' }}>
+                                          {config.label}
+                                          {config.required ? <span className="text-danger ms-0.5">*</span> : <span className="text-muted ms-0.5 font-normal" style={{ fontSize: 11 }}>(optional)</span>}
                                         </span>
                                         {hasSubFile ? (
-                                          <span className="text-dark fw-semibold small font-mono-ppsu">
-                                            📄 {subDoc.fileName}
+                                          <span className="text-success fw-semibold small font-mono-ppsu text-truncate">
+                                            ✓ {subDoc.fileName}
                                           </span>
                                         ) : (
                                           <span className="text-muted small italic">Not uploaded yet</span>
                                         )}
                                       </div>
 
-                                      <div className="d-flex align-items-center gap-2">
+                                      <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                         {hasSubFile && (
                                           <Button
                                             variant="outline-primary"
                                             size="sm"
                                             onClick={() => setViewingDoc({
-                                              title: `${item.name} — (${subKey.toUpperCase()})`,
+                                              title: `${item.name} — ${config.label}`,
                                               fileName: subDoc.fileName,
                                               fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
                                             })}
@@ -444,6 +461,7 @@ export default function CoordinatorSharedDocumentsPage() {
                                           onChange={(e: any) => {
                                             const file = e.target.files?.[0];
                                             if (file) handleUploadSubItem(item.index, subKey, file);
+                                            e.target.value = '';
                                           }}
                                         />
                                       </div>

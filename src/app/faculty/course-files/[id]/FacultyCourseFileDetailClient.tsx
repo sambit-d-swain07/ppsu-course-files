@@ -271,8 +271,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     return { avg10, avg20 };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (showSpinner = false) => {
     if (!courseFileId) return;
+    if (showSpinner) setLoading(true);
     try {
       const res = await fetch(`/api/course-files/${courseFileId}`);
       if (!res.ok) {
@@ -497,7 +498,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (courseFileId) fetchData(); }, [courseFileId]);
+  useEffect(() => { if (courseFileId) fetchData(true); }, [courseFileId]);
 
   const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status);
 
@@ -932,7 +933,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     }
     if (itemIndex === 8) {
       const subs = getSubItems(8);
-      return Boolean(subs?.students?.length && subs?.criteria?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
+      const hasAnyBatchData = Boolean(
+        subs?.batches?.some((b: any) => b.fileName || b.fileUrl || (b.students?.length && b.practicalCols?.length)) ||
+        (subs?.students?.length && subs?.criteria?.length) ||
+        dbItem.fileName ||
+        dbItem.status === 'UPLOADED' ||
+        dbItem.status === 'SUBMITTED'
+      );
+      return hasAnyBatchData;
     }
     if (itemIndex === 9) {
       const subs = getSubItems(9);
@@ -1433,6 +1441,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     }
 
     const isAll5Uploaded = !!(subs.vision?.fileName && subs.mission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName);
+    const newStatus = isAll5Uploaded ? 'UPLOADED' : 'EMPTY';
+
+    setChecklist((prev) => prev.map((item) => item.itemIndex === 1 ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -1440,13 +1451,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 1,
-          status: isAll5Uploaded ? 'UPLOADED' : 'EMPTY',
+          status: newStatus,
           fileName: 'vision_mission_peo_pso_po_package.pdf',
           subItemsJson: JSON.stringify(subs)
         })
       });
       setActionSuccess(`Item 1 (${subKey.toUpperCase()}) updated.`);
-      fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
 
@@ -1468,6 +1478,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     const isCompComplete = !!(subs.timetable?.fileName && subs.questionPaper?.fileName && subs.sampleAnswerSheet?.fileName && subs.markStatement?.fileName);
     const parentFileName = `ia${itemIndex === 11 ? 1 : 2}_package.pdf`;
+    const newStatus = isCompComplete ? 'UPLOADED' : 'EMPTY';
+
+    setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -1475,13 +1488,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex,
-          status: isCompComplete ? 'UPLOADED' : 'EMPTY',
+          status: newStatus,
           fileName: parentFileName,
           subItemsJson: JSON.stringify(subs)
         })
       });
       setActionSuccess(`Sub-item updated for Item #${itemIndex}.`);
-      fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
 
@@ -1506,6 +1518,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     // Required: lessonPlanLecture + outcomeLecture; optional: lab + tutorial slots
     const isComplete = !!(subs.lessonPlanLecture?.fileName && subs.outcomeLecture?.fileName);
+    const newStatus = isComplete ? 'UPLOADED' : 'EMPTY';
+
+    setChecklist((prev) => prev.map((item) => item.itemIndex === 6 ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -1513,13 +1528,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 6,
-          status: isComplete ? 'UPLOADED' : 'EMPTY',
+          status: newStatus,
           fileName: 'course_delivery_details_package.pdf',
           subItemsJson: JSON.stringify(subs)
         })
       });
       setActionSuccess('Item 6 (Course Delivery Details) updated.');
-      fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
 
@@ -1936,7 +1950,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     subs.batches = list;
     const batchA = list.find((b: any) => b.id === 'batch-a');
     const batchB = list.find((b: any) => b.id === 'batch-b');
-    const isBothCompComplete = !!(batchA?.fileName && batchB?.fileName);
+    const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -1944,7 +1958,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 8,
-          status: isBothCompComplete ? 'UPLOADED' : 'EMPTY',
+          status: hasAnyBatchData ? 'UPLOADED' : 'EMPTY',
           fileName: 'laboratory_rubrics_package.pdf',
           subItemsJson: JSON.stringify(subs)
         })
@@ -1979,7 +1993,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     subs.batches = list;
     const batchA = list.find((b: any) => b.id === 'batch-a');
     const batchB = list.find((b: any) => b.id === 'batch-b');
-    const isBothCompComplete = !!(batchA?.fileName && batchB?.fileName);
+    const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -1987,7 +2001,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 8,
-          status: isBothCompComplete ? 'UPLOADED' : 'EMPTY',
+          status: hasAnyBatchData ? 'UPLOADED' : 'EMPTY',
           fileName: 'laboratory_rubrics_package.pdf',
           subItemsJson: JSON.stringify(subs)
         })
@@ -2019,7 +2033,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     const batchA = list.find((b: any) => b.id === 'batch-a');
     const batchB = list.find((b: any) => b.id === 'batch-b');
-    const isBothCompComplete = !!(batchA?.fileName && batchB?.fileName);
+    const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -2027,7 +2041,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 8,
-          status: isBothCompComplete ? 'UPLOADED' : 'EMPTY',
+          status: hasAnyBatchData ? 'UPLOADED' : 'EMPTY',
           subItemsJson: JSON.stringify(subs)
         })
       });
@@ -2062,7 +2076,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     const batchA = subs.batches.find((b: any) => b.id === 'batch-a');
     const batchB = subs.batches.find((b: any) => b.id === 'batch-b');
-    const isBothCompComplete = !!(batchA?.fileName && batchB?.fileName);
+    const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
@@ -2070,7 +2084,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 8,
-          status: isBothCompComplete ? 'UPLOADED' : 'EMPTY',
+          status: hasAnyBatchData ? 'UPLOADED' : 'EMPTY',
           subItemsJson: JSON.stringify(subs)
         })
       });
@@ -2101,16 +2115,68 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
 
 
+  const getIncompleteItem8Batches = (): string[] => {
+    const item8Db = checklist.find((c: any) => c.itemIndex === 8);
+    if (!item8Db) return [];
+    const subs = getSubItems(8) || {};
+    const batches: any[] = Array.isArray(subs.batches) ? subs.batches : [
+      { id: 'batch-a', name: 'Batch A' },
+      { id: 'batch-b', name: 'Batch B' }
+    ];
+
+    const incomplete: string[] = [];
+    const allStudents = getStudentList();
+    const hasBatchBStudents = allStudents.some((s: any) => String(s.batch || '').toUpperCase().includes('B'));
+
+    const batchA = batches.find((b: any) => b.id === 'batch-a' || String(b.name || '').toUpperCase().includes('BATCH A'));
+    const isBatchADone = Boolean(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length > 0 && batchA?.practicalCols?.length > 0));
+    if (!isBatchADone && !item8Db.fileName && (!item8Db.status || item8Db.status === 'EMPTY')) {
+      incomplete.push('Batch A');
+    }
+
+    const batchB = batches.find((b: any) => b.id === 'batch-b' || String(b.name || '').toUpperCase().includes('BATCH B'));
+    if (batchB || hasBatchBStudents) {
+      const isBatchBDone = Boolean(batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length > 0 && batchB?.practicalCols?.length > 0));
+      if (!isBatchBDone && !item8Db.fileName) {
+        incomplete.push('Batch B');
+      }
+    }
+
+    return incomplete;
+  };
+
   const handleSubmit = async () => {
-    // Gate: only required items must be complete
     const missingRequired = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
-    if (missingRequired.length > 0) {
-      const missingNames = missingRequired
-        .map((idx) => `Item ${idx}: ${CHECKLIST_ITEMS.find((i) => i.index === idx)?.name ?? ''}`)
-        .join('; ');
-      setActionError(`${missingRequired.length} required item(s) still incomplete — ${missingNames}.`);
+    const incompleteBatches = getIncompleteItem8Batches();
+
+    if (missingRequired.length > 0 || incompleteBatches.length > 0) {
+      setSubmitLoading(true);
+      try {
+        await fetch(`/api/course-files/${courseFileId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'DRAFT' })
+        });
+        setCourseFile((prev: any) => prev ? { ...prev, status: 'DRAFT' } : prev);
+      } catch (e) {} finally {
+        setSubmitLoading(false);
+      }
+
+      let errorParts = [];
+      if (incompleteBatches.length > 0) {
+        errorParts.push(`Item 8 (Laboratory Rubrics) is incomplete for ${incompleteBatches.join(' & ')}.`);
+      }
+      if (missingRequired.length > 0) {
+        const missingNames = missingRequired
+          .map((idx) => `Item ${idx}: ${CHECKLIST_ITEMS.find((i) => i.index === idx)?.name ?? ''}`)
+          .join('; ');
+        errorParts.push(`Missing required item(s): ${missingNames}.`);
+      }
+
+      setActionError(`Course file saved as Draft. ${errorParts.join(' ')} Please complete all required sections/batches before final submission.`);
       return;
     }
+
     if (!facultyConfirmed) {
       setActionError('Please confirm the mandatory checklist declaration checkbox.');
       return;

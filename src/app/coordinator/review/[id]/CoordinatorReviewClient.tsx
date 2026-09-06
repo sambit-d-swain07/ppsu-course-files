@@ -399,6 +399,36 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               );
                             })}
                           </div>
+                        ) : item.index === 6 ? (
+                          <div className="mt-2 small text-secondary">
+                            {[
+                              { k: 'lessonPlanLecture',  l: '(a) Lesson Plan — Lecture',       sec: 'Planning' },
+                              { k: 'lessonPlanLab',      l: '(b) Lesson Plan — Lab',           sec: 'Planning' },
+                              { k: 'lessonPlanTutorial', l: '(c) Lesson Plan — Tutorial',      sec: 'Planning' },
+                              { k: 'outcomeLecture',     l: '(d) Outcome of Lesson (Lecture)', sec: 'Outcomes' },
+                              { k: 'outcomeLab',         l: '(e) Outcome of Lab',              sec: 'Outcomes' },
+                              { k: 'outcomeTutorial',    l: '(f) Outcome of Tutorial',         sec: 'Outcomes' },
+                            ].map((sub) => {
+                              const sFile = subItems?.[sub.k];
+                              return (
+                                <div key={sub.k} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                  <span className="fw-semibold text-truncate">
+                                    {sub.l} <span className="text-muted font-mono-ppsu" style={{ fontSize: 10 }}>({sub.sec})</span>
+                                  </span>
+                                  {sFile?.fileName ? (
+                                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 6 — ${sub.l}`, fileName: sFile.fileName, fileUrl: sFile.fileUrl })}>
+                                        👁️ View
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         ) : item.index === 4 ? (
                           <div className="mt-2 small text-secondary">
                             {subItems?.students?.length ? (

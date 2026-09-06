@@ -8,7 +8,7 @@ import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 const SHARED_ITEMS = [
   { index: 1,  name: 'Item 1 — Institute Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'peo', 'pso', 'po'] },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
-  { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching' },
+  { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
   { index: 10, name: 'Item 10 — Lab Manuals / Tutorials', category: 'Practical' },
   { index: 11, name: 'Item 11 — Internal Assessment 1 (Timetable & Question Paper)', category: 'Assessment', subKeys: ['timetable', 'questionPaper'] },
@@ -16,6 +16,20 @@ const SHARED_ITEMS = [
   { index: 15, name: 'Item 15 — University Exam (Question Paper)', category: 'Assessment', subKeys: ['questionPaper'] },
   { index: 18, name: 'Item 18 — Action to be taken for next year based on CO Attainment', category: 'Institutional' }
 ];
+
+const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
+  vision: { label: 'Vision', required: true },
+  mission: { label: 'Mission', required: true },
+  peo: { label: 'PEO', required: true },
+  pso: { label: 'PSO', required: true },
+  po: { label: 'PO', required: true },
+  lessonPlanLecture: { label: '(a) Lesson Plan — Lecture', required: true },
+  lessonPlanLab: { label: '(b) Lesson Plan — Lab', required: false },
+  lessonPlanTutorial: { label: '(c) Lesson Plan — Tutorial', required: false },
+  timetable: { label: 'Timetable', required: true },
+  questionPaper: { label: 'Question Paper', required: true },
+  sampleAnswerSheet: { label: 'Sample Answer Sheet', required: true },
+};
 
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -96,8 +110,8 @@ export default function FacultyCourseCoordinatorPage() {
   const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('faculty');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const subjRes = await fetch('/api/coordinator/shared-documents');
       if (!subjRes.ok) throw new Error('Failed to load coordinator subjects');
@@ -117,7 +131,7 @@ export default function FacultyCourseCoordinatorPage() {
     } catch (err: any) {
       setActionError(err.message || 'Failed to fetch coordinator data.');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -160,7 +174,7 @@ export default function FacultyCourseCoordinatorPage() {
       setActionSuccess(isSchoolItem
         ? `Shared Action Plan document for School ${schoolCode} (Item #${itemIndex}) uploaded and locked for all faculty.`
         : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
-      fetchData();
+      fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -202,8 +216,9 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(`Shared document sub-item (${subKey}) uploaded successfully.`);
-      fetchData();
+      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
+      setActionSuccess(`Shared document sub-item (${label}) uploaded successfully.`);
+      fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -235,7 +250,7 @@ export default function FacultyCourseCoordinatorPage() {
         throw new Error(errData.error || 'Removal failed');
       }
       setActionSuccess(isSchoolItem ? `Shared Item #${itemIndex} document removed.` : `Shared document for Item #${itemIndex} removed.`);
-      fetchData();
+      fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -245,7 +260,8 @@ export default function FacultyCourseCoordinatorPage() {
 
   const handleRemoveSubItem = async (itemIndex: number, subKey: string) => {
     if (!selectedSubjectId) return;
-    if (!confirm(`Are you sure you want to remove sub-item (${subKey})?`)) return;
+    const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
+    if (!confirm(`Are you sure you want to remove sub-item (${label})?`)) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const isSchoolItem = [1, 18].includes(itemIndex);
@@ -273,8 +289,8 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Removal failed');
       }
-      setActionSuccess(`Sub-item (${subKey}) removed.`);
-      fetchData();
+      setActionSuccess(`Sub-item (${label}) removed.`);
+      fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -308,7 +324,7 @@ export default function FacultyCourseCoordinatorPage() {
         throw new Error(errData.error || 'School update failed');
       }
       setActionSuccess(`School updated to ${school} for Item #1.`);
-      fetchData();
+      fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -474,27 +490,40 @@ export default function FacultyCourseCoordinatorPage() {
                           <div className="mt-2 d-flex flex-wrap gap-2">
                             {item.subKeys.map((sk) => {
                               const skData = parsedSubs[sk];
+                              const config = SUB_KEY_CONFIG[sk] || { label: sk };
                               return (
-                                <div key={sk} className="p-2 border rounded bg-white small d-flex align-items-center gap-2">
-                                  <span className="fw-bold text-uppercase" style={{ fontSize: 11 }}>({sk}):</span>
-                                  {skData?.fileName ? (
-                                    <>
-                                      <span className="text-success text-truncate font-mono-ppsu" style={{ maxWidth: 140, fontSize: 11 }}>
+                                <div key={sk} className="p-2 border rounded bg-white small d-flex align-items-center gap-2" style={{ minWidth: 240 }}>
+                                  <div className="flex-grow-1 text-truncate">
+                                    <span className="fw-semibold text-navy-900" style={{ fontSize: 11 }}>
+                                      {config.label}
+                                      {config.required ? <span className="text-danger ms-0.5">*</span> : <span className="text-muted ms-0.5" style={{ fontSize: 10 }}>(optional)</span>}
+                                    </span>
+                                    {skData?.fileName ? (
+                                      <div className="text-success text-truncate font-mono-ppsu" style={{ fontSize: 11 }}>
                                         ✓ {skData.fileName}
-                                      </span>
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: `${item.name} — (${sk})`, fileName: skData.fileName, fileUrl: skData.fileUrl })}>
+                                      </div>
+                                    ) : (
+                                      <div className="text-muted font-mono-ppsu" style={{ fontSize: 10 }}>
+                                        ✗ Pending upload
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="d-flex align-items-center gap-1">
+                                    {skData?.fileName && (
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 5px' }} onClick={() => setViewingDoc({ title: `${item.name} — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}>
                                         View
                                       </Button>
+                                    )}
+                                    <label className="btn btn-outline-primary btn-sm py-0 px-2 m-0" style={{ fontSize: 10, cursor: 'pointer' }}>
+                                      {skData?.fileName ? 'Replace' : 'Upload'}
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadSubItem(item.index, sk, f); e.currentTarget.value = ''; }} />
+                                    </label>
+                                    {skData?.fileName && (
                                       <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 5px' }} onClick={() => handleRemoveSubItem(item.index, sk)}>
                                         ×
                                       </Button>
-                                    </>
-                                  ) : (
-                                    <label className="btn btn-outline-primary btn-sm py-0 px-2 m-0" style={{ fontSize: 10 }}>
-                                      Upload
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadSubItem(item.index, sk, f); }} />
-                                    </label>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
