@@ -497,7 +497,8 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
     }
 
     // Merge Course Coordinator shared document if item is in SHARED_COORDINATOR_ITEM_INDICES
-    if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex)) {
+    // Note: Item 5 is admin-managed (handled above) and must NOT be treated as coordinator-shared.
+    if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex) && item.itemIndex !== 5) {
       const shared = (item.itemIndex === 1 || item.itemIndex === 18) ? schoolSharedMap.get(item.itemIndex) : sharedMap.get(item.itemIndex);
       const isSharedUploaded = shared && shared.status === 'UPLOADED';
 

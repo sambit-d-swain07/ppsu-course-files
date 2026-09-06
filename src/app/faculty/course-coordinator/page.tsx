@@ -107,13 +107,18 @@ export default function FacultyCourseCoordinatorPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('faculty');
+  const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('shared');
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const subjRes = await fetch('/api/coordinator/shared-documents');
+      // Fire both calls in parallel for faster load
+      const [subjRes, facRes] = await Promise.all([
+        fetch('/api/coordinator/shared-documents'),
+        fetch('/api/coordinator/faculty')
+      ]);
+
       if (!subjRes.ok) throw new Error('Failed to load coordinator subjects');
       const subjData = await subjRes.json();
       const list = Array.isArray(subjData.subjects) ? subjData.subjects : [];
@@ -123,7 +128,6 @@ export default function FacultyCourseCoordinatorPage() {
         setSelectedSubjectId(list[0].id);
       }
 
-      const facRes = await fetch('/api/coordinator/faculty');
       if (facRes.ok) {
         const facData = await facRes.json();
         setFacultyUnderMe(Array.isArray(facData.faculty) ? facData.faculty : []);
@@ -431,7 +435,10 @@ export default function FacultyCourseCoordinatorPage() {
               <small className="text-muted">Uploaded files appear read-only / locked in every faculty member's checklist for this subject.</small>
             </div>
             <Badge bg="info" className="px-3 py-2 text-dark">
-              {sharedDocsList.filter((d: any) => d.status === 'UPLOADED').length} / {SHARED_ITEMS.length} Uploaded
+              {SHARED_ITEMS.filter((item) => {
+                  const doc = [1, 18].includes(item.index) ? schoolSharedMap.get(item.index) : sharedMap.get(item.index);
+                  return doc && doc.status === 'UPLOADED';
+                }).length} / {SHARED_ITEMS.length} Uploaded
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">

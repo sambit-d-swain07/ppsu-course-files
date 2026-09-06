@@ -162,6 +162,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [facultySignatureName, setFacultySignatureName] = useState('');
   const [access, setAccess] = useState<{ mode: string; batch?: string; facultyName?: string; allowedItems?: number[]; editableItems?: number[] }>({ mode: 'OWNER' });
   const saveTimeoutsRef = useRef<Record<number, NodeJS.Timeout>>({});
+  // Refs that always hold the latest rows — needed so debounced save callbacks
+  // don't capture stale closures and overwrite marks the user just typed.
+  const item8RowsRef = useRef<any[]>([]);
+  const item9RowsRef = useRef<any[]>([]);
   const [activeIaItem, setActiveIaItem] = useState<number | null>(null);
   const [addDocName, setAddDocName] = useState('Mark Statement & Result Analysis');
   const [addDocFile, setAddDocFile] = useState<File | null>(null);
@@ -480,8 +484,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       const mergedStudentList = buildStudentList(checklistItems);
       const r8 = buildItem8Rows(checklistItems, mergedStudentList);
       const { rows: r9, criteria: c9 } = buildRows(checklistItems, 9, mergedStudentList);
-      setItem8Rows(r8);
-      setItem9Rows(r9); setItem9Criteria(c9);
+      setItem8Rows(r8); item8RowsRef.current = r8;
+      setItem9Rows(r9); item9RowsRef.current = r9; setItem9Criteria(c9);
 
       const item8 = checklistItems.find((cli: any) => cli.itemIndex === 8);
       if (item8?.subItemsJson) {
@@ -689,24 +693,32 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const handleMarkChange = useCallback((itemIndex: number, studentId: string, criterionId: string, value: number) => {
     if (isLocked) return;
     if (itemIndex === 8) {
-      const targetRow = item8Rows.find(r => r.studentId === studentId || r.id === studentId);
+      const targetRow = item8RowsRef.current.find(r => r.studentId === studentId || r.id === studentId);
       if (targetRow && !isRowEditableByCurrentFaculty(targetRow.batch)) return;
     }
     const clamped = Math.max(0, value || 0);
     if (itemIndex === 8) {
-      setItem8Rows(prev => prev.map(r => (r.studentId === studentId || r.id === studentId) ? (isRowEditableByCurrentFaculty(r.batch) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r) : r));
+      setItem8Rows(prev => {
+        const next = prev.map(r => (r.studentId === studentId || r.id === studentId) ? (isRowEditableByCurrentFaculty(r.batch) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r) : r);
+        item8RowsRef.current = next;
+        return next;
+      });
     } else if (itemIndex === 9) {
-      setItem9Rows(prev => prev.map(r => (r.studentId === studentId || r.id === studentId) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r));
+      setItem9Rows(prev => {
+        const next = prev.map(r => (r.studentId === studentId || r.id === studentId) ? { ...r, marks: { ...r.marks, [criterionId]: clamped } } : r);
+        item9RowsRef.current = next;
+        return next;
+      });
     }
-    const saveRows = itemIndex === 8 ? item8Rows : item9Rows;
-    const updatedRows = saveRows.map(r => (r.studentId === studentId || r.id === studentId) ? (itemIndex === 8 && !isRowEditableByCurrentFaculty(r.batch) ? r : { ...r, marks: { ...r.marks, [criterionId]: clamped } }) : r);
     if (saveTimeoutsRef.current[itemIndex]) clearTimeout(saveTimeoutsRef.current[itemIndex]);
     saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
+      // Read from ref — always contains the latest rows, not stale closure state.
+      const latestRows = itemIndex === 8 ? item8RowsRef.current : item9RowsRef.current;
       const subs = getSubItems(itemIndex) || {};
-      subs.students = updatedRows;
+      subs.students = latestRows;
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
     }, 600);
-  }, [isLocked, item8Rows, item9Rows, checklist, isRowEditableByCurrentFaculty]);
+  }, [isLocked, checklist, isRowEditableByCurrentFaculty]);
 
   const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
     if (isLocked) return;
@@ -1229,10 +1241,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const newCriteria = normalizeCriteria(subs.criteria);
     if (itemIndex === 8) {
       setItem8Criteria(newCriteria);
-      setItem8Rows(prev => prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }));
+      setItem8Rows(prev => { const next = prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }); item8RowsRef.current = next; return next; });
     } else {
       setItem9Criteria(newCriteria);
-      setItem9Rows(prev => prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }));
+      setItem9Rows(prev => { const next = prev.map(r => { const m = { ...r.marks }; newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; }); return { ...r, marks: m }; }); item9RowsRef.current = next; return next; });
     }
     fetchData();
   };
@@ -2521,7 +2533,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       {/* Course Coordinator Centrally Uploaded & Locked Banner */}
                       {dbItem.isCoordinatorShared && !isRestricted && (
                         <div className="mt-1.5 d-flex align-items-center gap-2">
-                          {dbItem.coordinatorUploaded ? (
+                          {(dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName) ? (
                             <span className="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small fw-semibold">
                               ✓ Uploaded by Course Coordinator — view only
                             </span>
@@ -3854,7 +3866,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               ) : (
                                 dbItem.isCoordinatorShared ? (
                                   <div className="text-muted mb-1" style={{ fontSize: 11 }}>
-                                    Not uploaded yet — pending Course Coordinator
+                                    {(dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName)
+                                      ? <span className="text-success fw-semibold">✓ Shared by Coordinator (combined document)</span>
+                                      : 'Not uploaded yet — pending Course Coordinator'
+                                    }
                                   </div>
                                 ) : (
                                   <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
@@ -3915,7 +3930,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
                                       ) : (
                                         <div className="text-muted mb-1" style={{ fontSize: 11 }}>
-                                          {isSubCoordShared ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                          {isSubCoordShared
+                                            ? (dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName)
+                                              ? <span className="text-success fw-semibold" style={{ fontSize: 11 }}>✓ Shared by Coordinator (combined document)</span>
+                                              : 'Not uploaded yet — pending Course Coordinator'
+                                            : '✗ Not uploaded'
+                                          }
                                         </div>
                                       )}
                                     </div>
@@ -3979,7 +3999,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   </div>
                                 ) : (
                                   <div className="text-muted mb-1" style={{ fontSize: 11 }}>
-                                    {isSubLockedByCoord ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
+                                    {isSubLockedByCoord
+                                      ? (dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName)
+                                        ? <span className="text-success fw-semibold" style={{ fontSize: 11 }}>✓ Shared by Coordinator (combined document)</span>
+                                        : 'Not uploaded yet — pending Course Coordinator'
+                                      : '✗ Not uploaded'
+                                    }
                                   </div>
                                 )}
                               </div>
@@ -4866,12 +4891,27 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         const item1Doc = checklist.find((c) => c.itemIndex === 1);
         let parsedItem1: any = {};
         try { if (item1Doc?.subItemsJson) parsedItem1 = JSON.parse(item1Doc.subItemsJson); } catch (e) {}
-        const item1Done = Boolean(parsedItem1.vision && parsedItem1.mission && parsedItem1.peo && parsedItem1.pso && parsedItem1.po);
+        // Item 1 is complete if the coordinator uploaded it as a whole (coordinatorUploaded flag)
+        // OR if all five sub-documents (vision/mission/peo/pso/po) are individually uploaded.
+        const item1Done = Boolean(
+          item1Doc?.coordinatorUploaded ||
+          item1Doc?.sharedStatus === 'UPLOADED' ||
+          item1Doc?.fileName ||
+          (parsedItem1.vision && parsedItem1.mission && parsedItem1.peo && parsedItem1.pso && parsedItem1.po)
+        );
         const item18Doc = checklist.find((c) => c.itemIndex === 18);
-        const item18Done = Boolean(item18Doc?.status === 'UPLOADED' || item18Doc?.fileName);
+        // Item 18 is complete if coordinator uploaded it (coordinatorUploaded flag, sharedStatus, or fileName)
+        const item18Done = Boolean(
+          item18Doc?.coordinatorUploaded ||
+          item18Doc?.sharedStatus === 'UPLOADED' ||
+          item18Doc?.status === 'UPLOADED' ||
+          item18Doc?.fileName
+        );
         const isCoordinatorReady = item1Done && item18Done;
         const missingRequiredItems = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
-        const isAllReady = missingRequiredItems.length === 0 && isCoordinatorReady;
+        // Faculty items being complete is sufficient to enable the Submit button.
+        // The API will validate coordinator shared docs server-side and return a clear error.
+        const isAllReady = missingRequiredItems.length === 0;
 
         return (
           <Card className="card-custom border-0 shadow-sm mb-4">
@@ -4917,11 +4957,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
               <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
                 <div className="small text-secondary">
-                  {isAllReady
-                    ? '✓ All required items complete. Ready to submit.'
+                  {missingRequiredItems.length > 0
+                    ? `⚠️ ${missingRequiredItems.length} required item(s) still incomplete: ${missingRequiredItems.map((idx) => `Item ${idx}`).join(', ')}.`
                     : !isCoordinatorReady
-                    ? '⚠️ Course Coordinator must upload Item 1 (Vision/Mission/PEO/PSO/PO) and Item 18 before submission.'
-                    : `⚠️ ${missingRequiredItems.length} required item(s) still incomplete: ${missingRequiredItems.map((idx) => `Item ${idx}`).join(', ')}.`}
+                    ? '✓ Your required items are complete. Note: Coordinator shared docs (Items 1 & 18) are pending — you can submit now and the coordinator can upload them separately.'
+                    : '✓ All required items complete. Ready to submit.'}
                 </div>
 
                 <div className="d-flex align-items-center gap-2 flex-wrap">
@@ -4935,7 +4975,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   <Button
                     id="btn-submit-checklist"
                     className="btn-ppsu-accent px-4 py-2"
-                    disabled={!isAllReady || !facultyConfirmed || submitLoading}
+                    disabled={!isAllReady || !facultyConfirmed || submitLoading || courseFile?.status === 'SUBMITTED' || courseFile?.status === 'APPROVED' || courseFile?.status === 'UNDER_REVIEW'}
                     onClick={handleSubmit}
                   >
                     {submitLoading
