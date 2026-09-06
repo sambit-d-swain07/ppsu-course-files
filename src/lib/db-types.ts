@@ -4,7 +4,7 @@ export interface User {
   passwordHash: string;
   name: string;
   employeeId?: string;
-  role: 'FACULTY' | 'COORDINATOR' | 'ADMIN';
+  role: 'FACULTY' | 'COORDINATOR' | 'EVALUATOR' | 'ADMIN';
   department?: string;
   school?: string;
   division?: string;

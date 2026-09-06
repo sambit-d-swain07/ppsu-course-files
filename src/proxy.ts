@@ -22,7 +22,7 @@ export async function proxy(request: NextRequest) {
   if (pathname === '/') {
     if (payload) {
       if (payload.role === 'FACULTY') return NextResponse.redirect(new URL('/faculty/dashboard', request.url));
-      if (payload.role === 'COORDINATOR') return NextResponse.redirect(new URL('/coordinator/dashboard', request.url));
+      if (payload.role === 'COORDINATOR' || payload.role === 'EVALUATOR') return NextResponse.redirect(new URL('/coordinator/dashboard', request.url));
       if (payload.role === 'ADMIN') return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
     return NextResponse.redirect(new URL('/login', request.url));
@@ -42,7 +42,7 @@ export async function proxy(request: NextRequest) {
     if (!payload) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    if (payload.role !== 'COORDINATOR' && payload.role !== 'ADMIN') {
+    if (payload.role !== 'COORDINATOR' && payload.role !== 'EVALUATOR' && payload.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/faculty/dashboard', request.url));
     }
   }
@@ -60,7 +60,7 @@ export async function proxy(request: NextRequest) {
   if (pathname === '/login') {
     if (payload) {
       if (payload.role === 'FACULTY') return NextResponse.redirect(new URL('/faculty/dashboard', request.url));
-      if (payload.role === 'COORDINATOR') return NextResponse.redirect(new URL('/coordinator/dashboard', request.url));
+      if (payload.role === 'COORDINATOR' || payload.role === 'EVALUATOR') return NextResponse.redirect(new URL('/coordinator/dashboard', request.url));
       if (payload.role === 'ADMIN') return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
   }

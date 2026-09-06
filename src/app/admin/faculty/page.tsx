@@ -31,7 +31,7 @@ export default function AdminFacultyPage() {
         { role: 'COORDINATOR', title: 'Coordinators / Evaluators' },
         { role: 'ADMIN', title: 'Admins' }
       ].map(section => {
-        const sectionUsers = users.filter(user => user.role === section.role);
+        const sectionUsers = users.filter(user => user.role === section.role || (section.role === 'COORDINATOR' && user.role === 'EVALUATOR'));
         return <section key={section.role} className="mb-4">
           <h5 className="fw-bold text-navy-900 mb-3">{section.title} <span className="text-secondary small fw-normal">({sectionUsers.length})</span></h5>
           <div className="card-custom p-0 overflow-hidden">

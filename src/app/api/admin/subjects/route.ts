@@ -23,7 +23,8 @@ function validateAssignments(body: any, users: any[]) {
   const labTeacherB = body.labTeacherBId ? byId.get(body.labTeacherBId) : null;
   const labTeacherC = body.labTeacherCId ? byId.get(body.labTeacherCId) : null;
   if (body.courseCoordinatorId === body.evaluatorId) return 'The Evaluator must be a different person from the Course Coordinator';
-  if (coordinator?.role !== 'FACULTY' || evaluator?.role !== 'COORDINATOR') return 'Course Coordinator must be a Faculty user and Evaluator must be a Coordinator user';
+  if (coordinator?.role !== 'FACULTY' && coordinator?.role !== 'COORDINATOR') return 'Course Coordinator must be a Faculty or Coordinator user';
+  if (evaluator?.role !== 'COORDINATOR' && evaluator?.role !== 'EVALUATOR' && evaluator?.role !== 'FACULTY') return 'Evaluator must be an Evaluator, Coordinator or Faculty user';
   if (teacher?.role !== 'FACULTY' || labTeacherA?.role !== 'FACULTY' || (body.labTeacherBId && labTeacherB?.role !== 'FACULTY') || (body.labTeacherCId && labTeacherC?.role !== 'FACULTY')) return 'Course Teacher and all selected Lab Teachers must be Faculty users';
   return null;
 }
@@ -49,7 +50,7 @@ function normalize(body: any) {
 export async function GET(req: NextRequest) {
   if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
   const [subjects, users] = await Promise.all([getSubjects(), getUsers()]);
-  return noStoreJson({ subjects, users: users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR') });
+  return noStoreJson({ subjects, users: users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR' || user.role === 'EVALUATOR') });
 }
 
 export async function POST(req: NextRequest) {

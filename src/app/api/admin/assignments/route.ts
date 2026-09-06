@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       statusCounts: statusCounts[u.id] ?? { completed: 0, pending: 0, revision: 0 }
     }));
 
-    const coordinators = allUsers.filter(u => u.role === 'COORDINATOR').map(u => ({
+    const coordinators = allUsers.filter(u => u.role === 'COORDINATOR' || u.role === 'EVALUATOR').map(u => ({
       id: u.id,
       name: u.name,
       email: u.email,

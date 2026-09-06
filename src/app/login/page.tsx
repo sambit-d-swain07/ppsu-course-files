@@ -62,7 +62,7 @@ export default function LoginPage() {
 
       if (data.role === 'FACULTY') {
         router.push('/faculty/dashboard');
-      } else if (data.role === 'COORDINATOR') {
+      } else if (data.role === 'COORDINATOR' || data.role === 'EVALUATOR') {
         router.push('/coordinator/dashboard');
       } else if (data.role === 'ADMIN') {
         router.push('/admin/dashboard');
