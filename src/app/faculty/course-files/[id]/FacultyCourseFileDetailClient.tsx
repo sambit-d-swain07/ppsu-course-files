@@ -117,6 +117,24 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
   });
 };
 
+const uploadFileToServer = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.fileUrl) return data.fileUrl;
+    }
+  } catch (e) {
+    console.warn('FormData upload failed, falling back to data URL:', e);
+  }
+  return await readFileAsDataUrl(file);
+};
+
 const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
   .filter((criterion: any) => criterion && typeof criterion === 'object' && String(criterion.id || '').trim())
   .map((criterion: any) => ({
@@ -1176,18 +1194,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const handleStructuredFileUpload = async (itemIndex: number, file?: File) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
-    subs.file = file ? { fileName: file.name, fileUrl: await readFileAsDataUrl(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
+    subs.file = file ? { fileName: file.name, fileUrl: await uploadFileToServer(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
     await saveStructuredItem(itemIndex, subs, file || subs.students?.length || subs.criteria?.length ? 'UPLOADED' : 'EMPTY');
     setActionSuccess(file ? `File uploaded for Item #${itemIndex}.` : `File removed from Item #${itemIndex}.`);
-    fetchData();
   };
 
   const handleSubFileUpload = async (itemIndex: number, key: string, file?: File) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
-    subs[key] = file ? { fileName: file.name, fileUrl: await readFileAsDataUrl(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
+    subs[key] = file ? { fileName: file.name, fileUrl: await uploadFileToServer(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
     await saveStructuredItem(itemIndex, subs, file || subs.students?.length || subs.assignmentTopics?.length ? 'UPLOADED' : 'EMPTY');
-    fetchData();
   };
 
   const handleAssignmentMarkChange = async (studentId: string, value: number) => {
@@ -1302,7 +1318,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     setUploadingItem(itemIndex);
     try {
-      const dataUrl = await readFileAsDataUrl(selectedFile);
+      const dataUrl = await uploadFileToServer(selectedFile);
       const isSig = itemIndex === 20 && access.mode !== 'LAB_BATCH';
       let studentListJson: string | undefined;
       if (itemIndex === 4 && /\.(csv|txt)$/i.test(selectedFile.name)) {
@@ -1345,7 +1361,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         })
       });
       if (!res.ok) {
-        fetchData();
         throw new Error('Upload failed');
       }
 
@@ -1432,7 +1447,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       subs[subKey] = {
         fileName: file.name,
         fileUrl: dataUrl,
@@ -1468,7 +1483,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       subs[subKey] = {
         fileName: file.name,
         fileUrl: dataUrl,
@@ -1508,7 +1523,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       subs[subKey] = {
         fileName: file.name,
         fileUrl: dataUrl,
@@ -1545,7 +1560,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       subs[subKey] = {
         fileName: file.name,
         fileUrl: dataUrl,
@@ -1629,7 +1644,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const list = subs.assignments || [];
     const target = list.find((a: any) => a.id === id);
     if (target && file) {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       target.fileName = file.name;
       target.fileUrl = dataUrl;
       subs.assignments = list;
@@ -1682,7 +1697,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     let dataUrl = SAMPLE_PDF_DATA_URL;
 
     if (addDocFile) {
-      dataUrl = await readFileAsDataUrl(addDocFile);
+      dataUrl = await uploadFileToServer(addDocFile);
     }
 
     const newDoc = {
@@ -1760,7 +1775,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       });
     }
 
-    const dataUrl = await readFileAsDataUrl(item19DocFile);
+    const dataUrl = await uploadFileToServer(item19DocFile);
     const newDoc = {
       id: `doc-${Date.now()}`,
       name: item19DocName.trim(),
@@ -2316,7 +2331,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           )}
         </Card.Header>
         <Card.Body>
-          <Row className="g-3">
+          <Row className="g-3 align-items-end">
             <Col xs={12} md={4}>
               <Form.Label className="small fw-semibold text-secondary mb-1">
                 {access.mode === 'LAB_BATCH' ? 'Faculty Name' : 'Course Faculty'}
@@ -2379,10 +2394,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 className="py-1"
               />
             </Col>
-            <Col xs={12} md={access.mode === 'LAB_BATCH' ? 2 : 4}>
-              <Form.Label className="small fw-semibold text-secondary mb-1">
-                Division
-                <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(from subject allocation)</span>
+            <Col xs={12} md={access.mode === 'LAB_BATCH' ? 2 : 4} className="d-flex flex-column justify-content-end">
+              <Form.Label className="small fw-semibold text-secondary mb-1" style={{ minHeight: 38, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                <div>
+                  Division
+                  <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(from subject allocation)</span>
+                </div>
               </Form.Label>
               <Form.Control
                 type="text"
@@ -2395,10 +2412,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               />
             </Col>
             {access.mode === 'LAB_BATCH' && (
-              <Col xs={12} md={2}>
-                <Form.Label className="small fw-semibold text-secondary mb-1">
-                  Batch
-                  <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(assigned)</span>
+              <Col xs={12} md={2} className="d-flex flex-column justify-content-end">
+                <Form.Label className="small fw-semibold text-secondary mb-1" style={{ minHeight: 38, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                  <div>
+                    Batch
+                    <span className="ms-1 text-muted" style={{ fontSize: 11, fontWeight: 400 }}>(assigned)</span>
+                  </div>
                 </Form.Label>
                 <Form.Control
                   type="text"
@@ -3724,7 +3743,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   )}
 
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && item.index !== 18 && (
+                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && item.index !== 14 && item.index !== 18 && item.index !== 19 && (
                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                       {dbItem.isCoordinatorShared ? (
                         (dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) ? (
@@ -3737,22 +3756,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             👁️ View
                           </Button>
                         ) : null
-                      ) : (
-                        item.index === 19 ? (
-                        !isLocked && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            style={{ fontSize: 12 }}
-                            onClick={() => {
-                              setItem19DocName('');
-                              setItem19DocFile(null);
-                              setItem19ModalOpen(true);
-                            }}
-                          >
-                            + Add Document
-                          </Button>
-                        )
                       ) : complete ? (
                           <>
                             <Button
@@ -3768,10 +3771,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 <label
                                   className="btn btn-outline-secondary btn-sm m-0"
                                   style={{ fontSize: 12, cursor: 'pointer' }}
-                                  htmlFor={`file-replace-${item.index}`}
                                 >
                                   Replace
-                                  <input id={`file-replace-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                                  <input type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                                 </label>
                                 <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
                                   Remove
@@ -3791,13 +3793,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               color: isLocked ? '#6c757d' : '#fff',
                               fontSize: 12, border: 'none', cursor: isLocked ? 'not-allowed' : 'pointer'
                             }}
-                            htmlFor={`file-upload-${item.index}`}
                           >
                             {isSigItem ? 'Upload Signature File' : 'Upload File'}
-                            <input id={`file-upload-${item.index}`} type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                            <input type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                           </label>
                         )
-                      )}
+                      }
                     </div>
                   )}
                 </div>
@@ -5001,7 +5002,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <span className="text-muted small ms-2">· Verified Document Inspection</span>
             </div>
             <a
-              href={viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:') ? viewingDoc.fileUrl : SAMPLE_PDF_DATA_URL}
+              href={viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL}
               download={viewingDoc?.fileName || 'document.pdf'}
               className="btn btn-outline-primary btn-sm"
             >
@@ -5010,7 +5011,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           </div>
 
           {(() => {
-            const url = viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:') ? viewingDoc.fileUrl : SAMPLE_PDF_DATA_URL;
+            const url = viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL;
             const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || (viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:image/'));
             const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (viewingDoc?.fileUrl && (viewingDoc.fileUrl.includes('data:text/csv') || viewingDoc.fileUrl.includes('data:text/plain') || viewingDoc.fileUrl.includes('data:application/vnd.ms-excel')));
 
