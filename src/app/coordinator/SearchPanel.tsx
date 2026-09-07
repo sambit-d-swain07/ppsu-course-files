@@ -21,7 +21,7 @@ export default function SearchPanel({ onSearch, buttonText = "Go to Evaluation" 
 
   // Fetch course files & extrapolate faculty and schools
   useEffect(() => {
-    fetch('/api/course-files')
+    fetch('/api/course-files?scope=coordinator')
       .then(res => res.json())
       .then(data => {
         if (data.courseFiles && data.courseFiles.length > 0) {

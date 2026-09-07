@@ -9,7 +9,7 @@ export default function CoordinatorCourseFiles() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/course-files')
+    fetch('/api/course-files?scope=coordinator')
       .then((res) => res.json())
       .then((data) => {
         if (data.courseFiles) {

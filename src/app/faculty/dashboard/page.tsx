@@ -38,7 +38,7 @@ export default function FacultyDashboard() {
 
   const fetchCourses = () => {
     setLoading(true);
-    fetch('/api/course-files')
+    fetch('/api/course-files?scope=faculty')
       .then((r) => r.json())
       .then((data) => {
         if (data.courseFiles) setCourses(data.courseFiles);

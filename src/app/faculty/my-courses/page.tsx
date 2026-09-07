@@ -9,7 +9,7 @@ export default function FacultyMyCourses() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/course-files')
+    fetch('/api/course-files?scope=faculty')
       .then((res) => res.json())
       .then((data) => {
         if (data.courseFiles) {

@@ -75,12 +75,11 @@ export async function getCourseFileById(id: string) {
 }
 
 export async function getCourseFilesByFacultyId(facultyId: string) {
-  // Step 1: find all subjects this faculty is involved with — 1 query
+  // Step 1: find all subjects this faculty is directly teaching — 1 query
   const subjects = await prisma.subject.findMany({
     where: {
       OR: [
         { courseTeacherId: facultyId },
-        { courseCoordinatorId: facultyId },
         { labTeacherAId: facultyId },
         { labTeacherBId: facultyId },
         { labTeacherCId: facultyId }
@@ -120,12 +119,12 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
     }
   }
 
-  // Step 4: final fetch with all includes — 1 query
+  // Step 4: final fetch with all includes — strictly direct teaching assignments
   return prisma.courseFile.findMany({
     where: {
       OR: [
         { facultyId },
-        { subject: { OR: [{ courseCoordinatorId: facultyId }, { labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
+        { subject: { OR: [{ courseTeacherId: facultyId }, { labTeacherAId: facultyId }, { labTeacherBId: facultyId }, { labTeacherCId: facultyId }] } }
       ]
     },
     include: {
@@ -245,8 +244,19 @@ export async function getFacultyUnderCourseCoordinator(coordinatorId: string) {
       { user: subj.labTeacherC, roleOnSubject: 'Lab Teacher C' }
     ];
 
+    // Group roles per user for this specific subject
+    const userSubjectRolesMap = new Map<string, { user: any; roles: string[] }>();
     roles.forEach(({ user, roleOnSubject }) => {
       if (!user) return;
+      if (!userSubjectRolesMap.has(user.id)) {
+        userSubjectRolesMap.set(user.id, { user, roles: [] });
+      }
+      if (!userSubjectRolesMap.get(user.id)!.roles.includes(roleOnSubject)) {
+        userSubjectRolesMap.get(user.id)!.roles.push(roleOnSubject);
+      }
+    });
+
+    userSubjectRolesMap.forEach(({ user, roles }) => {
       if (!facultyMap.has(user.id)) {
         facultyMap.set(user.id, { user, assignments: [] });
       }
@@ -255,7 +265,7 @@ export async function getFacultyUnderCourseCoordinator(coordinatorId: string) {
         subjectCode: subj.subjectCode,
         subjectName: subj.subjectName,
         semester: subj.semester,
-        roleOnSubject,
+        roleOnSubject: roles.join(', '),
         courseFileStatus: subj.courseFile?.status || 'NOT_SUBMITTED',
         courseFileId: subj.courseFile?.id || null
       });

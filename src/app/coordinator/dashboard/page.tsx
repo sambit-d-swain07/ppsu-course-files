@@ -41,7 +41,7 @@ export default function CoordinatorDashboard() {
   const [assignedFaculty, setAssignedFaculty] = useState<any[]>([]);
 
   const fetchCourses = () => {
-    fetch('/api/course-files')
+    fetch('/api/course-files?scope=coordinator')
       .then((r) => r.json())
       .then((data) => {
         if (data.courseFiles) setCourses(data.courseFiles);

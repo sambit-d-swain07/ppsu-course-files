@@ -21,10 +21,14 @@ export async function GET(req: NextRequest) {
     const payload = await verifyToken(token);
     if (!payload) return noStoreJson({ error: 'Unauthorized' }, { status: 401 });
 
+    const url = new URL(req.url);
+    const scope = url.searchParams.get('scope');
+    const referer = req.headers.get('referer') || '';
+
     let rawFiles: any[];
-    if (payload.role === 'ADMIN') {
+    if (payload.role === 'ADMIN' && scope !== 'faculty') {
       rawFiles = await getCourseFiles();
-    } else if (payload.role === 'COORDINATOR') {
+    } else if (scope === 'coordinator' || (!scope && referer.includes('/coordinator') && payload.role !== 'FACULTY')) {
       rawFiles = await getCourseFilesForCoordinator(payload.userId);
     } else {
       rawFiles = await getCourseFilesByFacultyId(payload.userId);
