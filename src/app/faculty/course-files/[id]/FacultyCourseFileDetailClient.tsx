@@ -166,6 +166,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // don't capture stale closures and overwrite marks the user just typed.
   const item8RowsRef = useRef<any[]>([]);
   const item9RowsRef = useRef<any[]>([]);
+  const item8CriteriaRef = useRef<any[]>([]);
+  const item9CriteriaRef = useRef<any[]>([]);
   const [activeIaItem, setActiveIaItem] = useState<number | null>(null);
   const [addDocName, setAddDocName] = useState('Mark Statement & Result Analysis');
   const [addDocFile, setAddDocFile] = useState<File | null>(null);
@@ -444,10 +446,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         const dbItem = items.find((c: any) => c.itemIndex === itemIndex);
         let rawSubs: any = {};
         try { if (dbItem?.subItemsJson) rawSubs = JSON.parse(dbItem.subItemsJson); } catch {}
-        const defaultCriteria = [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+        const defaultCriteria = [{ id: 'internal-1', label: 'Internal 1', max: 30, fixed: true }, { id: 'internal-2', label: 'Internal 2', max: 30, fixed: true }];
         const criteria = (Array.isArray(rawSubs.criteria) && rawSubs.criteria.length ? rawSubs.criteria : defaultCriteria)
           .filter((c: any) => c && String(c.id || '').trim())
-          .map((c: any) => ({ ...c, id: String(c.id), label: String(c.label || 'Criterion'), max: Number(c.max) || 0 }));
+          .map((c: any) => {
+            const idStr = String(c.id);
+            const normalizedId = idStr === 'internal-exam-1' ? 'internal-1' : idStr === 'internal-exam-2' ? 'internal-2' : idStr;
+            return { ...c, id: normalizedId, label: String(c.label || 'Criterion'), max: Number(c.max) || 0 };
+          });
 
         const storedById = new Map<string, any>(
           (Array.isArray(rawSubs.students) ? rawSubs.students : []).filter(Boolean).map((r: any) => [r.studentId || r.enrolmentNumber, r])
@@ -468,14 +474,24 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
           const lm = labMarks.get(s.id) || labMarks.get(s.enrolmentNumber) || {};
           const marks: Record<string, number> = {};
-          criteria.forEach((c: any) => { const v = lm[c.id] ?? prev.marks?.[c.id]; marks[c.id] = v !== undefined ? Number(v) : 0; });
+          criteria.forEach((c: any) => {
+            const altId = c.id === 'internal-1' ? 'internal-exam-1' : c.id === 'internal-2' ? 'internal-exam-2' : c.id;
+            const v = lm[c.id] ?? lm[altId] ?? prev.marks?.[c.id] ?? prev.marks?.[altId];
+            marks[c.id] = v !== undefined ? Number(v) : 0;
+          });
           return { studentId: s.id, name: s.name, enrolmentNumber: s.enrolmentNumber, marks, batch: s.batch || lm.batch || prev.batch || 'A' };
         });
         const manualRows = (Array.isArray(rawSubs.students) ? rawSubs.students : [])
           .filter((r: any) => r?.isManual)
           .map((r: any) => {
             const marks = { ...(r.marks || {}) };
-            criteria.forEach((c: any) => { if (marks[c.id] === undefined) marks[c.id] = 0; });
+            criteria.forEach((c: any) => {
+              const altId = c.id === 'internal-1' ? 'internal-exam-1' : c.id === 'internal-2' ? 'internal-exam-2' : c.id;
+              if (marks[c.id] === undefined && marks[altId] !== undefined) {
+                marks[c.id] = marks[altId];
+              }
+              if (marks[c.id] === undefined) marks[c.id] = 0;
+            });
             return { studentId: r.studentId, name: r.name, enrolmentNumber: r.enrolmentNumber, marks, isManual: true, batch: r.batch };
           });
         return { rows: [...autoRows, ...manualRows], criteria };
@@ -485,7 +501,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       const r8 = buildItem8Rows(checklistItems, mergedStudentList);
       const { rows: r9, criteria: c9 } = buildRows(checklistItems, 9, mergedStudentList);
       setItem8Rows(r8); item8RowsRef.current = r8;
-      setItem9Rows(r9); item9RowsRef.current = r9; setItem9Criteria(c9);
+      setItem9Rows(r9); item9RowsRef.current = r9;
+      setItem9Criteria(c9); item9CriteriaRef.current = c9;
 
       const item8 = checklistItems.find((cli: any) => cli.itemIndex === 8);
       if (item8?.subItemsJson) {
@@ -567,13 +584,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           return { ...row, [field]: Math.min(maxCap, numVal) };
         }
       });
+      item8RowsRef.current = updated;
       if (saveTimeoutsRef.current[8]) clearTimeout(saveTimeoutsRef.current[8]);
       saveTimeoutsRef.current[8] = setTimeout(() => {
         const subs = getSubItems(8) || {};
         subs.numPracticals = numPracticals;
-        subs.students = updated;
+        subs.students = item8RowsRef.current;
         saveStructuredItem(8, subs, 'UPLOADED');
-      }, 600);
+      }, 500);
       return updated;
     });
   }, [isLocked, numPracticals, item8Rows, isRowEditableByCurrentFaculty]);
@@ -622,12 +640,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
     const newCriteria = normalizeCriteria(subs.criteria);
-    setItem9Criteria(newCriteria);
-    setItem9Rows(prev => prev.map(r => {
-      const m = { ...r.marks };
-      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
-      return { ...r, marks: m };
-    }));
+    setItem9Criteria(newCriteria); item9CriteriaRef.current = newCriteria;
+    setItem9Rows(prev => {
+      const next = prev.map(r => {
+        const m = { ...r.marks };
+        newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+        return { ...r, marks: m };
+      });
+      item9RowsRef.current = next;
+      return next;
+    });
     debouncedSaveStructuredItem(9, subs, 'UPLOADED');
   }, [isLocked, checklist, item9Criteria]);
 
@@ -640,12 +662,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     subs.criteria = [...existing, { id: newId, label: toTitleCase(label.trim()), max: maxMarks, fixed: false, predefined: false }];
     subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
     const newCriteria = normalizeCriteria(subs.criteria);
-    setItem9Criteria(newCriteria);
-    setItem9Rows(prev => prev.map(r => {
-      const m = { ...r.marks };
-      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
-      return { ...r, marks: m };
-    }));
+    setItem9Criteria(newCriteria); item9CriteriaRef.current = newCriteria;
+    setItem9Rows(prev => {
+      const next = prev.map(r => {
+        const m = { ...r.marks };
+        newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+        return { ...r, marks: m };
+      });
+      item9RowsRef.current = next;
+      return next;
+    });
     debouncedSaveStructuredItem(9, subs, 'UPLOADED');
   }, [isLocked, checklist]);
 
@@ -669,12 +695,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     subs.criteria = (Array.isArray(subs.criteria) ? subs.criteria : []).filter((c: any) => c.id !== criterionId);
     subs.students = syncStudentRows(9, subs.students || [], subs.criteria);
     const newCriteria = normalizeCriteria(subs.criteria);
-    setItem9Criteria(newCriteria);
-    setItem9Rows(prev => prev.map(r => {
-      const m = { ...r.marks };
-      newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
-      return { ...r, marks: m };
-    }));
+    setItem9Criteria(newCriteria); item9CriteriaRef.current = newCriteria;
+    setItem9Rows(prev => {
+      const next = prev.map(r => {
+        const m = { ...r.marks };
+        newCriteria.forEach((c: any) => { if (m[c.id] === undefined) m[c.id] = 0; });
+        return { ...r, marks: m };
+      });
+      item9RowsRef.current = next;
+      return next;
+    });
     debouncedSaveStructuredItem(9, subs, 'UPLOADED');
   }, [isLocked, checklist]);
 
@@ -686,7 +716,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       c.id === criterionId ? { ...c, max: newMax } : c
     );
     const newCriteria = normalizeCriteria(subs.criteria);
-    setItem9Criteria(newCriteria);
+    setItem9Criteria(newCriteria); item9CriteriaRef.current = newCriteria;
     debouncedSaveStructuredItem(9, subs, 'UPLOADED');
   }, [isLocked, checklist]);
 
@@ -714,10 +744,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     saveTimeoutsRef.current[itemIndex] = setTimeout(() => {
       // Read from ref — always contains the latest rows, not stale closure state.
       const latestRows = itemIndex === 8 ? item8RowsRef.current : item9RowsRef.current;
+      const latestCriteria = itemIndex === 8 ? item8CriteriaRef.current : item9CriteriaRef.current;
       const subs = getSubItems(itemIndex) || {};
       subs.students = latestRows;
+      if (latestCriteria && latestCriteria.length) {
+        subs.criteria = latestCriteria;
+      }
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    }, 600);
+    }, 500);
   }, [isLocked, checklist, isRowEditableByCurrentFaculty]);
 
   const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
@@ -1149,14 +1183,18 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return;
     }
 
-    const defaultCriteria = [{ id: 'internal-exam-1', label: 'Internal Exam 1', max: 30, fixed: true }, { id: 'internal-exam-2', label: 'Internal Exam 2', max: 30, fixed: true }];
+    const defaultCriteria = [{ id: 'internal-1', label: 'Internal 1', max: 30, fixed: true }, { id: 'internal-2', label: 'Internal 2', max: 30, fixed: true }];
     if (!Array.isArray(subs.criteria) || subs.criteria.length === 0) subs.criteria = defaultCriteria;
     const newStudentId = `manual-${Date.now()}`;
     const newStudent: any = { studentId: newStudentId, name: '', enrolmentNumber: '', marks: {}, isManual: true, batch: access.batch || 'A' };
     normalizeCriteria(subs.criteria).forEach((criterion: any) => { newStudent.marks[criterion.id] = 0; });
     subs.students.push(newStudent);
     await saveStructuredItem(itemIndex, subs, 'UPLOADED');
-    setItem9Rows(prev => [...prev, newStudent]);
+    setItem9Rows(prev => {
+      const next = [...prev, newStudent];
+      item9RowsRef.current = next;
+      return next;
+    });
   };
 
   const debouncedSaveStructuredItem = (itemIndex: number, subs: any, status = 'UPLOADED') => {
@@ -1196,11 +1234,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const saveStructuredItem = async (itemIndex: number, subs: any, status = 'UPLOADED') => {
-    await fetch(`/api/checklist/${courseFileId}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemIndex, status, fileName: subs.file?.fileName || `${itemIndex}-structured-data.json`, subItemsJson: JSON.stringify(subs) })
-    });
-    setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, status, subItemsJson: JSON.stringify(subs), fileName: subs.file?.fileName } : item));
+    try {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIndex, status, fileName: subs.file?.fileName || `${itemIndex}-structured-data.json`, subItemsJson: JSON.stringify(subs) })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server responded with ${res.status}`);
+      }
+      setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, status, subItemsJson: JSON.stringify(subs), fileName: subs.file?.fileName } : item));
+    } catch (err: any) {
+      console.error(`Save error for item ${itemIndex}:`, err);
+      setActionError(`Failed to save marks for Item #${itemIndex}: ${err.message || 'Save error'}`);
+    }
   };
 
   const handleStructuredFileUpload = async (itemIndex: number, file?: File) => {

@@ -740,13 +740,19 @@ export async function createSubject(data: {
   semester: string; academicYear: string; courseCoordinatorId: string;
   courseTeacherId: string; labTeacherAId?: string | null; labTeacherBId?: string | null; labTeacherCId?: string | null; evaluatorId: string;
 }) {
-  return prisma.$transaction(async tx => {
-    const subject = await tx.subject.create({ data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
-    const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
-    if (!teacher) throw new Error('Course Teacher not found');
-    await createSubjectCourseFile(tx, subject, teacher);
-    return tx.subject.findUnique({ where: { id: subject.id }, include: subjectInclude });
-  });
+  // Resolve the teacher BEFORE opening the transaction — saves one round-trip inside the tx.
+  const teacher = await prisma.user.findUnique({ where: { id: data.courseTeacherId } });
+  if (!teacher) throw new Error('Course Teacher not found');
+
+  // Transaction only performs the atomic writes: subject + courseFile + 20 checklist rows.
+  const subject = await prisma.$transaction(async tx => {
+    const created = await tx.subject.create({ data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
+    await createSubjectCourseFile(tx, created, teacher);
+    return created;
+  }, { timeout: 20000, maxWait: 10000 });
+
+  // Fetch the full subject with relations AFTER the transaction — saves one more round-trip inside the tx.
+  return prisma.subject.findUnique({ where: { id: subject.id }, include: subjectInclude });
 }
 
 export async function updateSubject(id: string, data: {
@@ -755,19 +761,30 @@ export async function updateSubject(id: string, data: {
   semester: string; academicYear: string; courseCoordinatorId: string;
   courseTeacherId: string; labTeacherAId?: string | null; labTeacherBId?: string | null; labTeacherCId?: string | null; evaluatorId: string;
 }) {
-  return prisma.$transaction(async tx => {
-    const subject = await tx.subject.update({ where: { id }, data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
-    const teacher = await tx.user.findUnique({ where: { id: data.courseTeacherId } });
-    if (!teacher) throw new Error('Course Teacher not found');
-    const existing = await tx.courseFile.findUnique({ where: { subjectId: id } });
-    if (!existing) await createSubjectCourseFile(tx, subject, teacher);
-    else if (existing.status === 'DRAFT') await tx.courseFile.update({ where: { id: existing.id }, data: {
-      courseCode: subject.subjectCode, courseTitle: subject.subjectName,
-      department: subject.department, school: subject.school, division: subject.division, semester: subject.semester,
-      academicYear: subject.academicYear, facultyId: subject.courseTeacherId, facultyName: teacher.name
-    } });
-    return tx.subject.findUnique({ where: { id }, include: subjectInclude });
-  });
+  // Resolve reads BEFORE the transaction to minimise round-trips inside the tx.
+  const [teacher, existingFile] = await Promise.all([
+    prisma.user.findUnique({ where: { id: data.courseTeacherId } }),
+    prisma.courseFile.findUnique({ where: { subjectId: id } }),
+  ]);
+  if (!teacher) throw new Error('Course Teacher not found');
+
+  // Transaction only performs the atomic writes: subject update + courseFile create/update.
+  const subject = await prisma.$transaction(async tx => {
+    const updated = await tx.subject.update({ where: { id }, data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
+    if (!existingFile) {
+      await createSubjectCourseFile(tx, updated, teacher);
+    } else if (existingFile.status === 'DRAFT') {
+      await tx.courseFile.update({ where: { id: existingFile.id }, data: {
+        courseCode: updated.subjectCode, courseTitle: updated.subjectName,
+        department: updated.department, school: updated.school, division: updated.division, semester: updated.semester,
+        academicYear: updated.academicYear, facultyId: updated.courseTeacherId, facultyName: teacher.name
+      } });
+    }
+    return updated;
+  }, { timeout: 20000, maxWait: 10000 });
+
+  // Fetch the full subject with relations AFTER the transaction.
+  return prisma.subject.findUnique({ where: { id: subject.id }, include: subjectInclude });
 }
 
 export async function getChecklistItemsByCourseFileId(courseFileId: string) {
