@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
         rating: cf.rating,
         coordinatorRemarks: cf.coordinatorRemarks,
         generatedReportPath: cf.generatedReportPath,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14] } : { mode: 'OWNER' },
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14, 20] } : { mode: 'OWNER' },
         faculty: faculty
           ? {
               id: faculty.id,

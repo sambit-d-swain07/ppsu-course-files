@@ -230,7 +230,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     let checklist: any[];
     if (labBatch) {
       const submissions = courseFile.labSubmissions || [];
-      checklist = [2, 4, 8, 9, 14].map((itemIndex) => {
+      checklist = [2, 4, 8, 9, 14, 20].map((itemIndex) => {
         if ([4, 8, 9].includes(itemIndex)) {
           const mergedItem = mergedChecklist.find((item: any) => item.itemIndex === itemIndex);
           const filteredItem = filterItemStudentsByBatch(mergedItem, labBatch);
@@ -332,7 +332,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           return isSubjectCoordinator
             ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName }
             : labBatch
-            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14], editableItems: [2, 8, 9, 14] }
+            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14, 20], editableItems: [2, 8, 9, 14, 20] }
             : { mode: 'OWNER', assignedBatches, facultyName: callerName };
         })()
       },

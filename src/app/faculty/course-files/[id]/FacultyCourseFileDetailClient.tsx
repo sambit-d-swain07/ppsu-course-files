@@ -542,7 +542,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (courseFileId) fetchData(true); }, [courseFileId]);
 
-  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status);
+  const isBatchSubmitted = access?.mode === 'LAB_BATCH' && checklist.length > 0 && checklist.some((c: any) => c.status === 'SUBMITTED');
+  const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status) || isBatchSubmitted;
 
   const isRowEditableByCurrentFaculty = useCallback((rowBatch?: string) => {
     if (isLocked) return false;
@@ -1237,6 +1238,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const saveStructuredItem = async (itemIndex: number, subs: any, status = 'UPLOADED') => {
+    if (access?.mode === 'LAB_BATCH' && !LAB_TEACHER_EDITABLE_ITEM_INDICES.includes(itemIndex)) {
+      return;
+    }
     try {
       const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1309,7 +1313,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setSubmitLoading(true);
     setActionError(''); setActionSuccess('');
     try {
-      const allowedItems = [2, 4, 8, 9, 14, 20];
+      const allowedItems = LAB_TEACHER_EDITABLE_ITEM_INDICES;
       for (const idx of allowedItems) {
         const subs = getSubItems(idx) || {};
         await saveStructuredItem(idx, subs, 'SUBMITTED');
@@ -2462,17 +2466,24 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           <Card.Body className="py-3">
             <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
-                <h6 className="fw-bold text-success mb-1">Batch {access.batch} Lab Teacher Submission Portal</h6>
-                <p className="small text-secondary mb-0">Manage your assigned lab items (Items 2, 4, 8, 9, 14, and 20). Submitting will send your lab data & rubrics directly to the Course Teacher.</p>
+                <h6 className="fw-bold text-success mb-1 d-flex align-items-center gap-2">
+                  <span>Batch {access.batch} Lab Teacher Submission Portal</span>
+                  {isBatchSubmitted && <Badge bg="success" className="px-2 py-1">✓ SUBMITTED</Badge>}
+                </h6>
+                <p className="small text-secondary mb-0">
+                  {isBatchSubmitted
+                    ? `Your Batch ${access.batch} lab data (Items 2, 8, 9, 14, 20) has been submitted to the Course Teacher and is locked.`
+                    : `Manage your assigned lab items (Items 2, 4, 8, 9, 14, and 20). Submitting will send your lab data & rubrics directly to the Course Teacher.`}
+                </p>
               </div>
               <Button
                 variant="success"
                 size="sm"
                 className="fw-bold px-3 py-2"
-                disabled={isLocked || submitLoading || !labTeacherDeclared}
+                disabled={isLocked || submitLoading || (!isBatchSubmitted && !labTeacherDeclared)}
                 onClick={handleLabTeacherSubmit}
               >
-                {submitLoading ? <Spinner animation="border" size="sm" /> : `✓ Submit Batch ${access.batch} Data`}
+                {submitLoading ? <Spinner animation="border" size="sm" /> : isBatchSubmitted ? '✓ Submitted' : `✓ Submit Batch ${access.batch} Data`}
               </Button>
             </div>
           </Card.Body>
@@ -3927,13 +3938,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </Button>
                             {!isLocked && (
                               <>
-                                <label
-                                  className="btn btn-outline-secondary btn-sm m-0"
-                                  style={{ fontSize: 12, cursor: 'pointer' }}
-                                >
-                                  Replace
-                                  <input type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
-                                </label>
+                                {!isSigItem && (
+                                  <label
+                                    className="btn btn-outline-secondary btn-sm m-0"
+                                    style={{ fontSize: 12, cursor: 'pointer' }}
+                                  >
+                                    Replace
+                                    <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                                  </label>
+                                )}
                                 <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
                                   Remove
                                 </button>
@@ -4611,23 +4624,24 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 )}
                               </div>
                               <div className="d-flex gap-1 mt-2">
-                                {teacherSub?.fileName && (
-                                  <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Attendance Register — Course Teacher', fileName: teacherSub.fileName, fileUrl: teacherSub.fileUrl })}>
-                                    👁️ View
-                                  </Button>
-                                )}
-                                {!isLocked && (
+                                {teacherSub?.fileName ? (
                                   <>
-                                    <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
-                                      {teacherSub?.fileName ? 'Replace' : 'Upload Register'}
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, item.name, f); }} />
-                                    </label>
-                                    {teacherSub?.fileName && (
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Attendance Register — Course Teacher', fileName: teacherSub.fileName, fileUrl: teacherSub.fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                    {!isLocked && (
                                       <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
                                         Remove
                                       </Button>
                                     )}
                                   </>
+                                ) : (
+                                  !isLocked && (
+                                    <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
+                                      Upload Register
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, item.name, f); e.currentTarget.value = ''; }} />
+                                    </label>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -4643,9 +4657,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             <Col xs={12} md={6} key={batchKey}>
                               <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
                                 <div>
-                                  <div className="fw-bold mb-1 text-dark">
-                                    Attendance Register — Batch {batchKey}
-                                    <span className="ms-2 badge bg-primary" style={{ fontSize: 9 }}>Lab Batch {batchKey}</span>
+                                  <div className="fw-bold mb-1 text-dark d-flex align-items-center flex-wrap gap-1">
+                                    <span>Attendance Register — Batch {batchKey}</span>
+                                    <span className="badge bg-primary" style={{ fontSize: 9 }}>Lab Batch {batchKey}</span>
+                                    {!isLabTeacher && batchData?.status === 'SUBMITTED' && (
+                                      <span className="badge bg-success" style={{ fontSize: 9 }}>✓ Submitted by Lab Teacher</span>
+                                    )}
                                   </div>
                                   {batchData?.fileName ? (
                                     <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {batchData.fileName}</div>
@@ -4654,16 +4671,24 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   )}
                                 </div>
                                 <div className="d-flex gap-1 mt-2">
-                                  {batchData?.fileName && (
-                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Attendance Register — Batch ${batchKey}`, fileName: batchData.fileName, fileUrl: batchData.fileUrl })}>
-                                      👁️ View
-                                    </Button>
-                                  )}
-                                  {!isLocked && isLabTeacher && access?.batch === batchKey && (
-                                    <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
-                                      {batchData?.fileName ? 'Replace' : 'Upload Register'}
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, 'Attendance Register', f); }} />
-                                    </label>
+                                  {batchData?.fileName ? (
+                                    <>
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Attendance Register — Batch ${batchKey}`, fileName: batchData.fileName, fileUrl: batchData.fileUrl })}>
+                                        👁️ View
+                                      </Button>
+                                      {!isLocked && ((isLabTeacher && access?.batch === batchKey) || (!isLabTeacher && access?.mode === 'OWNER')) && (
+                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
+                                          Remove
+                                        </Button>
+                                      )}
+                                    </>
+                                  ) : (
+                                    !isLocked && (isLabTeacher ? access?.batch === batchKey : true) && (
+                                      <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
+                                        Upload Register
+                                        <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, 'Attendance Register', f); e.currentTarget.value = ''; }} />
+                                      </label>
+                                    )
                                   )}
                                 </div>
                               </div>
@@ -4674,6 +4699,45 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   );
                 })()}
+
+                {/* Item 20: Lab Teacher Signatures Display for Course Teacher */}
+                {isSigItem && !isLabTeacher && dbItem.batchSubmissions && dbItem.batchSubmissions.length > 0 && (
+                  <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
+                    <div className="small fw-bold text-navy-900 mb-2">Lab Teacher Signatures by Batch</div>
+                    <Row className="g-2 small">
+                      {dbItem.batchSubmissions.map((bSub: any) => (
+                        <Col xs={12} md={4} key={bSub.batch}>
+                          <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                            <div>
+                              <div className="fw-bold mb-1 d-flex align-items-center justify-content-between">
+                                <span>Batch {bSub.batch} ({bSub.facultyName || 'Lab Teacher'})</span>
+                                {bSub.status === 'SUBMITTED' ? (
+                                  <span className="badge bg-success" style={{ fontSize: 9 }}>Submitted</span>
+                                ) : bSub.fileName ? (
+                                  <span className="badge bg-info" style={{ fontSize: 9 }}>Uploaded</span>
+                                ) : (
+                                  <span className="badge bg-secondary" style={{ fontSize: 9 }}>Pending</span>
+                                )}
+                              </div>
+                              {bSub.fileName ? (
+                                <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {bSub.fileName}</div>
+                              ) : (
+                                <div className="text-muted mb-1" style={{ fontSize: 11 }}>✗ Signature not uploaded</div>
+                              )}
+                            </div>
+                            {bSub.fileName && (
+                              <div className="mt-2">
+                                <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Signature — Batch ${bSub.batch}`, fileName: bSub.fileName, fileUrl: bSub.fileUrl })}>
+                                  👁️ View Signature
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </Col>
+                      ))}
+                    </Row>
+                  </div>
+                )}
 
                 {/* Item 15: University Exam Sub-uploads & Grade Sheet Result Analysis */}
                 {isUniv && !isRestricted && (
@@ -5213,42 +5277,58 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       })()}
 
       {/* Lab Teacher Submission Gate */}
-      {!isLocked && isLabTeacher && (
+      {isLabTeacher && (
         <Card className="card-custom border-0 shadow-sm mb-4" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
-          <Card.Header className="bg-transparent py-3 border-bottom">
-            <h5 className="fw-bold text-success mb-0">Batch {access.batch} Lab Teacher Submission Gate</h5>
+          <Card.Header className="bg-transparent py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h5 className="fw-bold text-success mb-0">
+              {isBatchSubmitted ? `✓ Batch ${access.batch} Lab Teacher Submission Gate — SUBMITTED` : `Batch ${access.batch} Lab Teacher Submission Gate`}
+            </h5>
+            {isBatchSubmitted && <Badge bg="success" className="px-3 py-2">✓ Submitted to Course Teacher</Badge>}
           </Card.Header>
           <Card.Body>
-            <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
-              <Form.Check
-                type="checkbox"
-                id="chk-lab-teacher-declaration"
-                label={
-                  <span className="fw-bold text-dark" style={{ fontSize: '0.95rem' }}>
-                    I confirm all required documents are uploaded correctly <span className="text-danger fw-bold">*</span>
-                  </span>
-                }
-                checked={labTeacherDeclared}
-                onChange={(e) => setLabTeacherDeclared(e.target.checked)}
-                style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
-              />
-            </div>
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
-              <div className="small text-secondary">
-                <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/5</span> assigned lab items completed.
+            {isBatchSubmitted ? (
+              <div className="p-3 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div className="small text-secondary">
+                  All assigned lab items (Items 2, 8, 9, 14, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
+                </div>
+                <Button variant="success" disabled size="sm" className="fw-bold px-3 py-2">
+                  ✓ Submitted
+                </Button>
               </div>
-              <Button
-                id="btn-submit-lab-batch-bottom"
-                variant="success"
-                className="px-4 py-2 fw-bold"
-                disabled={submitLoading || !labTeacherDeclared}
-                onClick={handleLabTeacherSubmit}
-              >
-                {submitLoading
-                  ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
-                  : `✓ Submit Batch ${access.batch} Data`}
-              </Button>
-            </div>
+            ) : (
+              <>
+                <div className="mb-3 p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
+                  <Form.Check
+                    type="checkbox"
+                    id="chk-lab-teacher-declaration"
+                    label={
+                      <span className="fw-bold text-dark" style={{ fontSize: '0.95rem' }}>
+                        I confirm all required documents are uploaded correctly <span className="text-danger fw-bold">*</span>
+                      </span>
+                    }
+                    checked={labTeacherDeclared}
+                    onChange={(e) => setLabTeacherDeclared(e.target.checked)}
+                    style={{ transform: 'scale(1.1)', transformOrigin: 'left center' }}
+                  />
+                </div>
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
+                  <div className="small text-secondary">
+                    <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/5</span> assigned lab items completed.
+                  </div>
+                  <Button
+                    id="btn-submit-lab-batch-bottom"
+                    variant="success"
+                    className="px-4 py-2 fw-bold"
+                    disabled={isLocked || submitLoading || !labTeacherDeclared}
+                    onClick={handleLabTeacherSubmit}
+                  >
+                    {submitLoading
+                      ? <><Spinner animation="border" size="sm" className="me-2" />Submitting…</>
+                      : `✓ Submit Batch ${access.batch} Data`}
+                  </Button>
+                </div>
+              </>
+            )}
           </Card.Body>
         </Card>
       )}

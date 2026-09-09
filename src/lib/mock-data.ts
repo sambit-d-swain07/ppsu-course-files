@@ -542,7 +542,7 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
       };
     }
 
-    if (![2, 4, 8, 9, 14].includes(item.itemIndex)) return currentItem;
+    if (![2, 4, 8, 9, 14, 20].includes(item.itemIndex)) return currentItem;
 
     const related = submissions.filter((submission: any) => submission.itemIndex === item.itemIndex);
     const assignedBatches = ['B', 'C'].filter((batch) => batch === 'B' ? Boolean(subject?.labTeacherBId) : Boolean(subject?.labTeacherCId));
