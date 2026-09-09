@@ -473,13 +473,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           });
         }
 
+        const currentRefRows = itemIndex === 8 ? item8RowsRef.current : item9RowsRef.current;
         const autoRows = studentList.map((s: any) => {
           const prev = storedById.get(s.id) || storedById.get(s.enrolmentNumber) || {};
+          const inMem = (currentRefRows || []).find((r: any) => r.studentId === s.id || (s.enrolmentNumber && r.enrolmentNumber === s.enrolmentNumber));
           const lm = labMarks.get(s.id) || labMarks.get(s.enrolmentNumber) || {};
           const marks: Record<string, number> = {};
           criteria.forEach((c: any) => {
             const altId = c.id === 'internal-1' ? 'internal-exam-1' : c.id === 'internal-2' ? 'internal-exam-2' : c.id;
-            const v = lm[c.id] ?? lm[altId] ?? prev.marks?.[c.id] ?? prev.marks?.[altId];
+            const v = inMem?.marks?.[c.id] ?? lm[c.id] ?? lm[altId] ?? prev.marks?.[c.id] ?? prev.marks?.[altId];
             marks[c.id] = v !== undefined ? Number(v) : 0;
           });
           return { studentId: s.id, name: s.name, enrolmentNumber: s.enrolmentNumber, marks, batch: s.batch || lm.batch || prev.batch || 'A' };
@@ -757,6 +759,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       saveStructuredItem(itemIndex, subs, 'UPLOADED');
     }, 500);
   }, [isLocked, checklist, isRowEditableByCurrentFaculty]);
+
+
 
   const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
     if (isLocked) return;
@@ -1256,6 +1260,36 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(`Failed to save marks for Item #${itemIndex}: ${err.message || 'Save error'}`);
     }
   };
+
+  const flushSaveItem = useCallback((itemIndex: number) => {
+    if (saveTimeoutsRef.current[itemIndex]) {
+      clearTimeout(saveTimeoutsRef.current[itemIndex]);
+      delete saveTimeoutsRef.current[itemIndex];
+      const latestRows = itemIndex === 8 ? item8RowsRef.current : item9RowsRef.current;
+      const latestCriteria = itemIndex === 8 ? item8CriteriaRef.current : item9CriteriaRef.current;
+      const subs = getSubItems(itemIndex) || {};
+      if (latestRows && latestRows.length) subs.students = latestRows;
+      if (latestCriteria && latestCriteria.length) subs.criteria = latestCriteria;
+      saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    }
+  }, [saveStructuredItem]);
+
+  const flushAllPendingSaves = useCallback(() => {
+    Object.keys(saveTimeoutsRef.current).forEach((key) => {
+      flushSaveItem(Number(key));
+    });
+  }, [flushSaveItem]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushAllPendingSaves();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushAllPendingSaves();
+    };
+  }, [flushAllPendingSaves]);
 
   const handleStructuredFileUpload = async (itemIndex: number, file?: File) => {
     if (isLocked) return;
@@ -2328,18 +2362,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const incompleteBatches = getIncompleteItem8Batches();
 
     if (missingRequired.length > 0 || incompleteBatches.length > 0) {
-      setSubmitLoading(true);
-      try {
-        await fetch(`/api/course-files/${courseFileId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'DRAFT' })
-        });
-        setCourseFile((prev: any) => prev ? { ...prev, status: 'DRAFT' } : prev);
-      } catch (e) {} finally {
-        setSubmitLoading(false);
-      }
-
       let errorParts = [];
       if (incompleteBatches.length > 0) {
         errorParts.push(`Item 8 (Laboratory Rubrics) is incomplete for ${incompleteBatches.join(' & ')}.`);
@@ -2351,7 +2373,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         errorParts.push(`Missing required item(s): ${missingNames}.`);
       }
 
-      setActionError(`Course file saved as Draft. ${errorParts.join(' ')} Please complete all required sections/batches before final submission.`);
+      setActionError(`Cannot submit course file. ${errorParts.join(' ')} Please complete all required sections/batches before final submission.`);
       return;
     }
 
@@ -2372,7 +2394,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           facultyConfirmed: true
         })
       });
-      if (!res.ok) throw new Error('Failed to submit');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to submit course file');
       setActionSuccess('Course file submitted to Coordinator for review!');
       fetchData();
     } catch (err: any) { setActionError(err.message); } finally { setSubmitLoading(false); }
@@ -3692,6 +3715,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           value={row.marks?.['internal-1'] ?? 0}
                                           disabled={isLocked}
                                           onChange={(e) => handleMarkChange(9, row.studentId, 'internal-1', Math.min(30, Number(e.target.value) || 0))}
+                                          onBlur={() => flushSaveItem(9)}
                                         />
                                       </td>
                                       {/* Internal 2 */}
@@ -3701,6 +3725,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           value={row.marks?.['internal-2'] ?? 0}
                                           disabled={isLocked}
                                           onChange={(e) => handleMarkChange(9, row.studentId, 'internal-2', Math.min(30, Number(e.target.value) || 0))}
+                                          onBlur={() => flushSaveItem(9)}
                                         />
                                       </td>
                                       {/* Average of Internals — auto-calculated, read-only */}
@@ -3713,6 +3738,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                             value={row.marks?.[c.id] ?? 0}
                                             disabled={isLocked}
                                             onChange={(e) => handleMarkChange(9, row.studentId, c.id, Math.min(c.max, Number(e.target.value) || 0))}
+                                            onBlur={() => flushSaveItem(9)}
                                           />
                                         </td>
                                       ))}
