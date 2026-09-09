@@ -899,13 +899,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
 
 
-  if (loading) return (
-    <div className="d-flex justify-content-center py-5">
-      <Spinner animation="border" style={{ color: 'var(--ppsu-primary)' }} />
-    </div>
-  );
 
-  if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
 
   const getSubItems = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
@@ -2403,6 +2397,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const studentListUploaded = access.mode === 'OWNER' ? true : isItemComplete(4);
   const visibleChecklistItems = CHECKLIST_ITEMS;
+
+  if (loading) return (
+    <div className="d-flex justify-content-center py-5">
+      <Spinner animation="border" style={{ color: 'var(--ppsu-primary)' }} />
+    </div>
+  );
+
+  if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
 
   return (
     <div>
