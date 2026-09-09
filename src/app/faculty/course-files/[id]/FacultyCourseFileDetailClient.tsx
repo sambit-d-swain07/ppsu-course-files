@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab, Badge } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
+import * as XLSX from 'xlsx';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
@@ -196,6 +197,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [item9CustomMax, setItem9CustomMax] = useState<number>(10);
   const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
   const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
+  const [gradeSheetConvertLoading, setGradeSheetConvertLoading] = useState(false);
+  const [gradeSheetExcelModal, setGradeSheetExcelModal] = useState<{ fileName: string; rows: string[][] } | null>(null);
 
   // Item 19 Lecture Notes Multi-document state
   const [item19ModalOpen, setItem19ModalOpen] = useState(false);
@@ -1987,6 +1990,103 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       fetchData();
     } catch (err: any) { setActionError(err.message); }
   };
+
+  // ─── Grade Sheet: Upload & Convert to Excel (Item 15b) ─────────────────────
+  const handleGradeSheetConvertToExcel = async (file: File) => {
+    if (isLocked) return;
+    setGradeSheetConvertLoading(true);
+    try {
+      const subs: any = { ...(getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null }) };
+
+      // 1. Store the original file as gradeSheet (existing upload slot)
+      const originalDataUrl = await readFileAsDataUrl(file);
+      subs.gradeSheet = { fileName: file.name, fileUrl: originalDataUrl, uploadDate: new Date().toISOString().split('T')[0] };
+
+      // 2. Convert to Excel using SheetJS
+      let workbook: XLSX.WorkBook;
+      const isCsv = /\.(csv|txt)$/i.test(file.name) || file.type === 'text/csv' || file.type === 'text/plain';
+
+      if (isCsv) {
+        // Read CSV text and parse into a workbook
+        const text = await new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = (e) => res(e.target?.result as string);
+          reader.onerror = rej;
+          reader.readAsText(file);
+        });
+        workbook = XLSX.read(text, { type: 'string' });
+      } else {
+        // PDF or other: generate a structured template with expected grade sheet columns
+        const templateHeaders = ['Sr No', 'Enrolment Number', 'Student Name', 'Theory Marks', 'Practical Marks', 'Total', 'Grade'];
+        const ws = XLSX.utils.aoa_to_sheet([templateHeaders]);
+        // Style header row (column widths)
+        ws['!cols'] = templateHeaders.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
+        workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, ws, 'Grade Sheet');
+      }
+
+      // 3. Write workbook to base64 and create data URL
+      const xlsxBase64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+      const xlsxDataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${xlsxBase64}`;
+      const excelFileName = file.name.replace(/\.[^.]+$/, '') + '_converted.xlsx';
+
+      subs.gradeSheetExcel = {
+        fileName: excelFileName,
+        fileUrl: xlsxDataUrl,
+        sourceFileName: file.name,
+        convertedAt: new Date().toISOString(),
+        isPdfTemplate: !isCsv,
+      };
+
+      const isAllThreeUploaded = !!(subs.questionPaper?.fileName && subs.gradeSheet?.fileName && subs.resultAnalysis?.fileName);
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 15,
+          status: isAllThreeUploaded ? 'UPLOADED' : 'EMPTY',
+          fileName: 'university_exam_package.pdf',
+          subItemsJson: JSON.stringify(subs),
+        }),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      setActionSuccess(isCsv ? `Grade sheet converted to Excel: ${excelFileName}` : `Excel template generated: ${excelFileName} — please fill in the grade data.`);
+      fetchData();
+    } catch (err: any) {
+      setActionError(err.message || 'Conversion failed');
+    } finally {
+      setGradeSheetConvertLoading(false);
+    }
+  };
+
+  const handleRemoveGradeSheetExcel = async () => {
+    if (isLocked) return;
+    const subs: any = { ...(getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null }) };
+    delete subs.gradeSheetExcel;
+    const isAllThreeUploaded = !!(subs.questionPaper?.fileName && subs.gradeSheet?.fileName && subs.resultAnalysis?.fileName);
+    try {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIndex: 15, status: isAllThreeUploaded ? 'UPLOADED' : 'EMPTY', fileName: 'university_exam_package.pdf', subItemsJson: JSON.stringify(subs) }),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      fetchData();
+    } catch (err: any) { setActionError(err.message); }
+  };
+
+  const openExcelPreviewModal = (excelData: { fileName: string; fileUrl: string }) => {
+    try {
+      const b64 = excelData.fileUrl.split(';base64,')[1];
+      const wb = XLSX.read(b64, { type: 'base64' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][];
+      setGradeSheetExcelModal({ fileName: excelData.fileName, rows });
+    } catch (e) {
+      setActionError('Could not parse Excel file for preview.');
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const openRubricsModalForBatch = (batchId: string) => {
     const subs = getSubItems(8) || {
@@ -4580,12 +4680,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
                     <div className="small text-secondary mb-2 fw-semibold">3 Compulsory Sub-uploads Required:</div>
                     <Row className="g-2 small mb-3">
-                      {[
-                        { key: 'questionPaper', label: '(a) Question Paper' },
-                        { key: 'gradeSheet', label: '(b) Grade Sheet' },
-                      ].map((sub) => {
+                      {/* (a) Question Paper — unchanged generic card */}
+                      {(() => {
+                        const sub = { key: 'questionPaper', label: '(a) Question Paper' };
                         const subData = getSubItems(15)?.[sub.key];
-                        const isSubLockedByCoord = dbItem.isCoordinatorShared && sub.key === 'questionPaper';
+                        const isSubLockedByCoord = dbItem.isCoordinatorShared;
                         return (
                           <Col xs={12} md={6} key={sub.key}>
                             <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
@@ -4596,13 +4695,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     <span className="ms-2 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>
                                   )}
                                 </div>
-                                {sub.key === 'gradeSheet' && (
-                                  <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />
-                                )}
                                 {subData?.fileName ? (
-                                  <div>
-                                    <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
-                                  </div>
+                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
                                 ) : (
                                   <div className="text-muted mb-1" style={{ fontSize: 11 }}>
                                     {isSubLockedByCoord ? 'Not uploaded yet — pending Course Coordinator' : '✗ Not uploaded'}
@@ -4619,10 +4713,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   <>
                                     <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
                                       {subData?.fileName ? 'Replace' : 'Upload Document'}
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload(sub.key as any, f); }} />
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload('questionPaper', f); }} />
                                     </label>
                                     {subData?.fileName && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload(sub.key as any, undefined)}>
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload('questionPaper', undefined)}>
                                         Remove
                                       </Button>
                                     )}
@@ -4632,7 +4726,89 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </div>
                           </Col>
                         );
-                      })}
+                      })()}
+
+                      {/* (b) Grade Sheet — bespoke card with Convert to Excel */}
+                      {(() => {
+                        const subs15 = getSubItems(15) || {};
+                        const gradeSheetData = subs15.gradeSheet;
+                        const excelData = subs15.gradeSheetExcel;
+                        return (
+                          <Col xs={12} md={6}>
+                            <div className="p-2 bg-light rounded border h-100 d-flex flex-column">
+                              <div className="fw-bold mb-1">(b) Grade Sheet</div>
+                              <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />
+
+                              {/* Original Upload section */}
+                              <div className="mb-2">
+                                <div className="small text-muted fw-semibold mb-1" style={{ fontSize: 10 }}>📎 Original Upload</div>
+                                {gradeSheetData?.fileName ? (
+                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate" style={{ fontSize: 11 }}>✓ {gradeSheetData.fileName}</div>
+                                ) : (
+                                  <div className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded</div>
+                                )}
+                                <div className="d-flex gap-1 mt-1 flex-wrap">
+                                  {gradeSheetData?.fileName && (
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: 'University Exam — (b) Grade Sheet', fileName: gradeSheetData.fileName, fileUrl: gradeSheetData.fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                  )}
+                                  {!isLocked && (
+                                    <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
+                                      {gradeSheetData?.fileName ? 'Replace' : 'Upload Document'}
+                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload('gradeSheet', f); }} />
+                                    </label>
+                                  )}
+                                  {!isLocked && gradeSheetData?.fileName && (
+                                    <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload('gradeSheet', undefined)}>
+                                      Remove
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Excel Version section */}
+                              <div className="border-top pt-2 mt-auto">
+                                <div className="small text-muted fw-semibold mb-1" style={{ fontSize: 10 }}>📊 Excel Version (.xlsx)</div>
+                                {excelData?.fileName ? (
+                                  <>
+                                    <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate" style={{ fontSize: 11 }}>✓ {excelData.fileName}</div>
+                                    {excelData.isPdfTemplate && (
+                                      <div className="text-warning small mb-1" style={{ fontSize: 10 }}>⚠️ Template generated from PDF — please fill in grade data.</div>
+                                    )}
+                                    <div className="d-flex gap-1 flex-wrap">
+                                      <Button size="sm" variant="outline-success" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => openExcelPreviewModal(excelData)}>
+                                        📋 Preview Excel
+                                      </Button>
+                                      <a href={excelData.fileUrl} download={excelData.fileName} className="btn btn-outline-primary btn-sm p-0 px-1" style={{ fontSize: 10 }}>
+                                        ⬇ Download .xlsx
+                                      </a>
+                                      {!isLocked && (
+                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={handleRemoveGradeSheetExcel}>
+                                          Remove
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="d-flex flex-column gap-1">
+                                    <div className="text-muted" style={{ fontSize: 10 }}>No Excel version yet.</div>
+                                    {!isLocked && (
+                                      <label className="btn btn-outline-success btn-sm p-0 px-2 m-0 align-self-start" style={{ fontSize: 10 }}>
+                                        {gradeSheetConvertLoading ? (
+                                          <><Spinner animation="border" size="sm" className="me-1" style={{ width: 10, height: 10, borderWidth: 2 }} />Converting…</>
+                                        ) : '📊 Upload & Convert to Excel'}
+                                        <input type="file" accept=".csv,.txt,.pdf,application/pdf,text/csv,text/plain" className="d-none" disabled={gradeSheetConvertLoading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleGradeSheetConvertToExcel(f); }} />
+                                      </label>
+                                    )}
+                                    <div className="text-muted" style={{ fontSize: 9 }}>Accepts CSV (auto-converts) or PDF (generates template)</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Col>
+                        );
+                      })()}
                     </Row>
                   </div>
                 )}
@@ -5547,6 +5723,59 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         <Modal.Footer>
           <Button variant="secondary" size="sm" onClick={() => setItem9ModalOpen(false)}>Cancel</Button>
           <Button variant="success" size="sm" onClick={handleSaveItem9Sheets}>Save & Attach Experiment Sheets</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Excel Preview Modal — Grade Sheet (b) */}
+      <Modal show={gradeSheetExcelModal !== null} onHide={() => setGradeSheetExcelModal(null)} size="xl" centered>
+        <Modal.Header closeButton className="bg-success text-white py-2">
+          <Modal.Title className="h6 fw-bold mb-0">📊 Excel Preview — {gradeSheetExcelModal?.fileName}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-3 bg-light">
+          {gradeSheetExcelModal && (
+            <>
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <span className="small text-muted">Showing all {Math.max(0, (gradeSheetExcelModal.rows?.length ?? 0) - 1)} data rows</span>
+                <a
+                  href={getSubItems(15)?.gradeSheetExcel?.fileUrl}
+                  download={gradeSheetExcelModal.fileName}
+                  className="btn btn-outline-success btn-sm"
+                >
+                  ⬇ Download .xlsx
+                </a>
+              </div>
+              {gradeSheetExcelModal.rows.length > 0 ? (
+                <div className="table-responsive" style={{ maxHeight: '520px', overflowY: 'auto' }}>
+                  <Table bordered hover striped size="sm" className="small align-middle mb-0">
+                    <thead className="table-success sticky-top">
+                      <tr>
+                        {(gradeSheetExcelModal.rows[0] || []).map((h, i) => (
+                          <th key={i} className="fw-bold text-dark">{String(h)}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gradeSheetExcelModal.rows.slice(1).map((row, rIdx) => (
+                        <tr key={rIdx}>
+                          {row.map((cell, cIdx) => (
+                            <td key={cIdx}>{String(cell ?? '')}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center text-muted py-5">
+                  <div style={{ fontSize: 40 }}>📋</div>
+                  <div className="mt-2">This Excel file appears to be empty or could not be parsed.</div>
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setGradeSheetExcelModal(null)}>Close</Button>
         </Modal.Footer>
       </Modal>
     </div>
