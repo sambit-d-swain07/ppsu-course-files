@@ -510,22 +510,34 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
     // Note: Item 5 is admin-managed (handled above) and must NOT be treated as coordinator-shared.
     if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex) && item.itemIndex !== 5) {
       const shared = (item.itemIndex === 1 || item.itemIndex === 18) ? schoolSharedMap.get(item.itemIndex) : sharedMap.get(item.itemIndex);
-      const isSharedUploaded = shared && shared.status === 'UPLOADED';
 
-      let mergedSubItemsJson = item.subItemsJson;
+      let sharedParsed: any = {};
       if (shared?.subItemsJson) {
         try {
-          const sharedParsed = JSON.parse(shared.subItemsJson);
-          const teacherParsed = item.subItemsJson ? JSON.parse(item.subItemsJson) : {};
-          mergedSubItemsJson = JSON.stringify({
-            ...teacherParsed,
-            ...sharedParsed,
-            isCoordinatorShared: true,
-            school: (item.itemIndex === 1 || item.itemIndex === 18) ? shared?.school || normalizeSchoolCode(subject?.school) : undefined,
-            coordinatorUploaded: isSharedUploaded
-          });
+          sharedParsed = JSON.parse(shared.subItemsJson);
         } catch (e) {}
       }
+
+      // Check if uploaded either via shared.status === 'UPLOADED', shared.fileName, or sub-item uploads/texts
+      const hasSubContent = sharedParsed && typeof sharedParsed === 'object' && Object.values(sharedParsed).some((val: any) => val && (val.fileName || val.fileUrl || val.textContent));
+      const isSharedUploaded = Boolean(shared && (shared.status === 'UPLOADED' || shared.fileName || shared.fileUrl || hasSubContent));
+
+      let teacherParsed: any = {};
+      if (item.subItemsJson) {
+        try {
+          teacherParsed = JSON.parse(item.subItemsJson);
+        } catch (e) {}
+      }
+
+      const mergedSubItemsJson = JSON.stringify({
+        ...teacherParsed,
+        ...sharedParsed,
+        isCoordinatorShared: true,
+        school: (item.itemIndex === 1 || item.itemIndex === 18) ? shared?.school || normalizeSchoolCode(subject?.school) : undefined,
+        coordinatorUploaded: isSharedUploaded,
+        sharedFileName: shared?.fileName || null,
+        sharedFileUrl: shared?.fileUrl || null
+      });
 
       currentItem = {
         ...currentItem,
@@ -536,9 +548,9 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
         sharedStatus: isSharedUploaded ? 'UPLOADED' : 'PENDING',
         sharedFileName: shared?.fileName || null,
         sharedFileUrl: shared?.fileUrl || null,
-        ...(isSharedUploaded && !['sub-items-only', 1, 11, 12, 13, 18].includes(item.itemIndex)
-          ? { status: 'UPLOADED', fileName: shared.fileName, fileUrl: shared.fileUrl }
-          : {})
+        status: isSharedUploaded ? 'UPLOADED' : (currentItem.status || 'EMPTY'),
+        fileName: shared?.fileName || currentItem.fileName || (isSharedUploaded ? 'Coordinator Shared Document' : null),
+        fileUrl: shared?.fileUrl || currentItem.fileUrl || null
       };
     }
 

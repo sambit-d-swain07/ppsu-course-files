@@ -173,7 +173,15 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                   return (
                     <div key={key} style={{ marginBottom: '32px' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{key.toUpperCase()}</div>
-                      {sub?.fileUrl ? <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" /> : <Pending name={key.toUpperCase()} />}
+                      {sub?.fileUrl ? (
+                        <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" />
+                      ) : sub?.textContent ? (
+                        <div style={{ padding: '16px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit' }}>
+                          {sub.textContent}
+                        </div>
+                      ) : (
+                        <Pending name={key.toUpperCase()} />
+                      )}
                     </div>
                   );
                 })}

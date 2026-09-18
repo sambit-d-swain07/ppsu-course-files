@@ -2729,11 +2729,28 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                       {/* Course Coordinator Centrally Uploaded & Locked Banner */}
                       {dbItem.isCoordinatorShared && !isRestricted && (
-                        <div className="mt-1.5 d-flex align-items-center gap-2">
-                          {(dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName) ? (
-                            <span className="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small fw-semibold">
-                              ✓ Uploaded by Course Coordinator — view only
-                            </span>
+                        <div className="mt-1.5 d-flex align-items-center gap-2 flex-wrap">
+                          {(dbItem.coordinatorUploaded || dbItem.status === 'UPLOADED' || dbItem.fileName || dbItem.sharedFileName || dbItem.fileUrl || dbItem.sharedFileUrl) ? (
+                            <div className="d-flex align-items-center gap-2">
+                              <span className="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small fw-semibold">
+                                ✓ Uploaded by Course Coordinator — view only
+                              </span>
+                              {(dbItem.fileUrl || dbItem.sharedFileUrl) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-success"
+                                  className="py-0 px-2 font-mono-ppsu"
+                                  style={{ fontSize: 11 }}
+                                  onClick={() => setViewingDoc({
+                                    title: `${item.name} (Coordinator Shared Document)`,
+                                    fileName: dbItem.fileName || dbItem.sharedFileName || 'Coordinator Document.pdf',
+                                    fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl
+                                  })}
+                                >
+                                  👁️ View Shared Document
+                                </Button>
+                              )}
+                            </div>
                           ) : (
                             <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1 rounded-pill small fw-semibold">
                               ⏳ Not uploaded yet — pending Course Coordinator (Locked)
@@ -2742,8 +2759,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         </div>
                       )}
 
-
-                      {/* Single upload complete indicator */}
+                      {/* Single upload complete indicator for non-shared items */}
                       {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && item.index !== 18 && (dbItem.fileName || dbItem.sharedFileName) && !isRestricted && !dbItem.isCoordinatorShared && (
                         <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: 12, color: 'var(--ppsu-success-text)', overflow: 'hidden' }}>
                           <span>✓ <strong className="font-mono-ppsu text-truncate d-inline-block" style={{ maxWidth: '360px', verticalAlign: 'bottom' }}>{dbItem.fileName || dbItem.sharedFileName}</strong></span>
@@ -2759,6 +2775,85 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       )}
                     </div>
                   </div>
+
+                  {/* Item 1: Institute Vision, Mission & PEO, PSO & PO */}
+                  {isItem1 && !isRestricted && (() => {
+                    const subs = getSubItems(1) || {};
+                    const subKeys = [
+                      { key: 'vision', label: '1. Institute & Department Vision' },
+                      { key: 'mission', label: '2. Institute & Department Mission' },
+                      { key: 'peo', label: '3. Program Educational Objectives (PEO)' },
+                      { key: 'pso', label: '4. Program Specific Outcomes (PSO)' },
+                      { key: 'po', label: '5. Program Outcomes (PO)' }
+                    ];
+
+                    return (
+                      <div className="mt-3 ps-3 border-start border-3 border-primary ms-2 w-100">
+                        <div className="alert alert-info py-2 px-3 small mb-3">
+                          ℹ️ Item 1 documents and texts are managed centrally by the <strong>Course Coordinator</strong> for your school ({headerEdit.school || 'School'}). Below are the active documents/texts provided by your Coordinator.
+                        </div>
+                        <Row className="g-3">
+                          {subKeys.map(({ key, label }) => {
+                            const subData = subs[key];
+                            const hasFile = Boolean(subData?.fileName && subData?.fileUrl);
+                            const hasText = Boolean(subData?.textContent?.trim());
+                            const isFilled = hasFile || hasText;
+
+                            return (
+                              <Col xs={12} md={6} key={key}>
+                                <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                                  <div>
+                                    <div className="d-flex align-items-center justify-content-between mb-2">
+                                      <span className="fw-bold small text-navy-900">{label}</span>
+                                      {isFilled ? (
+                                        <Badge bg="success" style={{ fontSize: 10 }}>✓ UPLOADED</Badge>
+                                      ) : (
+                                        <Badge bg="secondary" style={{ fontSize: 10 }}>PENDING</Badge>
+                                      )}
+                                    </div>
+
+                                    {hasFile && (
+                                      <div className="text-success small fw-bold font-mono-ppsu mb-2 text-truncate">
+                                        📄 {subData.fileName}
+                                      </div>
+                                    )}
+
+                                    {hasText && (
+                                      <div
+                                        className="p-2 bg-white rounded border small text-secondary mb-2"
+                                        style={{ maxHeight: 120, overflowY: 'auto', fontSize: 12, whiteSpace: 'pre-wrap' }}
+                                      >
+                                        {subData.textContent}
+                                      </div>
+                                    )}
+
+                                    {!isFilled && (
+                                      <div className="text-muted small italic mb-2" style={{ fontSize: 11 }}>
+                                        Not provided yet by Course Coordinator
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {hasFile && (
+                                    <div className="mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        style={{ fontSize: 11 }}
+                                        onClick={() => setViewingDoc({ title: `Item 1 — ${label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}
+                                      >
+                                        👁️ View Document
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      </div>
+                    );
+                  })()}
 
                   {/* SECTION 33: Item 8 Laboratory Rubrics Batch-wise Sub-sections */}
                   {false && isItem8 && !isLockedByStudentList && (

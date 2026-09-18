@@ -14,6 +14,7 @@ import {
   getMergedChecklistItems,
   getSubjectSharedDocuments,
   getSchoolSharedDocuments,
+  normalizeSchoolCode,
   updateCourseFile,
   addNotification
 } from '@/lib/mock-data';
@@ -203,8 +204,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     const callerUser = await getUserById(payload.userId);
     const callerName: string | null = callerUser?.name || faculty?.name || null;
-    const subjectSharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
-    const schoolSharedDocs = subject?.school ? await getSchoolSharedDocuments(subject.school) : [];
+    const targetSubjectId = subject?.id || courseFile.subjectId;
+    const schoolCode = normalizeSchoolCode(subject?.school || courseFile.school);
+    const subjectSharedDocs = targetSubjectId ? await getSubjectSharedDocuments(targetSubjectId) : [];
+    const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
     const mergedChecklist = mergeChecklistItemsInMemory(
       courseFile.checklistItems || [],
       courseFile.labSubmissions || [],
