@@ -271,6 +271,8 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
                 href={link.href}
                 prefetch={false}
                 className={`sidebar-nav-link ${isActive ? 'active' : ''}`}
+                title={sidebarMode === 'collapsed' ? link.label : undefined}
+                data-tooltip={link.label}
                 onClick={() => setMobileOpen(false)}
               >
                 <span className="sidebar-nav-icon">{link.icon}</span>
@@ -303,22 +305,21 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
       <div className={mainClass}>
         <header className={`top-header${sidebarMode === 'collapsed' ? ' header-collapsed' : sidebarMode === 'hidden' ? ' header-hidden' : ''}`}>
           <div className="d-flex align-items-center gap-3">
-            {/* Desktop sidebar toggle */}
-            <button
-              className="d-none d-md-flex btn btn-sm align-items-center justify-content-center p-1 me-1"
-              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--ppsu-border)', background: 'var(--ppsu-bg)', color: 'var(--ppsu-text-secondary)' }}
-              title={sidebarMode === 'expanded' ? 'Collapse sidebar' : sidebarMode === 'collapsed' ? 'Hide sidebar' : 'Show sidebar'}
-              onClick={toggleSidebar}
-              aria-label="Toggle sidebar"
-            >
-              {sidebarMode === 'hidden' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
-              ) : sidebarMode === 'collapsed' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h8M4 18h16" /></svg>
-              )}
-            </button>
+          {/* Desktop sidebar toggle button (Chevron) */}
+          <button
+            className="d-none d-md-flex btn btn-sm align-items-center justify-content-center p-1 me-1"
+            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--ppsu-border)', background: 'var(--ppsu-bg)', color: 'var(--ppsu-text-secondary)' }}
+            title={sidebarMode === 'collapsed' ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            aria-label={sidebarMode === 'collapsed' ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            aria-expanded={sidebarMode === 'expanded'}
+            onClick={toggleSidebar}
+          >
+            {sidebarMode === 'collapsed' ? (
+              <span className="fw-bold fs-6">››</span>
+            ) : (
+              <span className="fw-bold fs-6">‹‹</span>
+            )}
+          </button>
             {/* Mobile sidebar toggle */}
             <button className="mobile-menu-toggle d-md-none" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
               <span /><span /><span />

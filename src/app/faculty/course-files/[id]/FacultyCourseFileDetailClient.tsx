@@ -2787,6 +2787,51 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       { key: 'po', label: '5. Program Outcomes (PO)' }
                     ];
 
+                    const handleCopyText = (text: string, title: string) => {
+                      if (navigator?.clipboard?.writeText) {
+                        navigator.clipboard.writeText(text);
+                      } else {
+                        const el = document.createElement('textarea');
+                        el.value = text;
+                        document.body.appendChild(el);
+                        el.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(el);
+                      }
+                      setActionSuccess(`Copied ${title} to clipboard!`);
+                      setTimeout(() => setActionSuccess(''), 2500);
+                    };
+
+                    const handlePdfExport = (title: string, text: string) => {
+                      const win = window.open('', '_blank');
+                      if (win) {
+                        win.document.write(`
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <title>${title} — PPSU Course Files</title>
+                              <style>
+                                body { font-family: sans-serif; padding: 40px; color: #0F172A; }
+                                .header { border-bottom: 3px solid #1B2A6B; padding-bottom: 12px; margin-bottom: 24px; }
+                                h2 { color: #1B2A6B; margin: 0 0 4px 0; }
+                                .badge { background: #ECFDF5; color: #047857; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-block; margin-top: 6px; }
+                                .content { font-size: 14px; line-height: 1.7; background: #F8FAFC; padding: 24px; border-radius: 8px; border: 1px solid #CBD5E1; white-space: pre-wrap; }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="header">
+                                <h2>${title}</h2>
+                                <div class="badge">✓ Submitted & Locked — PPSU Official Entry</div>
+                              </div>
+                              <div class="content">${text}</div>
+                              <script>window.onload = function() { window.print(); };</script>
+                            </body>
+                          </html>
+                        `);
+                        win.document.close();
+                      }
+                    };
+
                     return (
                       <div className="mt-3 ps-3 border-start border-3 border-primary ms-2 w-100">
                         <div className="alert alert-info py-2 px-3 small mb-3">
@@ -2805,8 +2850,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   <div>
                                     <div className="d-flex align-items-center justify-content-between mb-2">
                                       <span className="fw-bold small text-navy-900">{label}</span>
-                                      {isFilled ? (
-                                        <Badge bg="success" style={{ fontSize: 10 }}>✓ UPLOADED</Badge>
+                                      {hasText ? (
+                                        <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Submitted &amp; Locked</Badge>
+                                      ) : hasFile ? (
+                                        <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Uploaded &amp; Locked</Badge>
                                       ) : (
                                         <Badge bg="secondary" style={{ fontSize: 10 }}>PENDING</Badge>
                                       )}
@@ -2821,7 +2868,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     {hasText && (
                                       <div
                                         className="p-2 bg-white rounded border small text-secondary mb-2"
-                                        style={{ maxHeight: 120, overflowY: 'auto', fontSize: 12, whiteSpace: 'pre-wrap' }}
+                                        style={{ maxHeight: 140, overflowY: 'auto', fontSize: 12, whiteSpace: 'pre-wrap' }}
                                       >
                                         {subData.textContent}
                                       </div>
@@ -2834,18 +2881,39 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     )}
                                   </div>
 
-                                  {hasFile && (
-                                    <div className="mt-2">
+                                  <div className="d-flex align-items-center gap-1.5 mt-2 flex-wrap">
+                                    {hasFile && (
                                       <Button
                                         size="sm"
                                         variant="outline-primary"
                                         style={{ fontSize: 11 }}
                                         onClick={() => setViewingDoc({ title: `Item 1 — ${label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}
                                       >
-                                        👁️ View Document
+                                        👁️ View
                                       </Button>
-                                    </div>
-                                  )}
+                                    )}
+
+                                    {hasText && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline-secondary"
+                                          style={{ fontSize: 11 }}
+                                          onClick={() => handleCopyText(subData.textContent, label)}
+                                        >
+                                          📋 Copy
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline-danger"
+                                          style={{ fontSize: 11 }}
+                                          onClick={() => handlePdfExport(label, subData.textContent)}
+                                        >
+                                          📄 Export as PDF
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </Col>
                             );
