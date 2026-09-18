@@ -56,6 +56,9 @@ export default function CoordinatorSharedDocumentsPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
+  // Item 1: per-subKey input mode toggle ('upload' | 'text') and draft text state
+  const [item1TextMode, setItem1TextMode] = useState<Record<string, 'upload' | 'text'>>({});
+  const [item1TextDraft, setItem1TextDraft] = useState<Record<string, string>>({});
 
   const fetchSubjects = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -158,6 +161,48 @@ export default function CoordinatorSharedDocumentsPage() {
       setActionSuccess(itemIndex === 1
         ? `School ${selectedSchool} Item 1 ${label} document updated.`
         : `Sub-document '${label}' for Item #${itemIndex} updated.`);
+      fetchSubjects(false);
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
+  const handleSaveSubItemText = async (itemIndex: number, subKey: string, text: string) => {
+    if (!text.trim()) return;
+    if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId)) return;
+    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    try {
+      const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      existingSubJson[subKey] = {
+        ...(existingSubJson[subKey] || {}),
+        textContent: text,
+        textDate: new Date().toISOString().split('T')[0]
+      };
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
+          itemIndex,
+          status: 'UPLOADED',
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Save failed');
+      }
+      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
+      setActionSuccess(`Item 1 ${label} text saved for School ${selectedSchool}.`);
+      // Switch back to upload mode view after save
+      setItem1TextMode(prev => ({ ...prev, [subKey]: 'upload' }));
+      setItem1TextDraft(prev => ({ ...prev, [subKey]: '' }));
       fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
@@ -418,53 +463,127 @@ export default function CoordinatorSharedDocumentsPage() {
 
                             {/* Render Sub-keys for multi-part shared items */}
                             {item.subKeys ? (
-                              <div className="d-flex flex-column gap-2">
+                              <div className="d-flex flex-column gap-3">
                                 {item.subKeys.map((subKey) => {
                                   const subDoc = subParsed[subKey];
                                   const hasSubFile = !!subDoc?.fileName;
+                                  const hasSubText = !!subDoc?.textContent;
+                                  const isDone = hasSubFile || hasSubText;
                                   const config = SUB_KEY_CONFIG[subKey] || { label: subKey };
+                                  const isItem1 = item.index === 1;
+                                  const curMode = (isItem1 ? item1TextMode[subKey] : 'upload') || 'upload';
+
                                   return (
-                                    <div key={subKey} className="d-flex align-items-center justify-content-between p-2.5 bg-light rounded-2 border">
-                                      <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ minWidth: 0 }}>
-                                        <span className="fw-bold small text-navy-900" style={{ minWidth: '180px' }}>
+                                    <div key={subKey} className="rounded-2 border bg-light p-3">
+                                      {/* Sub-key header */}
+                                      <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                                        <span className="fw-bold small text-navy-900">
                                           {config.label}
-                                          {config.required ? <span className="text-danger ms-0.5">*</span> : <span className="text-muted ms-0.5 font-normal" style={{ fontSize: 11 }}>(optional)</span>}
+                                          {config.required ? <span className="text-danger ms-1">*</span> : <span className="text-muted ms-1" style={{ fontSize: 11 }}>(optional)</span>}
                                         </span>
-                                        {hasSubFile ? (
-                                          <span className="text-success fw-semibold small font-mono-ppsu text-truncate">
-                                            ✓ {subDoc.fileName}
+                                        {isDone ? (
+                                          <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>
+                                            {hasSubFile ? `✓ ${subDoc.fileName}` : `✓ Text saved (${subDoc.textDate || ''})`}
                                           </span>
                                         ) : (
-                                          <span className="text-muted small italic">Not uploaded yet</span>
+                                          <span className="badge bg-warning text-dark" style={{ fontSize: '0.7rem' }}>Pending</span>
                                         )}
                                       </div>
 
-                                      <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                        {hasSubFile && (
-                                          <Button
-                                            variant="outline-primary"
-                                            size="sm"
-                                            onClick={() => setViewingDoc({
-                                              title: `${item.name} — ${config.label}`,
-                                              fileName: subDoc.fileName,
-                                              fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
-                                            })}
+                                      {/* Input mode tabs (only for Item 1) */}
+                                      {isItem1 && (
+                                        <div className="d-flex mb-2 rounded-2 overflow-hidden" style={{ border: '1px solid var(--ppsu-border)', width: 'fit-content' }}>
+                                          <button
+                                            type="button"
+                                            className={`btn btn-sm px-3 py-1 rounded-0 border-0 ${curMode === 'upload' ? 'btn-primary' : 'btn-light text-secondary'}`}
+                                            style={{ fontSize: '0.75rem', fontWeight: 600 }}
+                                            onClick={() => setItem1TextMode(prev => ({ ...prev, [subKey]: 'upload' }))}
                                           >
-                                            View
-                                          </Button>
-                                        )}
-                                        <Form.Control
-                                          type="file"
-                                          size="sm"
-                                          style={{ width: '210px' }}
-                                          disabled={uploadingItem === item.index}
-                                          onChange={(e: any) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) handleUploadSubItem(item.index, subKey, file);
-                                            e.target.value = '';
-                                          }}
-                                        />
-                                      </div>
+                                            📎 Upload Document
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={`btn btn-sm px-3 py-1 rounded-0 border-0 ${curMode === 'text' ? 'btn-primary' : 'btn-light text-secondary'}`}
+                                            style={{ fontSize: '0.75rem', fontWeight: 600 }}
+                                            onClick={() => {
+                                              setItem1TextMode(prev => ({ ...prev, [subKey]: 'text' }));
+                                              // Pre-fill with existing text if any
+                                              if (subDoc?.textContent && !item1TextDraft[subKey]) {
+                                                setItem1TextDraft(prev => ({ ...prev, [subKey]: subDoc.textContent }));
+                                              }
+                                            }}
+                                          >
+                                            ✏️ Enter Text
+                                          </button>
+                                        </div>
+                                      )}
+
+                                      {/* Upload panel */}
+                                      {curMode === 'upload' && (
+                                        <div className="d-flex align-items-center gap-2 flex-wrap">
+                                          {hasSubFile && (
+                                            <Button
+                                              variant="outline-primary"
+                                              size="sm"
+                                              onClick={() => setViewingDoc({
+                                                title: `${item.name} — ${config.label}`,
+                                                fileName: subDoc.fileName,
+                                                fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
+                                              })}
+                                            >
+                                              View Document
+                                            </Button>
+                                          )}
+                                          <Form.Control
+                                            type="file"
+                                            size="sm"
+                                            style={{ width: '220px' }}
+                                            disabled={uploadingItem === item.index}
+                                            onChange={(e: any) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleUploadSubItem(item.index, subKey, file);
+                                              e.target.value = '';
+                                            }}
+                                          />
+                                          {uploadingItem === item.index && <span className="spinner-border spinner-border-sm text-primary" />}
+                                        </div>
+                                      )}
+
+                                      {/* Text entry panel */}
+                                      {curMode === 'text' && (
+                                        <div>
+                                          <Form.Control
+                                            as="textarea"
+                                            rows={4}
+                                            className="mb-2"
+                                            placeholder={`Enter ${config.label} content here...`}
+                                            value={item1TextDraft[subKey] ?? subDoc?.textContent ?? ''}
+                                            onChange={(e) => setItem1TextDraft(prev => ({ ...prev, [subKey]: e.target.value }))}
+                                            disabled={uploadingItem === item.index}
+                                            style={{ fontSize: '0.85rem', resize: 'vertical' }}
+                                          />
+                                          <div className="d-flex gap-2">
+                                            <Button
+                                              variant="primary"
+                                              size="sm"
+                                              disabled={uploadingItem === item.index || !item1TextDraft[subKey]?.trim()}
+                                              onClick={() => handleSaveSubItemText(item.index, subKey, item1TextDraft[subKey] || '')}
+                                            >
+                                              {uploadingItem === item.index ? 'Saving…' : 'Save Text'}
+                                            </Button>
+                                            <Button
+                                              variant="outline-secondary"
+                                              size="sm"
+                                              onClick={() => setItem1TextMode(prev => ({ ...prev, [subKey]: 'upload' }))}
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                          {hasSubText && !item1TextDraft[subKey] && (
+                                            <div className="text-muted small mt-1">Currently saved text: <em>{subDoc.textContent.substring(0, 80)}{subDoc.textContent.length > 80 ? '…' : ''}</em></div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}

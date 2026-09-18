@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Modal, Button } from 'react-bootstrap';
+import { useSidebar } from '@/lib/useSidebar';
 
 const TAB_STORAGE_KEY = 'ppsu_active_role_tab';
 
@@ -11,7 +12,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { mode: sidebarMode, toggleSidebar, mobileOpen, setMobileOpen } = useSidebar();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [isAlsoCoordinator, setIsAlsoCoordinator] = useState(false);
   const [isCoordinatorAssigned, setIsCoordinatorAssigned] = useState(false);
@@ -154,12 +155,26 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
     }
   ];
 
+  // Compute CSS modifier class from sidebar mode (desktop) or mobileOpen (mobile)
+  const sidebarClass = [
+    'sidebar',
+    sidebarMode === 'collapsed' ? 'sidebar-collapsed' : '',
+    sidebarMode === 'hidden' ? 'sidebar-hidden' : '',
+    mobileOpen ? 'sidebar-open' : ''
+  ].filter(Boolean).join(' ');
+
+  const mainClass = [
+    'main-content-wrapper',
+    sidebarMode === 'collapsed' ? 'content-collapsed' : '',
+    sidebarMode === 'hidden' ? 'content-hidden' : ''
+  ].filter(Boolean).join(' ');
+
   return (
     <div className="layout-wrapper">
-      {sidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+      {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
       
       {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+      <aside className={sidebarClass}>
         <div className="sidebar-brand">
           <div className="bg-white p-2 rounded-3 shadow-sm mb-2 d-inline-block">
             <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '44px', objectFit: 'contain' }} />
@@ -180,7 +195,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
                   type="button"
                   className="sidebar-nav-link text-muted opacity-75 border-0 w-100 text-start"
                   style={{ background: 'transparent', cursor: 'pointer' }}
-                  onClick={() => { setSidebarOpen(false); setShowLockedModal(true); }}
+                  onClick={() => { setMobileOpen(false); setShowLockedModal(true); }}
                 >
                   <span className="sidebar-nav-icon text-secondary">{link.icon}</span>
                   <span className="flex-grow-1 text-secondary">{link.label}</span>
@@ -194,7 +209,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
                 href={link.href}
                 prefetch={false}
                 className={`sidebar-nav-link ${isActive ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => setMobileOpen(false)}
               >
                 <span className="sidebar-nav-icon">{link.icon}</span>
                 <span className="flex-grow-1">{link.label}</span>
@@ -218,10 +233,27 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
       </aside>
 
       {/* Main Container */}
-      <div className="main-content-wrapper">
-        <header className="top-header">
+      <div className={mainClass}>
+        <header className={`top-header${sidebarMode === 'collapsed' ? ' header-collapsed' : sidebarMode === 'hidden' ? ' header-hidden' : ''}`}>
           <div className="d-flex align-items-center gap-3">
-            <button className="mobile-menu-toggle" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}>
+            {/* Desktop sidebar toggle */}
+            <button
+              className="d-none d-md-flex btn btn-sm align-items-center justify-content-center p-1 me-1"
+              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--ppsu-border)', background: 'var(--ppsu-bg)', color: 'var(--ppsu-text-secondary)' }}
+              title={sidebarMode === 'expanded' ? 'Collapse sidebar' : sidebarMode === 'collapsed' ? 'Hide sidebar' : 'Show sidebar'}
+              onClick={toggleSidebar}
+              aria-label="Toggle sidebar"
+            >
+              {sidebarMode === 'hidden' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+              ) : sidebarMode === 'collapsed' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h8M4 18h16" /></svg>
+              )}
+            </button>
+            {/* Mobile sidebar toggle */}
+            <button className="mobile-menu-toggle d-md-none" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
               <span /><span /><span />
             </button>
             <div className="header-title-section">
