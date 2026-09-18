@@ -330,10 +330,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           }
           if (assignedBatches.length === 0) assignedBatches.push('A');
           return isSubjectCoordinator
-            ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName }
+            ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName, role: payload.role, isAdmin: payload.role === 'ADMIN' }
             : labBatch
-            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14, 20], editableItems: [2, 8, 9, 14, 20] }
-            : { mode: 'OWNER', assignedBatches, facultyName: callerName };
+            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14, 20], editableItems: [2, 8, 9, 14, 20], role: payload.role, isAdmin: payload.role === 'ADMIN' }
+            : { mode: 'OWNER', assignedBatches, facultyName: callerName, role: payload.role, isAdmin: payload.role === 'ADMIN' };
         })()
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)
@@ -411,6 +411,19 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       reviewerConfirmed,
       division
     } = body;
+
+    const isUpdatingHeaderDetails =
+      facultyName !== undefined ||
+      department !== undefined ||
+      school !== undefined ||
+      semester !== undefined ||
+      courseCode !== undefined ||
+      courseTitle !== undefined ||
+      division !== undefined;
+
+    if (isUpdatingHeaderDetails && payload.role !== 'ADMIN') {
+      return noStoreJson({ error: 'Only administrators can edit Faculty & Course Details.' }, { status: 403 });
+    }
 
     if (!isCoordinator && status !== 'SUBMITTED' && status !== undefined) {
       return noStoreJson({ error: 'Faculty may only submit a completed course file.' }, { status: 403 });

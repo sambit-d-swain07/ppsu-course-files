@@ -156,13 +156,23 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [resumedItemIndex, setResumedItemIndex] = useState<number | null>(null);
   const hasAutoScrolledRef = useRef(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerEdit, setHeaderEdit] = useState({
     facultyName: '', department: '', school: '', semester: '', courseCode: '', courseTitle: '', division: ''
   });
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
-  const [access, setAccess] = useState<{ mode: string; batch?: string; facultyName?: string; allowedItems?: number[]; editableItems?: number[] }>({ mode: 'OWNER' });
+  const [access, setAccess] = useState<{ mode: string; batch?: string; facultyName?: string; allowedItems?: number[]; editableItems?: number[]; role?: string; isAdmin?: boolean }>({ mode: 'OWNER' });
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.role) setUserRole(data.user.role);
+      })
+      .catch(() => {});
+  }, []);
   const saveTimeoutsRef = useRef<Record<number, NodeJS.Timeout>>({});
   // Refs that always hold the latest rows — needed so debounced save callbacks
   // don't capture stale closures and overwrite marks the user just typed.
@@ -1389,8 +1399,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const completedCount = scopedChecklistItems.filter((item) => isItemComplete(item.index)).length;
   const percent = Math.round((completedCount / checklistTotal) * 100);
 
+  const isAdmin = userRole === 'ADMIN' || access.mode === 'ADMIN' || access.role === 'ADMIN' || access.isAdmin === true;
+
   const handleSaveHeader = async () => {
     if (isLocked) return;
+    if (!isAdmin) {
+      setActionError('Only administrators can edit Faculty & Course Details.');
+      return;
+    }
     setHeaderSaving(true); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch(`/api/course-files/${courseFileId}`, {
@@ -1398,7 +1414,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(headerEdit)
       });
-      if (!res.ok) throw new Error('Failed to update header details');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to update header details');
+      }
       setActionSuccess('Faculty & Course details updated.');
       fetchData();
     } catch (err: any) { setActionError(err.message); } finally { setHeaderSaving(false); }
@@ -2506,8 +2525,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       {/* SECTION 0: Faculty & Course Details Header Block */}
       <Card className="card-custom mb-4 border-0 shadow-sm">
         <Card.Header className="bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-          <h5 className="fw-bold text-navy-900 mb-0">Faculty & Course Details</h5>
-          {!isLocked && (
+          <div className="d-flex align-items-center gap-2">
+            <h5 className="fw-bold text-navy-900 mb-0">Faculty & Course Details</h5>
+            {!isAdmin && (
+              <Badge bg="light" text="dark" className="border px-2 py-1" style={{ fontSize: 11, fontWeight: 500 }}>
+                🔒 Read Only (Admin Managed)
+              </Badge>
+            )}
+          </div>
+          {isAdmin && !isLocked && (
             <Button size="sm" variant="outline-primary" onClick={handleSaveHeader} disabled={headerSaving}>
               {headerSaving ? <Spinner animation="border" size="sm" /> : 'Save Header Info'}
             </Button>
@@ -2522,7 +2548,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={access.mode === 'LAB_BATCH' ? (access.facultyName || headerEdit.facultyName) : headerEdit.facultyName}
-                disabled={isLocked || access.mode === 'LAB_BATCH'}
+                disabled={!isAdmin || isLocked || access.mode === 'LAB_BATCH'}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, facultyName: e.target.value })}
                 className="py-1"
               />
@@ -2532,7 +2558,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={headerEdit.department}
-                disabled={isLocked}
+                disabled={!isAdmin || isLocked}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, department: e.target.value })}
                 className="py-1"
               />
@@ -2542,7 +2568,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={headerEdit.school}
-                disabled={isLocked}
+                disabled={!isAdmin || isLocked}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, school: e.target.value })}
                 className="py-1"
               />
@@ -2552,7 +2578,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={headerEdit.semester}
-                disabled={isLocked}
+                disabled={!isAdmin || isLocked}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, semester: e.target.value })}
                 className="py-1"
               />
@@ -2562,7 +2588,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={headerEdit.courseCode}
-                disabled={isLocked}
+                disabled={!isAdmin || isLocked}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, courseCode: e.target.value })}
                 className="py-1 font-mono-ppsu fw-bold"
               />
@@ -2572,7 +2598,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <Form.Control
                 type="text"
                 value={headerEdit.courseTitle}
-                disabled={isLocked}
+                disabled={!isAdmin || isLocked}
                 onChange={(e) => setHeaderEdit({ ...headerEdit, courseTitle: e.target.value })}
                 className="py-1"
               />
