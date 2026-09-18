@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card, Tabs, Tab, Badge } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 import * as XLSX from 'xlsx';
+import { parseItem4StudentList } from '@/lib/student-parser';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
@@ -1415,24 +1416,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       const dataUrl = await uploadFileToServer(selectedFile);
       const isSig = itemIndex === 20 && access.mode !== 'LAB_BATCH';
       let studentListJson: string | undefined;
-      if (itemIndex === 4 && /\.(csv|txt)$/i.test(selectedFile.name)) {
-        const lines = (await selectedFile.text()).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-        const header = lines[0]?.split(',').map((value) => value.trim().toLowerCase()) || [];
-        const findIndex = (patterns: string[], fallback: number) => {
-          const found = header.findIndex((label) => patterns.some((pattern) => label.includes(pattern)));
-          return found >= 0 ? found : fallback;
-        };
-        const enrolmentIndex = findIndex(['enrol', 'enroll', 'roll'], 0);
-        const nameIndex = findIndex(['name', 'student'], 1);
-        const batchIndex = findIndex(['batch'], 2);
-        const rows = lines.slice(1).map((line, index) => {
-          const values = line.split(',').map((value) => value.trim());
-          const enrolmentNumber = values[enrolmentIndex] || '';
-          const name = values[nameIndex] || '';
-          const batch = String(values[batchIndex] || '').toUpperCase();
-          return { id: enrolmentNumber || `student-${index}`, enrolmentNumber, name, batch: ['A', 'B', 'C'].includes(batch) ? batch : '' };
-        }).filter((student) => student.enrolmentNumber && student.name);
-        studentListJson = JSON.stringify({ students: rows });
+      if (itemIndex === 4 && (/\.(csv|txt)$/i.test(selectedFile.name) || selectedFile.type === 'text/csv' || selectedFile.type === 'text/plain')) {
+        const text = await selectedFile.text();
+        const defaultBatch = access.mode === 'LAB_BATCH' ? access.batch : undefined;
+        const parsedResult = parseItem4StudentList(text, defaultBatch);
+        studentListJson = JSON.stringify(parsedResult);
       }
 
       setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? {
