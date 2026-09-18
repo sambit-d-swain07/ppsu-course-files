@@ -179,8 +179,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
           <div className="bg-white p-2 rounded-3 shadow-sm mb-2 d-inline-block">
             <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '44px', objectFit: 'contain' }} />
           </div>
-          <div className="fw-bold text-white text-center" style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}>Course Files Portal</div>
-          <div className="badge rounded-pill mt-1" style={{ background: 'rgba(232, 84, 30, 0.25)', color: '#FFA07A', fontSize: '0.68rem', fontWeight: 600 }}>
+          <div className="fw-bold text-white text-center sidebar-brand-text" style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}>Course Files Portal</div>
+          <div className="badge rounded-pill mt-1 sidebar-badge" style={{ background: 'rgba(232, 84, 30, 0.25)', color: '#FFA07A', fontSize: '0.68rem', fontWeight: 600 }}>
             Faculty Portal
           </div>
         </div>
@@ -198,8 +198,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
                   onClick={() => { setMobileOpen(false); setShowLockedModal(true); }}
                 >
                   <span className="sidebar-nav-icon text-secondary">{link.icon}</span>
-                  <span className="flex-grow-1 text-secondary">{link.label}</span>
-                  <span className="ms-auto" title="Locked — Not assigned as Course Coordinator">🔒</span>
+                  <span className="flex-grow-1 text-secondary sidebar-nav-text">{link.label}</span>
+                  <span className="ms-auto sidebar-nav-text" title="Locked — Not assigned as Course Coordinator">🔒</span>
                 </button>
               );
             }
@@ -212,7 +212,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
                 onClick={() => setMobileOpen(false)}
               >
                 <span className="sidebar-nav-icon">{link.icon}</span>
-                <span className="flex-grow-1">{link.label}</span>
+                <span className="flex-grow-1 sidebar-nav-text">{link.label}</span>
               </Link>
             );
           })}
@@ -227,7 +227,7 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Sign Out
+            <span className="sidebar-footer-text">Sign Out</span>
           </button>
         </div>
       </aside>

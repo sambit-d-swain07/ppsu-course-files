@@ -217,9 +217,9 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
           <div className="bg-white p-2 rounded-3 shadow-sm mb-2 d-inline-block">
             <img src="/PPSUNAACA+Logo.png" alt="PPSU Logo" style={{ height: '44px', objectFit: 'contain' }} />
           </div>
-          <div className="fw-bold text-white text-center" style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}>Course Files Portal</div>
+          <div className="fw-bold text-white text-center sidebar-brand-text" style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}>Course Files Portal</div>
           <div
-            className="badge rounded-pill mt-1"
+            className="badge rounded-pill mt-1 sidebar-badge"
             style={{
               background: isFacultyTab ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)',
               color: isFacultyTab ? '#6EE7B7' : '#FCD34D',
@@ -233,7 +233,7 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
 
         {/* ── Inline tab switcher inside sidebar (visible on mobile) ── */}
         {isDualRole && (
-          <div className="px-3 pb-2" style={{ marginTop: '-4px' }}>
+          <div className="px-3 pb-2 sidebar-tab-switcher" style={{ marginTop: '-4px' }}>
             <div className="d-flex rounded-2 overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.18)' }}>
               <button
                 onClick={() => switchTab('coordinator')}
@@ -274,9 +274,9 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
                 onClick={() => setMobileOpen(false)}
               >
                 <span className="sidebar-nav-icon">{link.icon}</span>
-                <span className="flex-grow-1">{link.label}</span>
+                <span className="flex-grow-1 sidebar-nav-text">{link.label}</span>
                 {showBadge && (
-                  <span className="badge rounded-pill bg-danger px-2" style={{ fontSize: '0.68rem' }}>
+                  <span className="badge rounded-pill bg-danger px-2 sidebar-nav-text" style={{ fontSize: '0.68rem' }}>
                     {unreadCount}
                   </span>
                 )}
@@ -294,7 +294,7 @@ export default function CoordinatorLayout({ children }: { children: React.ReactN
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Sign Out
+            <span className="sidebar-footer-text">Sign Out</span>
           </button>
         </div>
       </aside>
