@@ -920,6 +920,46 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     document.body.removeChild(link);
   };
 
+  const handleDownloadPerfQuizTemplate = () => {
+    const students = getStudentList();
+    const headers = ['Enrollment No', 'Name', 'Perf / Quiz (30)'];
+    const dataRows = students.map((s: any) => {
+      const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
+      const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
+      return [enrol, name, ''].join(',');
+    });
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const batchSuffix = access.mode === 'LAB_BATCH' ? `_Batch${access.batch}` : '';
+    link.setAttribute('download', `PerfQuiz_Template${batchSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadExtVivaTemplate = () => {
+    const students = getStudentList();
+    const headers = ['Enrollment No', 'Name', 'Ext Viva (30)'];
+    const dataRows = students.map((s: any) => {
+      const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
+      const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
+      return [enrol, name, ''].join(',');
+    });
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const batchSuffix = access.mode === 'LAB_BATCH' ? `_Batch${access.batch}` : '';
+    link.setAttribute('download', `ExtViva_Template${batchSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDownloadStudentCsv = (students: any[], batchName?: string) => {
     if (!students || students.length === 0) return;
     const headers = ['Sr No', 'Student Name', 'Enrolment Number', 'Batch'];
@@ -3553,12 +3593,23 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         )}
                                       </div>
                                     ) : (
-                                      !isLocked && (
-                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
-                                          Upload CSV / PDF
-                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec31', f); e.currentTarget.value = ''; }} />
-                                        </label>
-                                      )
+                                      <div className="d-flex align-items-center gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline-success"
+                                          style={{ fontSize: 9, padding: '1px 5px' }}
+                                          onClick={handleDownloadPerfQuizTemplate}
+                                          title="Download Perf/Quiz Template CSV"
+                                        >
+                                          ⬇ PerfQuiz Template.csv
+                                        </Button>
+                                        {!isLocked && (
+                                          <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                            Upload CSV / PDF
+                                            <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec31', f); e.currentTarget.value = ''; }} />
+                                          </label>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 );
@@ -3663,12 +3714,23 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         )}
                                       </div>
                                     ) : (
-                                      !isLocked && (
-                                        <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
-                                          Upload CSV / PDF
-                                          <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec32', f); e.currentTarget.value = ''; }} />
-                                        </label>
-                                      )
+                                      <div className="d-flex align-items-center gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline-success"
+                                          style={{ fontSize: 9, padding: '1px 5px' }}
+                                          onClick={handleDownloadExtVivaTemplate}
+                                          title="Download External Viva Template CSV"
+                                        >
+                                          ⬇ ExtViva Template.csv
+                                        </Button>
+                                        {!isLocked && (
+                                          <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10 }}>
+                                            Upload CSV / PDF
+                                            <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem8SectionFileUpload('sec32', f); e.currentTarget.value = ''; }} />
+                                          </label>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 );
