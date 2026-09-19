@@ -47,10 +47,36 @@ function PageHeader({ cf }: { cf: any }) {
 
 function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string; height?: string }) {
   if (!url) return null;
-  if (name?.match(/.(png|jpg|jpeg|gif|webp)$/i))
+  const isImg = name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+  const isDoc = name?.match(/\.(docx|doc|xlsx|xls|csv|txt)$/i);
+
+  if (isImg) {
     return <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: height, objectFit: 'contain', display: 'block', margin: '0 auto' }} />;
-  return <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none' }} />;
+  }
+
+  if (isDoc) {
+    return (
+      <div style={{ padding: '24px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', margin: '16px 0' }}>
+        <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
+        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'Document File'}</div>
+        <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Office / Text Document</div>
+        <a href={url} download={name || 'document'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
+          Download / Open {name}
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none', borderRadius: '4px' }} />
+      <div className="no-print text-center mt-1" style={{ fontSize: '11px', color: '#666' }}>
+        Having trouble viewing? <a href={url} target="_blank" rel="noreferrer" className="text-decoration-underline">Open PDF in new tab</a>
+      </div>
+    </div>
+  );
 }
+
 
 function Pending({ name }: { name: string }) {
   return (
