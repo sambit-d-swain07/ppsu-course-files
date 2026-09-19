@@ -193,25 +193,101 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           let content: React.ReactNode;
 
           if (item.index === 1) {
+            const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
             content = (
               <div>
                 {(['vision', 'mission', 'peo', 'pso', 'po'] as const).map((key) => {
                   const sub = sb?.[key];
-                  return (
-                    <div key={key} style={{ marginBottom: '32px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{key.toUpperCase()}</div>
-                      {sub?.fileUrl ? (
-                        <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" />
-                      ) : sub?.textContent ? (
-                        <div style={{ padding: '16px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit' }}>
-                          {sub.textContent}
+                  const text = sub?.textContent;
+                  const isMission = key === 'mission';
+                  const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
+
+                  if (text?.trim()) {
+                    if (isMission) {
+                      return (
+                        <div key={key} style={{ marginBottom: '24px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                            <thead>
+                              <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
+                                <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
+                                  INSTITUTE MISSION
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line: string, idx: number) => (
+                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #ccc' : 'none' }}>
+                                  <td style={{ width: '40px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #ccc', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                    {idx + 1}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                    {line.replace(/^\d+[\.\)]\s*/, '')}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
                         </div>
-                      ) : (
-                        <Pending name={key.toUpperCase()} />
-                      )}
-                    </div>
-                  );
+                      );
+                    }
+
+                    return (
+                      <div key={key} style={{ marginBottom: '24px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                          <thead>
+                            <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
+                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
+                                INSTITUTE {key.toUpperCase()}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
+                                {text}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                        {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
+                      </div>
+                    );
+                  }
+
+                  if (sub?.fileUrl) {
+                    return (
+                      <div key={key} style={{ marginBottom: '24px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{key.toUpperCase()}</div>
+                        <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" />
+                      </div>
+                    );
+                  }
+
+                  return <Pending key={key} name={key.toUpperCase()} />;
                 })}
+
+                {/* Custom Sections */}
+                {customSecs.map((sec: any) => (
+                  <div key={sec.id} style={{ marginBottom: '24px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                      <thead>
+                        <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
+                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
+                            {sec.title.toUpperCase()}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
+                            {sec.textContent}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
               </div>
             );
           } else if (item.index === 4) {
