@@ -131,35 +131,40 @@ export default function AppShell({
       {/* Global Sidebar */}
       <aside className={sidebarClass}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo-box bg-white p-2 rounded-3 shadow-sm mb-2 d-inline-block">
+          <div className="sidebar-logo-box bg-white p-2 rounded-3 shadow-sm mb-2 d-flex align-items-center justify-content-center">
             <img
               src="/PPSUNAACA+Logo.png"
               alt="PPSU Logo"
               style={{
                 height: isCollapsed ? '28px' : '44px',
                 width: 'auto',
+                maxWidth: '100%',
                 objectFit: 'contain',
-                transition: 'height 0.25s ease',
+                transition: 'all 0.25s ease',
               }}
             />
           </div>
-          <div
-            className="fw-bold text-white text-center sidebar-brand-text"
-            style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}
-          >
-            Course Files Portal
-          </div>
-          <div
-            className="badge rounded-pill mt-1 sidebar-badge"
-            style={{
-              background: portalBadgeBg,
-              color: portalBadgeColor,
-              fontSize: '0.68rem',
-              fontWeight: 600,
-            }}
-          >
-            {portalBadgeText}
-          </div>
+          {!isCollapsed && (
+            <>
+              <div
+                className="fw-bold text-white text-center sidebar-brand-text"
+                style={{ fontSize: '0.9rem', letterSpacing: '0.3px' }}
+              >
+                Course Files Portal
+              </div>
+              <div
+                className="badge rounded-pill mt-1 sidebar-badge"
+                style={{
+                  background: portalBadgeBg,
+                  color: portalBadgeColor,
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
+                }}
+              >
+                {portalBadgeText}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Sidebar Menu */}
@@ -250,16 +255,17 @@ export default function AppShell({
             {/* Desktop Sidebar Toggle Button */}
             <button
               type="button"
-              className="d-none d-md-flex btn btn-sm align-items-center justify-content-center p-1 me-1 sidebar-toggle-btn"
+              className="d-none d-md-flex btn btn-sm align-items-center justify-content-center p-0 sidebar-toggle-btn"
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 8,
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
                 border: '1px solid var(--ppsu-border)',
-                background: 'var(--ppsu-bg)',
-                color: 'var(--ppsu-text-secondary)',
+                background: '#ffffff',
+                color: 'var(--ppsu-navy-900)',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
               aria-label={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
@@ -267,13 +273,33 @@ export default function AppShell({
               onClick={toggleSidebar}
             >
               {isCollapsed ? (
-                <span className="fw-bold fs-6" style={{ lineHeight: 1 }}>
-                  ››
-                </span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
               ) : (
-                <span className="fw-bold fs-6" style={{ lineHeight: 1 }}>
-                  ‹‹
-                </span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 19l-7-7 7-7" />
+                </svg>
               )}
             </button>
 
