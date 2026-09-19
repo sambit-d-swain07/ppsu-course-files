@@ -383,9 +383,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             bs.filter(Boolean).forEach(add);
           });
         }
-        return loadedAccess.mode === 'LAB_BATCH' && loadedAccess.batch
-          ? all.filter((student) => String(student.batch || '').toUpperCase() === loadedAccess.batch)
-          : all;
+        if (loadedAccess.mode === 'LAB_BATCH' && loadedAccess.batch) {
+          const targetBatch = String(loadedAccess.batch).toUpperCase().trim();
+          return all.filter((student) => {
+            const raw = String(student.batch || '').toUpperCase().trim();
+            const normalized = raw.replace(/^BATCH[-\s]*/i, '').trim();
+            return normalized === targetBatch;
+          });
+        }
+        return all;
       };
 
       const buildItem8Rows = (items: any[], studentList: any[]) => {
@@ -1121,9 +1127,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       });
     }
 
-    return access.mode === 'LAB_BATCH' && access.batch
-      ? allStudents.filter((student) => String(student.batch || '').toUpperCase() === access.batch)
-      : allStudents;
+    if (access.mode === 'LAB_BATCH' && access.batch) {
+      const targetBatch = String(access.batch).toUpperCase().trim(); // e.g. "A", "B", "C"
+      return allStudents.filter((student) => {
+        // Normalize: "Batch A" → "A", "batch-a" → "A", "A" → "A"
+        const raw = String(student.batch || '').toUpperCase().trim();
+        const normalized = raw.replace(/^BATCH[-\s]*/i, '').trim(); // strip "BATCH " or "BATCH-"
+        return normalized === targetBatch;
+      });
+    }
+    return allStudents;
   };
 
   const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
