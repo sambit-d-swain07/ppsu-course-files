@@ -869,15 +869,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleDownloadLabCsvTemplate = () => {
-    // Build headers: Enrollment No, Name, then P1...Pn based on current numPracticals
+    // Get students — getStudentList() already filters by access.batch when mode is LAB_BATCH
+    const students = getStudentList();
     const practicalHeaders = Array.from({ length: numPracticals }, (_, i) => `P${i + 1}`);
     const headers = ['Enrollment No', 'Name', ...practicalHeaders];
-    const csvContent = headers.join(',') + '\n';
+    // Build one row per student: enrolment + name filled in, practicals empty
+    const dataRows = students.map((s: any) => {
+      const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
+      const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
+      const emptyPracticals = practicalHeaders.map(() => '');
+      return [enrol, name, ...emptyPracticals].join(',');
+    });
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `Lab_PracticalMarks_Template_P1-P${numPracticals}.csv`);
+    // Include batch label in filename when lab teacher
+    const batchSuffix = access.mode === 'LAB_BATCH' ? `_Batch${access.batch}` : '';
+    link.setAttribute('download', `Lab_PracticalMarks_Template${batchSuffix}_P1-P${numPracticals}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
