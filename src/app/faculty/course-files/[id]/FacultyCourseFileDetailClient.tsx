@@ -197,6 +197,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [continuousCriteria, setContinuousCriteria] = useState<any[]>([]);
   const [hasSeparatePracticalGrade, setHasSeparatePracticalGrade] = useState(false);
 
+  // Item 1 text-input state (Vision, Mission, PEO, PSO, PO)
+  const ITEM1_CHAR_LIMITS: Record<string, number> = { vision: 2000, mission: 2000, peo: 6000, pso: 6000, po: 6000 };
+  const [item1Drafts, setItem1Drafts] = useState<Record<string, string>>({ vision: '', mission: '', peo: '', pso: '', po: '' });
+  const [item1Saving, setItem1Saving] = useState<Record<string, boolean>>({ vision: false, mission: false, peo: false, pso: false, po: false });
+
   // Lifted state for Items 8 & 9 — populated once in fetchData, updated surgically on mark changes
   const [numPracticals, setNumPracticals] = useState<number>(4);
   const [item8Rows, setItem8Rows] = useState<any[]>([]);
@@ -549,6 +554,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         try {
           const parsed = JSON.parse(item15.subItemsJson);
           setHasSeparatePracticalGrade(Boolean(parsed.hasSeparatePracticalGrade));
+        } catch (e) {}
+      }
+
+      // Populate Item 1 text drafts from saved textContent
+      const item1 = checklistItems.find((cli: any) => cli.itemIndex === 1);
+      if (item1?.subItemsJson) {
+        try {
+          const p = JSON.parse(item1.subItemsJson);
+          setItem1Drafts({
+            vision:  p.vision?.textContent  || '',
+            mission: p.mission?.textContent || '',
+            peo:     p.peo?.textContent     || '',
+            pso:     p.pso?.textContent     || '',
+            po:      p.po?.textContent      || '',
+          });
         } catch (e) {}
       }
     } catch (err: any) {
@@ -1096,6 +1116,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const isItemComplete = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
     if (!dbItem) return false;
+
+    if (itemIndex === 1) {
+      const subs: any = getSubItems(1) || {};
+      const hasText = ['vision', 'mission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
+      const hasFile = subs.vision?.fileName && subs.mission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName;
+      return hasText || Boolean(hasFile) || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
+    }
 
     if (itemIndex === 6) {
       const subs = getSubItems(6);
@@ -1656,39 +1683,45 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   // Item 1 Sub-upload handler with real Data URL
-  const handleItem1SubUpload = async (subKey: 'vision' | 'mission' | 'peo' | 'pso' | 'po', file?: File) => {
+  const handleItem1TextSave = async (subKey: 'vision' | 'mission' | 'peo' | 'pso' | 'po') => {
     if (isLocked) return;
-    const subs = getSubItems(1) || { vision: null, mission: null, peo: null, pso: null, po: null };
+    const text = (item1Drafts[subKey] || '').trim();
+    if (!text || text.length > ITEM1_CHAR_LIMITS[subKey]) return;
 
-    if (!file) {
-      subs[subKey] = null;
-    } else {
-      const dataUrl = await uploadFileToServer(file);
-      subs[subKey] = {
-        fileName: file.name,
-        fileUrl: dataUrl,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
-    }
+    setItem1Saving(prev => ({ ...prev, [subKey]: true }));
+    const subs: any = getSubItems(1) || { vision: null, mission: null, peo: null, pso: null, po: null };
+    const now = new Date();
+    // Sanitize: strip any HTML/script tags before storing
+    const sanitized = text.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    subs[subKey] = {
+      ...(subs[subKey] || {}),
+      textContent: sanitized,
+      savedBy: headerEdit.facultyName || 'Coordinator',
+      savedAt: now.toISOString(),
+    };
 
-    const isAll5Uploaded = !!(subs.vision?.fileName && subs.mission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName);
-    const newStatus = isAll5Uploaded ? 'UPLOADED' : 'EMPTY';
+    const isAll5Done = ['vision', 'mission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
+    const newStatus = isAll5Done ? 'UPLOADED' : 'EMPTY';
 
-    setChecklist((prev) => prev.map((item) => item.itemIndex === 1 ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
+    setChecklist(prev => prev.map(item =>
+      item.itemIndex === 1
+        ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) }
+        : item
+    ));
 
     try {
       await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itemIndex: 1,
-          status: newStatus,
-          fileName: 'vision_mission_peo_pso_po_package.pdf',
-          subItemsJson: JSON.stringify(subs)
-        })
+        body: JSON.stringify({ itemIndex: 1, status: newStatus, subItemsJson: JSON.stringify(subs) }),
       });
-      setActionSuccess(`Item 1 (${subKey.toUpperCase()}) updated.`);
-    } catch (err: any) { setActionError(err.message); }
+      setActionSuccess('Saved successfully.');
+      setTimeout(() => setActionSuccess(''), 2500);
+    } catch {
+      setActionError('Failed to save. Please try again.');
+    } finally {
+      setItem1Saving(prev => ({ ...prev, [subKey]: false }));
+    }
   };
 
   // IA Fixed Sub-upload handler with real Data URL
@@ -2767,7 +2800,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           <div className="mt-4">
             <div className="d-flex justify-content-between small text-secondary mb-1">
               <span>Overall Completion Progress</span>
-              <span className="fw-bold font-mono-ppsu">{completedCount}/20 ({percent}%)</span>
+              <span className="fw-bold font-mono-ppsu">{completedCount}/20 Completed ({percent}%)</span>
             </div>
             <ProgressBar now={percent} className="progress-custom" style={{ height: 8 }} />
           </div>
@@ -4348,75 +4381,89 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 </div>
 
                 {/* SECTION 10 & 16: Item 1 Split into 5 Sub-uploads */}
-                {isItem1 && !isRestricted && (
-                  <div className="mt-3 ps-4 border-start border-2 border-info ms-2">
-                    <div className="small text-secondary mb-2 fw-semibold">
-                      5 Compulsory Sub-uploads Required
-                      {dbItem.isCoordinatorShared && (
-                        <span className="ms-2 badge bg-info-subtle text-info-emphasis border">
-                          School: {SCHOOL_LABELS[getSubItems(1)?.school] || getSubItems(1)?.school || courseFile.school || 'Not selected'}
-                        </span>
-                      )}
-                    </div>
-                    <Row className="g-2 small">
-                      {[
-                        { key: 'vision', label: '(a) Vision *' },
-                        { key: 'mission', label: '(b) Mission *' },
-                        { key: 'peo', label: '(c) PEO *' },
-                        { key: 'pso', label: '(d) PSO *' },
-                        { key: 'po', label: '(e) PO *' }
-                      ].map((sub) => {
-                        const subData = getSubItems(1)?.[sub.key];
-                        return (
-                          <Col xs={12} md={6} lg={4} key={sub.key}>
-                            <div className="p-2 bg-light rounded border">
-                              <div className="fw-bold mb-1">
-                                {sub.label}
-                                {dbItem.isCoordinatorShared && <span className="ms-2 badge bg-secondary" style={{ fontSize: 9 }}>Coordinator Upload</span>}
-                              </div>
-                              {sub.key === 'gradeSheet' && <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />}
-                              {subData?.fileName ? (
-                                <div>
-                                  <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {subData.fileName}</div>
-                                  <div className="d-flex gap-1">
-                                    <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}>
-                                      View
-                                    </Button>
-                                    {!isLocked && !dbItem.isCoordinatorShared && (
-                                      <>
-                                        <label className="btn btn-outline-secondary btn-sm p-0 px-1 m-0" style={{ fontSize: 10 }}>
-                                          Replace
-                                          <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
-                                        </label>
-                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleItem1SubUpload(sub.key as any, undefined)}>
-                                          Remove
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
+                {isItem1 && !isRestricted && (() => {
+                  const subs: any = getSubItems(1) || {};
+                  const subDefs = [
+                    { key: 'vision',  label: '(a) Institute & Department Vision *',        limit: 2000 },
+                    { key: 'mission', label: '(b) Institute & Department Mission *',       limit: 2000 },
+                    { key: 'peo',     label: '(c) Program Educational Objectives (PEO) *', limit: 6000 },
+                    { key: 'pso',     label: '(d) Program Specific Outcomes (PSO) *',      limit: 6000 },
+                    { key: 'po',      label: '(e) Program Outcomes (PO) *',                limit: 6000 },
+                  ];
+                  return (
+                    <div className="mt-3 ps-4 border-start border-2 border-info ms-2">
+                      <div className="small text-secondary mb-2 fw-semibold">
+                        5 Text Fields Required — type content directly as Course Coordinator
+                      </div>
+                      <Row className="g-3">
+                        {subDefs.map(({ key, label, limit }) => {
+                          const subData = subs[key];
+                          const draft = item1Drafts[key] || '';
+                          const saved = subData?.textContent?.trim();
+                          const overLimit = draft.length > limit;
+                          const isSaving = item1Saving[key];
+                          const savedAt = subData?.savedAt ? new Date(subData.savedAt) : null;
+                          return (
+                            <Col xs={12} md={6} key={key}>
+                              <div className="p-3 bg-light rounded border h-100 d-flex flex-column">
+                                <div className="d-flex align-items-center justify-content-between mb-2">
+                                  <span className="fw-bold small">{label}</span>
+                                  {saved
+                                    ? <Badge bg="success" style={{ fontSize: 9 }}>✓ Saved</Badge>
+                                    : <Badge bg="secondary" style={{ fontSize: 9 }}>PENDING</Badge>
+                                  }
                                 </div>
-                              ) : (
-                                dbItem.isCoordinatorShared ? (
-                                  <div className="text-muted mb-1" style={{ fontSize: 11 }}>
-                                    {(dbItem.coordinatorUploaded || dbItem.fileName || dbItem.sharedFileName)
-                                      ? <span className="text-success fw-semibold">✓ Shared by Coordinator (combined document)</span>
-                                      : 'Not uploaded yet — pending Course Coordinator'
-                                    }
+                                {isLocked ? (
+                                  <div
+                                    className="p-2 bg-white rounded border flex-grow-1"
+                                    style={{ fontSize: 12, whiteSpace: 'pre-wrap', minHeight: 80 }}
+                                  >
+                                    {saved || <span className="text-muted fst-italic">Not saved yet.</span>}
                                   </div>
                                 ) : (
-                                  <label className="btn btn-outline-secondary btn-sm py-0" style={{ fontSize: 11 }}>
-                                    Choose Document
-                                    <input type="file" className="d-none" accept=".pdf" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItem1SubUpload(sub.key as any, f); }} />
-                                  </label>
-                                )
-                              )}
-                            </div>
-                          </Col>
-                        );
-                      })}
-                    </Row>
-                  </div>
-                )}
+                                  <>
+                                    <Form.Control
+                                      as="textarea"
+                                      rows={4}
+                                      value={draft}
+                                      placeholder={`Enter ${label.replace(/\s*\*$/, '')}…`}
+                                      className="mb-1 flex-grow-1"
+                                      style={{ resize: 'none', overflow: 'hidden', fontSize: 12 }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget as HTMLTextAreaElement;
+                                        el.style.height = 'auto';
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onChange={(e) => setItem1Drafts(prev => ({ ...prev, [key]: e.target.value }))}
+                                    />
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                      <small className={overLimit ? 'text-danger fw-semibold' : 'text-muted'}>
+                                        {draft.length.toLocaleString()} / {limit.toLocaleString()} characters
+                                      </small>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="primary"
+                                      disabled={!draft.trim() || overLimit || isSaving}
+                                      onClick={() => handleItem1TextSave(key as any)}
+                                    >
+                                      {isSaving ? <><Spinner size="sm" animation="border" className="me-1" />Saving…</> : '💾 Save'}
+                                    </Button>
+                                    {savedAt && (
+                                      <div className="text-muted mt-1" style={{ fontSize: 10 }}>
+                                        Last saved by <strong>{subData.savedBy}</strong> on {savedAt.toLocaleDateString('en-IN')} at {savedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </Col>
+                          );
+                        })}
+                      </Row>
+                    </div>
+                  );
+                })()}
 
                 {/* SECTION 6: Item 6 — Course Delivery Details (Planning: Coordinator · Outcomes: Faculty) */}
                 {isItem6 && !isRestricted && (() => {
@@ -5556,7 +5603,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           item1Doc?.coordinatorUploaded ||
           item1Doc?.sharedStatus === 'UPLOADED' ||
           item1Doc?.fileName ||
-          (parsedItem1.vision && parsedItem1.mission && parsedItem1.peo && parsedItem1.pso && parsedItem1.po)
+          (['vision', 'mission', 'peo', 'pso', 'po'].every(k => parsedItem1[k]?.textContent?.trim())) ||
+          (parsedItem1.vision?.fileName && parsedItem1.mission?.fileName && parsedItem1.peo?.fileName && parsedItem1.pso?.fileName && parsedItem1.po?.fileName)
         );
         const item18Doc = checklist.find((c) => c.itemIndex === 18);
         // Item 18 is complete if coordinator uploaded it (coordinatorUploaded flag, sharedStatus, or fileName)
