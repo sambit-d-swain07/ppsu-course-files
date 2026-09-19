@@ -855,6 +855,19 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     await saveStructuredItem(8, { ...subs, sectionFiles }, 'UPLOADED');
   };
 
+  
+  const handleDownloadCsvTemplate = () => {
+    const csvContent = 'Enrollment No,Name,Batch\n25IC02CA001,AMAN RAJ,Batch A\n25IC02CA002,ANGEL GUPTA,Batch A\n25IC02CA049,VISHWAKARMA ALOK AJAY,Batch B\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'StudentList_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDownloadStudentCsv = (students: any[], batchName?: string) => {
     if (!students || students.length === 0) return;
     const headers = ['Sr No', 'Student Name', 'Enrolment Number', 'Batch'];
@@ -2431,6 +2444,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         </button>
 
         <div className="d-flex align-items-center gap-2">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              style={{ fontSize: 11 }}
+                              onClick={handleDownloadCsvTemplate}
+                              title="Download sample CSV template format"
+                            >
+                              📄 Download CSV Template
+                            </Button>
           <Button
             size="sm"
             variant="outline-success"
