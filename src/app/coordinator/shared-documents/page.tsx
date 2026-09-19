@@ -36,6 +36,22 @@ const SCHOOL_LABELS: Record<string, string> = {
   ICA: 'ICA'
 };
 
+const uploadFileToServer = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.fileUrl || data.url) return data.fileUrl || data.url;
+    }
+  } catch (e) {}
+  return readFileAsDataUrl(file);
+};
+
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -126,7 +142,7 @@ export default function CoordinatorSharedDocumentsPage() {
     if ((itemIndex === 18 ? !selectedSchool : !selectedSubjectId) || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +173,7 @@ export default function CoordinatorSharedDocumentsPage() {
     if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId) || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
       let existingSubJson: any = {};
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}

@@ -1476,6 +1476,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }
 
       setActionSuccess(`Item #${itemIndex} (${selectedFile.name}) uploaded successfully.`);
+      if (itemIndex === 4) {
+        await fetchData(false);
+      }
     } catch (err: any) {
       setActionError(err.message);
     } finally {
@@ -4046,7 +4049,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         <Form.Select
                                           size="sm"
                                           style={{ fontSize: 11, padding: '2px 4px', width: 100 }}
-                                          value={student.batch || ''}
+                                          value={student.batch ? (['A','B','C'].includes(String(student.batch).toUpperCase()) ? String(student.batch).toUpperCase() : (/B/i.test(student.batch) ? 'B' : /C/i.test(student.batch) ? 'C' : 'A')) : ''}
                                           onChange={(e) => handleStudentBatchChange(student.id, e.target.value)}
                                         >
                                           <option value="">Unassigned</option>

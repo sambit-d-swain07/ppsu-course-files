@@ -46,7 +46,8 @@ function PageHeader({ cf }: { cf: any }) {
 }
 
 function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string; height?: string }) {
-  if (name?.match(/\.(png|jpg|jpeg|gif|webp)$/i))
+  if (!url) return null;
+  if (name?.match(/.(png|jpg|jpeg|gif|webp)$/i))
     return <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: height, objectFit: 'contain', display: 'block', margin: '0 auto' }} />;
   return <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none' }} />;
 }
@@ -133,7 +134,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           <div style={{ fontWeight: 'bold', fontSize: '20px', letterSpacing: '2px', textTransform: 'uppercase' }}>(COURSE FILE)</div>
         </div>
 
-        {/* PAGE 2: TABLE OF CONTENTS — plain 2-column, no Status */}
+        {/* PAGE 2: TABLE OF CONTENTS */}
         <div style={{ ...PAGE }}>
           <PageHeader cf={cf} />
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -161,8 +162,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         {CHECKLIST_ITEMS.map((item) => {
           const db = dbi(item.index);
           const sb = subs(item.index);
-          const url = db?.fileUrl;
-          const fn  = db?.fileName;
+          const url = db?.fileUrl || db?.sharedFileUrl;
+          const fn  = db?.fileName || db?.sharedFileName;
           let content: React.ReactNode;
 
           if (item.index === 1) {
@@ -197,58 +198,151 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                 </table>
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 8) {
-            const batches = sb?.batches;
-            if (batches?.length > 0) {
+          } else if (item.index === 6) {
+            const subFiles = [
+              sb?.lessonPlanLecture,
+              sb?.lessonPlanLab,
+              sb?.lessonPlanTutorial,
+              sb?.outcomeLecture,
+              sb?.outcomeLab
+            ].filter((f: any) => f && f.fileUrl);
+
+            if (subFiles.length > 0) {
               content = (
                 <div>
-                  {batches.map((batch: any) => {
-                    const students = batch.students || [];
-                    return (
-                      <div key={batch.id} style={{ marginBottom: '36px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '12px' }}>{batch.name || batch.id}</div>
-                        {batch.fileUrl ? <FileEmbed url={batch.fileUrl} name={batch.fileName} /> : students.length > 0 ? (
-                          <table style={TBLSTYLE}>
-                            <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th><th style={TH}>P.Key</th><th style={TH}>Term Work</th><th style={TH}>Int Viva</th><th style={TH}>ESE Perf</th><th style={TH}>ESE Ext Viva</th><th style={TH}>Total</th></tr></thead>
-                            <tbody>
-                              {students.map((st: any, i: number) => {
-                                const m = st.marks || st;
-                                return (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{m.pKey ?? '—'}</td><td style={TDC}>{m.termWork ?? m.tw ?? '—'}</td><td style={TDC}>{m.internalViva ?? m.iv ?? '—'}</td><td style={TDC}>{m.esePerformance ?? '—'}</td><td style={TDC}>{m.eseExternalViva ?? '—'}</td><td style={{ ...TDC, fontWeight: 'bold' }}>{m.total ?? '—'}</td></tr>);
-                              })}
-                            </tbody>
-                          </table>
-                        ) : <Pending name={`${batch.name} Rubrics`} />}
-                      </div>
-                    );
-                  })}
+                  {subFiles.map((sf: any, i: number) => (
+                    <div key={i} style={{ marginBottom: '28px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>{sf.fileName || `Lesson Plan File ${i + 1}`}</div>
+                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
+                    </div>
+                  ))}
+                </div>
+              );
+            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 8) {
+            const students = sb?.students || [];
+            const criteria = sb?.criteria || [
+              { id: 'termWork', label: 'Term Work' },
+              { id: 'internalViva', label: 'Internal Viva' }
+            ];
+            const batches = sb?.batches || [];
+
+            if (students.length > 0) {
+              content = (
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '12px' }}>Laboratory Continuous Evaluation Rubrics</div>
+                  <table style={TBLSTYLE}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...TH, width: '40px' }}>Sr</th>
+                        <th style={TH}>Enrolment No</th>
+                        <th style={TH}>Student Name</th>
+                        <th style={TH}>Batch</th>
+                        {criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((st: any, i: number) => {
+                        const m = st.marks || st;
+                        return (
+                          <tr key={i}>
+                            <td style={TDC}>{i + 1}</td>
+                            <td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td>
+                            <td style={TD}>{st.name || st.studentName || '—'}</td>
+                            <td style={TDC}>{st.batch || 'A'}</td>
+                            {criteria.map((cr: any) => (
+                              <td key={cr.id} style={TDC}>{m[cr.id] ?? m.marks?.[cr.id] ?? '—'}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            } else if (batches.length > 0) {
+              content = (
+                <div>
+                  {batches.map((batch: any) => (
+                    <div key={batch.id || batch.batch} style={{ marginBottom: '28px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Batch {batch.batch || batch.id} Rubrics</div>
+                      {batch.fileUrl ? <FileEmbed url={batch.fileUrl} name={batch.fileName} /> : <Pending name={`Batch ${batch.batch || batch.id} Rubrics`} />}
+                    </div>
+                  ))}
                 </div>
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
           } else if (item.index === 9) {
-            const sheets = sb?.sheets;
-            if (sheets?.length > 0) {
+            const students = sb?.students || [];
+            const criteria = sb?.criteria || [
+              { id: 'internal-1', label: 'Internal 1' },
+              { id: 'internal-2', label: 'Internal 2' }
+            ];
+            const sheets = sb?.sheets || [];
+
+            if (students.length > 0) {
               content = (
                 <div>
-                  {sheets.map((sheet: any, si: number) => {
-                    const students = sheet.students || [];
-                    const criteria = sheet.criteria || [];
-                    return (
-                      <div key={si} style={{ marginBottom: '36px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '12px' }}>Experiment {si + 1}{sheet.name ? `: ${sheet.name}` : ''}</div>
-                        <table style={TBLSTYLE}>
-                          <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}<th style={TH}>Total</th></tr></thead>
-                          <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{criteria.map((cr: any) => <td key={cr.id} style={TDC}>{st.marks?.[cr.id] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
-                        </table>
-                      </div>
-                    );
-                  })}
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '12px' }}>Theory Continuous Evaluation Rubrics</div>
+                  <table style={TBLSTYLE}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...TH, width: '40px' }}>Sr</th>
+                        <th style={TH}>Enrolment No</th>
+                        <th style={TH}>Student Name</th>
+                        {criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((st: any, i: number) => (
+                        <tr key={i}>
+                          <td style={TDC}>{i + 1}</td>
+                          <td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td>
+                          <td style={TD}>{st.name || st.studentName || '—'}</td>
+                          {criteria.map((cr: any) => (
+                            <td key={cr.id} style={TDC}>{st.marks?.[cr.id] ?? '—'}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            } else if (sheets.length > 0) {
+              content = (
+                <div>
+                  {sheets.map((sheet: any, si: number) => (
+                    <div key={si} style={{ marginBottom: '28px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Experiment {si + 1}</div>
+                      {sheet.fileUrl ? <FileEmbed url={sheet.fileUrl} name={sheet.fileName} /> : <Pending name={`Experiment ${si + 1}`} />}
+                    </div>
+                  ))}
                 </div>
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
           } else if (item.index === 11 || item.index === 12) {
-            const students = sb?.students;
-            if (students?.length > 0) {
-              const qKeys = Object.keys(students[0]).filter((k) => /^q\d+$/i.test(k));
+            const subDocs = [
+              sb?.timetable && { label: 'Timetable', ...sb.timetable },
+              sb?.questionPaper && { label: 'Question Paper', ...sb.questionPaper },
+              sb?.sampleAnswerSheet && { label: 'Sample Answer Sheet', ...sb.sampleAnswerSheet },
+              sb?.file && { label: 'Mark Statement Document', ...sb.file }
+            ].filter((f: any) => f && f.fileUrl);
+
+            const students = sb?.students || [];
+
+            if (subDocs.length > 0) {
+              content = (
+                <div>
+                  {subDocs.map((sd: any, idx: number) => (
+                    <div key={idx} style={{ marginBottom: '32px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{sd.label}: {sd.fileName}</div>
+                      <FileEmbed url={sd.fileUrl} name={sd.fileName} />
+                    </div>
+                  ))}
+                </div>
+              );
+            } else if (students.length > 0) {
+              const qKeys = Object.keys(students[0]).filter((k) => /^qd+$/i.test(k));
               content = (
                 <table style={TBLSTYLE}>
                   <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{qKeys.map((q) => <th key={q} style={TH}>{q.toUpperCase()}</th>)}<th style={TH}>Total</th></tr></thead>
@@ -256,16 +350,28 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                 </table>
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 15) {
-            const students = sb?.students;
-            if (students?.length > 0) {
+          } else if (item.index === 13) {
+            const subFiles = [
+              sb?.sampleAssignment && { label: 'Sample Assignment', ...sb.sampleAssignment },
+              sb?.marksFile && { label: 'Evaluation Marks Sheet', ...sb.marksFile }
+            ].filter((f: any) => f && f.fileUrl);
+
+            if (subFiles.length > 0) {
               content = (
-                <table style={TBLSTYLE}>
-                  <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th><th style={TH}>Theory Grade</th><th style={TH}>Practical Grade</th></tr></thead>
-                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.studentId || st.enrolmentNumber || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.theoryGrade || '—'}</td><td style={TDC}>{st.practicalGrade || '—'}</td></tr>))}</tbody>
-                </table>
+                <div>
+                  {subFiles.map((sf: any, i: number) => (
+                    <div key={i} style={{ marginBottom: '28px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>{sf.label}: {sf.fileName}</div>
+                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
+                    </div>
+                  ))}
+                </div>
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
+          } else if (item.index === 18) {
+            const sharedUrl = sb?.fileUrl || url;
+            const sharedName = sb?.fileName || fn;
+            content = sharedUrl ? <FileEmbed url={sharedUrl} name={sharedName} /> : <Pending name={item.name} />;
           } else if (item.index === 19) {
             let docs: any[] = [];
             if (db?.subItemsJson) { try { const p = JSON.parse(db.subItemsJson); if (Array.isArray(p.documents)) docs = p.documents; } catch {} }
@@ -291,7 +397,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
 
           return (
             <div key={item.index}>
-              {/* Section divider — plain centered title, no badge, no colored background */}
+              {/* Section divider */}
               <div style={{ ...PAGE, minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '22px', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: '80%', lineHeight: 1.4 }}>
                   {item.name}

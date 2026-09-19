@@ -151,7 +151,7 @@ export function parseItem4StudentList(fileText: string, defaultBatch?: string): 
       id: enrolmentToken,
       enrolmentNumber: enrolmentToken,
       name,
-      batch: batchDisplay,
+      batch: batchGroup,
     };
 
     students.push(studentObj);
