@@ -857,7 +857,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   
   const handleDownloadCsvTemplate = () => {
-    const csvContent = 'Enrollment No,Name,Batch\n25IC02CA001,AMAN RAJ,Batch A\n25IC02CA002,ANGEL GUPTA,Batch A\n25IC02CA049,VISHWAKARMA ALOK AJAY,Batch B\n';
+    const csvContent = 'Enrollment No,Name,Batch\n';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -4007,16 +4007,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             )}
                           </span>
                           <div className="d-flex align-items-center gap-2">
-                            {mergedStudents.length > 0 && (
-                              <Button
-                                variant="outline-success"
-                                size="sm"
-                                style={{ fontSize: 11 }}
-                                onClick={() => handleDownloadStudentCsv(mergedStudents, isLabBatchView ? access.batch : undefined)}
-                              >
-                                ⬇ Download as CSV
-                              </Button>
-                            )}
+                            <Button
+                              variant="outline-success"
+                              size="sm"
+                              style={{ fontSize: 11 }}
+                              onClick={handleDownloadCsvTemplate}
+                              title="Download StudentList Template CSV"
+                            >
+                              ⬇ StudentList Template.csv
+                            </Button>
                             {!isLocked && !isLabBatchView && (
                               <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11 }}>
                                 {uploadedFile ? 'Replace CSV' : '↑ Upload CSV / PDF'}
