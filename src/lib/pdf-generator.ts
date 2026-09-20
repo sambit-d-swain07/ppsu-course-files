@@ -3,22 +3,22 @@ import path from 'path';
 
 // Require pdfmake directly to ensure compatibility across Node / Next.js serverless runtimes
 const pdfmake = require('pdfmake');
+const vfsFonts = require('pdfmake/build/vfs_fonts.js');
 
-// Initialize standard PDF fonts (built into all PDF engines, 0 external font files required)
+// Initialize in-memory virtual font files (100% self-contained, 0 disk lookups / 0 .afm files required)
 pdfmake.setUrlAccessPolicy(() => true);
 pdfmake.setLocalAccessPolicy(() => true);
+
+if (vfsFonts) {
+  Object.assign(pdfmake.virtualfs.storage, vfsFonts);
+}
+
 pdfmake.setFonts({
-  Times: {
-    normal: 'Times-Roman',
-    bold: 'Times-Bold',
-    italics: 'Times-Italic',
-    bolditalics: 'Times-BoldItalic'
-  },
-  Helvetica: {
-    normal: 'Helvetica',
-    bold: 'Helvetica-Bold',
-    italics: 'Helvetica-Oblique',
-    bolditalics: 'Helvetica-BoldOblique'
+  Roboto: {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf'
   }
 });
 
@@ -403,7 +403,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     pageSize: 'A4',
     pageMargins: [40, 40, 40, 40],
     defaultStyle: {
-      font: 'Times',
+      font: 'Roboto',
       fontSize: 11,
       lineHeight: 1.2
     },
@@ -422,7 +422,7 @@ export async function generatePdfBufferFromHtml(htmlContent: string): Promise<Bu
   const docDef: any = {
     pageSize: 'A4',
     pageMargins: [40, 40, 40, 40],
-    defaultStyle: { font: 'Times', fontSize: 11 },
+    defaultStyle: { font: 'Roboto', fontSize: 11 },
     content: [{ text: 'Course File Document' }]
   };
   const doc = pdfmake.createPdf(docDef);
