@@ -32,6 +32,58 @@ const TDC: React.CSSProperties = { ...TD, textAlign: 'center' };
 const TBLSTYLE: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' };
 const PAGE: React.CSSProperties = { padding: '60px 70px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: 'Arial, sans-serif', color: '#000', background: '#fff' };
 
+function hashString(str: string) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function generateBreakdown(totalMark: number, seedKey: string, maxMark = 20) {
+  const roundedTotal = Number(totalMark || 0);
+  if (roundedTotal === 0) return { a: 0, b: 0, c: 0, d: 0, total: 0 };
+  const hash = hashString(`${seedKey}-${roundedTotal}`);
+  const targetUnits = Math.round(roundedTotal * 2);
+  const maxUnitsPerCol = Math.round((maxMark / 4) * 2);
+  const baseAvg = Math.floor(targetUnits / 4);
+  let units = [baseAvg, baseAvg, baseAvg, baseAvg];
+  let remainder = targetUnits - (baseAvg * 4);
+  const shift = hash % 4;
+  const shuffledOrder = [(0 + shift) % 4, (1 + shift) % 4, (2 + shift) % 4, (3 + shift) % 4];
+  for (let i = 0; i < remainder; i++) { units[shuffledOrder[i % 4]]++; }
+  for (let i = 0; i < 4; i++) {
+    if (units[i] > maxUnitsPerCol) {
+      const overflow = units[i] - maxUnitsPerCol;
+      units[i] = maxUnitsPerCol;
+      for (let j = 0; j < 4; j++) {
+        if (i !== j && units[j] + overflow <= maxUnitsPerCol) {
+          units[j] += overflow;
+          break;
+        }
+      }
+    }
+  }
+  const a = units[0] / 2;
+  const b = units[1] / 2;
+  const c = units[2] / 2;
+  const d = units[3] / 2;
+  const sum = Number((a + b + c + d).toFixed(1));
+  return { a, b, c, d, total: sum };
+}
+
+function calcStudentAverages(row: any, numP: number) {
+  const practicals = row.practicals || {};
+  let sum = 0;
+  for (let i = 1; i <= numP; i++) {
+    sum += Number(practicals[`P${i}`]) || 0;
+  }
+  const avg10 = numP > 0 ? Number((sum / numP).toFixed(2)) : 0;
+  const avg20 = Number((avg10 * 2).toFixed(2));
+  return { avg10, avg20 };
+}
+
 function PageHeader({ cf }: { cf: any }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '22px' }}>
@@ -322,44 +374,280 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
               );
             } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
           } else if (item.index === 8) {
-            const students = sb?.students || [];
-            const criteria = sb?.criteria || [
-              { id: 'termWork', label: 'Term Work' },
-              { id: 'internalViva', label: 'Internal Viva' }
-            ];
+            const item4 = checklist.find((c: any) => c.itemIndex === 4);
+            let item4Students: any[] = [];
+            if (item4?.subItemsJson) {
+              try {
+                const p4 = JSON.parse(item4.subItemsJson);
+                item4Students = Array.isArray(p4.students) ? p4.students : (Array.isArray(p4) ? p4 : []);
+              } catch (_) {}
+            }
+
+            const rawStudents = sb?.students || sb?.rows || sb?.item8Rows || [];
+            const studentsMap = new Map<string, any>();
+            item4Students.forEach((s: any) => {
+              const id = s.id || s.studentId || s.enrolmentNumber;
+              if (id) {
+                studentsMap.set(id, {
+                  studentId: id,
+                  name: s.name || s.studentName || '—',
+                  enrolmentNumber: s.enrolmentNumber || s.rollNo || '—',
+                  batch: s.batch || 'A',
+                  practicals: {},
+                  termWork: 0,
+                  internalViva: 0,
+                  esePerformance: 0,
+                  eseExternalViva: 0
+                });
+              }
+            });
+
+            rawStudents.forEach((s: any) => {
+              const id = s.studentId || s.id || s.enrolmentNumber;
+              if (id) {
+                const existing = studentsMap.get(id) || {
+                  studentId: id,
+                  name: s.name || s.studentName || '—',
+                  enrolmentNumber: s.enrolmentNumber || s.rollNo || '—',
+                  batch: s.batch || 'A'
+                };
+                studentsMap.set(id, {
+                  ...existing,
+                  name: s.name || existing.name,
+                  enrolmentNumber: s.enrolmentNumber || existing.enrolmentNumber,
+                  batch: s.batch || existing.batch,
+                  practicals: s.practicals || existing.practicals || {},
+                  termWork: s.termWork ?? existing.termWork ?? 0,
+                  internalViva: s.internalViva ?? existing.internalViva ?? 0,
+                  esePerformance: s.esePerformance ?? existing.esePerformance ?? 0,
+                  eseExternalViva: s.eseExternalViva ?? s.eseViva ?? existing.eseExternalViva ?? 0
+                });
+              }
+            });
+
+            const studentRows = Array.from(studentsMap.values());
+            const numP = Number(sb?.numPracticals) || 4;
+            const secFiles = Object.values(sb?.sectionFiles || {}).filter((f: any) => f && f.fileUrl);
             const batches = sb?.batches || [];
 
-            if (students.length > 0) {
+            if (studentRows.length > 0) {
               content = (
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '12px' }}>Laboratory Continuous Evaluation Rubrics</div>
-                  <table style={TBLSTYLE}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...TH, width: '40px' }}>Sr</th>
-                        <th style={TH}>Enrolment No</th>
-                        <th style={TH}>Student Name</th>
-                        <th style={TH}>Batch</th>
-                        {criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((st: any, i: number) => {
-                        const m = st.marks || st;
-                        return (
-                          <tr key={i}>
-                            <td style={TDC}>{i + 1}</td>
-                            <td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td>
-                            <td style={TD}>{st.name || st.studentName || '—'}</td>
-                            <td style={TDC}>{st.batch || 'A'}</td>
-                            {criteria.map((cr: any) => (
-                              <td key={cr.id} style={TDC}>{m[cr.id] ?? m.marks?.[cr.id] ?? '—'}</td>
-                            ))}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px' }}>
+                    CE — Continuous Evaluation (Laboratory)
+                  </div>
+
+                  {/* 2.1 Practical Marks Table */}
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                      2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...TH, width: '45px' }}>Batch</th>
+                          <th style={TH}>Student Name</th>
+                          <th style={TH}>Enrolment Number</th>
+                          {Array.from({ length: numP }).map((_, i) => (
+                            <th key={i} style={{ ...TH, width: '45px' }}>P{i + 1}</th>
+                          ))}
+                          <th style={{ ...TH, width: '70px', background: '#e0f2fe' }}>Avg of 10</th>
+                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Avg of 20</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRows.map((st: any, i: number) => {
+                          const { avg10, avg20 } = calcStudentAverages(st, numP);
+                          return (
+                            <tr key={i}>
+                              <td style={TDC}>{st.batch || 'A'}</td>
+                              <td style={TD}>{st.name || '—'}</td>
+                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                              {Array.from({ length: numP }).map((_, pi) => (
+                                <td key={pi} style={TDC}>{st.practicals?.[`P${pi + 1}`] ?? 0}</td>
+                              ))}
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0284c7' }}>{avg10}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#b45309' }}>{avg20}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table */}
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                      2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...TH, width: '45px' }}>Batch</th>
+                          <th style={TH}>Student Name</th>
+                          <th style={TH}>Enrolment Number</th>
+                          <th style={{ ...TH, width: '110px' }}>A (Understanding)</th>
+                          <th style={{ ...TH, width: '110px' }}>B (Performance)</th>
+                          <th style={{ ...TH, width: '110px' }}>C (Record Maint.)</th>
+                          <th style={{ ...TH, width: '110px' }}>D (Viva)</th>
+                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRows.map((st: any, i: number) => {
+                          const { avg20 } = calcStudentAverages(st, numP);
+                          const bd = generateBreakdown(avg20, `${st.studentId}-ce-prac`);
+                          return (
+                            <tr key={i}>
+                              <td style={TDC}>{st.batch || 'A'}</td>
+                              <td style={TD}>{st.name || '—'}</td>
+                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                              <td style={TDC}>{bd.a}</td>
+                              <td style={TDC}>{bd.b}</td>
+                              <td style={TDC}>{bd.c}</td>
+                              <td style={TDC}>{bd.d}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 2.3 Internal Viva Evaluation & Breakdown */}
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                      2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...TH, width: '45px' }}>Batch</th>
+                          <th style={TH}>Student Name</th>
+                          <th style={TH}>Enrolment Number</th>
+                          <th style={{ ...TH, width: '110px' }}>Internal Viva (20)</th>
+                          <th style={{ ...TH, width: '55px' }}>A</th>
+                          <th style={{ ...TH, width: '55px' }}>B</th>
+                          <th style={{ ...TH, width: '55px' }}>C</th>
+                          <th style={{ ...TH, width: '55px' }}>D</th>
+                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRows.map((st: any, i: number) => {
+                          const mark = st.internalViva ?? 0;
+                          const bd = generateBreakdown(mark, `${st.studentId}-ce-iv`);
+                          return (
+                            <tr key={i}>
+                              <td style={TDC}>{st.batch || 'A'}</td>
+                              <td style={TD}>{st.name || '—'}</td>
+                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                              <td style={TDC}>{bd.a}</td>
+                              <td style={TDC}>{bd.b}</td>
+                              <td style={TDC}>{bd.c}</td>
+                              <td style={TDC}>{bd.d}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px', marginTop: '36px' }}>
+                    ESE — End Semester Exam (Laboratory)
+                  </div>
+
+                  {/* 3.1 Performance / Quiz Evaluation & Breakdown */}
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                      3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...TH, width: '45px' }}>Batch</th>
+                          <th style={TH}>Student Name</th>
+                          <th style={TH}>Enrolment Number</th>
+                          <th style={{ ...TH, width: '120px' }}>Perf / Quiz (30)</th>
+                          <th style={{ ...TH, width: '55px' }}>A</th>
+                          <th style={{ ...TH, width: '55px' }}>B</th>
+                          <th style={{ ...TH, width: '55px' }}>C</th>
+                          <th style={{ ...TH, width: '55px' }}>D</th>
+                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRows.map((st: any, i: number) => {
+                          const mark = st.esePerformance ?? 0;
+                          const bd = generateBreakdown(mark, `${st.studentId}-ese-pq`, 30);
+                          return (
+                            <tr key={i}>
+                              <td style={TDC}>{st.batch || 'A'}</td>
+                              <td style={TD}>{st.name || '—'}</td>
+                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                              <td style={TDC}>{bd.a}</td>
+                              <td style={TDC}>{bd.b}</td>
+                              <td style={TDC}>{bd.c}</td>
+                              <td style={TDC}>{bd.d}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 3.2 External Viva Evaluation & Breakdown */}
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                      3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...TH, width: '45px' }}>Batch</th>
+                          <th style={TH}>Student Name</th>
+                          <th style={TH}>Enrolment Number</th>
+                          <th style={{ ...TH, width: '120px' }}>Ext Viva (30)</th>
+                          <th style={{ ...TH, width: '55px' }}>A</th>
+                          <th style={{ ...TH, width: '55px' }}>B</th>
+                          <th style={{ ...TH, width: '55px' }}>C</th>
+                          <th style={{ ...TH, width: '55px' }}>D</th>
+                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRows.map((st: any, i: number) => {
+                          const mark = st.eseExternalViva ?? st.eseViva ?? 0;
+                          const bd = generateBreakdown(mark, `${st.studentId}-ese-ev`, 30);
+                          return (
+                            <tr key={i}>
+                              <td style={TDC}>{st.batch || 'A'}</td>
+                              <td style={TD}>{st.name || '—'}</td>
+                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                              <td style={TDC}>{bd.a}</td>
+                              <td style={TDC}>{bd.b}</td>
+                              <td style={TDC}>{bd.c}</td>
+                              <td style={TDC}>{bd.d}</td>
+                              <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Render any section files if present */}
+                  {secFiles.map((sf: any, idx: number) => (
+                    <div key={idx} style={{ marginTop: '24px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>Uploaded Document: {sf.fileName}</div>
+                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
+                    </div>
+                  ))}
                 </div>
               );
             } else if (batches.length > 0) {
@@ -369,6 +657,17 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                     <div key={batch.id || batch.batch} style={{ marginBottom: '28px' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Batch {batch.batch || batch.id} Rubrics</div>
                       {batch.fileUrl ? <FileEmbed url={batch.fileUrl} name={batch.fileName} /> : <Pending name={`Batch ${batch.batch || batch.id} Rubrics`} />}
+                    </div>
+                  ))}
+                </div>
+              );
+            } else if (secFiles.length > 0) {
+              content = (
+                <div>
+                  {secFiles.map((sf: any, idx: number) => (
+                    <div key={idx} style={{ marginBottom: '28px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>Uploaded Document: {sf.fileName}</div>
+                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
                     </div>
                   ))}
                 </div>
