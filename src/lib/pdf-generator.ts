@@ -5,12 +5,16 @@ import path from 'path';
 const pdfmake = require('pdfmake');
 const vfsFonts = require('pdfmake/build/vfs_fonts.js');
 
-// Initialize in-memory virtual font files (100% self-contained, 0 disk lookups / 0 .afm files required)
+// Initialize in-memory virtual font files as true binary Buffers
 pdfmake.setUrlAccessPolicy(() => true);
 pdfmake.setLocalAccessPolicy(() => true);
 
 if (vfsFonts) {
-  Object.assign(pdfmake.virtualfs.storage, vfsFonts);
+  for (const [filename, base64Content] of Object.entries(vfsFonts)) {
+    if (typeof base64Content === 'string') {
+      pdfmake.virtualfs.writeFileSync(filename, Buffer.from(base64Content, 'base64'));
+    }
+  }
 }
 
 pdfmake.setFonts({
@@ -487,10 +491,8 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
         col2Header = 'PROGRAMME OUTCOMES';
         prefix = 'PO ';
       } else if (isMission) {
-        col1Header = '';
         col2Header = 'INSTITUTE MISSION';
       } else {
-        col1Header = '';
         col2Header = 'INSTITUTE VISION';
       }
 
