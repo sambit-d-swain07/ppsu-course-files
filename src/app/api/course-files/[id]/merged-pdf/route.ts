@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCourseFileById, getMergedChecklistItems, getSubjectById } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
-import { renderCleanCourseFileHtml, generatePdfBufferFromHtml } from '@/lib/pdf-generator';
+import { generatePdfBuffer } from '@/lib/pdf-generator';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // seconds — headless Chromium rendering needs more than the default
+export const maxDuration = 30;
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {
@@ -27,8 +27,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const checklist = await getMergedChecklistItems(id);
-    const htmlContent = renderCleanCourseFileHtml(courseFile, checklist, subject);
-    const pdfBuffer = await generatePdfBufferFromHtml(htmlContent);
+    const pdfBuffer = await generatePdfBuffer(courseFile, checklist, subject);
 
     const safeCode = (courseFile.courseCode || 'course-file').replace(/[^a-z0-9_-]/gi, '_');
 

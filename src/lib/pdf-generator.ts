@@ -1,7 +1,26 @@
 import fs from 'fs';
 import path from 'path';
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+
+// Require pdfmake directly to ensure compatibility across Node / Next.js serverless runtimes
+const pdfmake = require('pdfmake');
+
+// Initialize standard PDF fonts (built into all PDF engines, 0 external font files required)
+pdfmake.setUrlAccessPolicy(() => true);
+pdfmake.setLocalAccessPolicy(() => true);
+pdfmake.setFonts({
+  Times: {
+    normal: 'Times-Roman',
+    bold: 'Times-Bold',
+    italics: 'Times-Italic',
+    bolditalics: 'Times-BoldItalic'
+  },
+  Helvetica: {
+    normal: 'Helvetica',
+    bold: 'Helvetica-Bold',
+    italics: 'Helvetica-Oblique',
+    bolditalics: 'Helvetica-BoldOblique'
+  }
+});
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO' },
@@ -39,16 +58,51 @@ function getLogoBase64(): string {
   return '';
 }
 
-export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: any): string {
+function buildPageHeader(schoolName: string, hasLogo: boolean) {
+  return {
+    table: {
+      widths: ['*', 'auto'],
+      body: [
+        [
+          hasLogo
+            ? { image: 'logo', fit: [180, 34], margin: [0, 0, 0, 4] }
+            : { text: 'P P SAVANI UNIVERSITY', bold: true, fontSize: 13 },
+          {
+            text: `  ${schoolName}  `,
+            bold: true,
+            fontSize: 10,
+            color: '#ffffff',
+            fillColor: '#4d8e28',
+            alignment: 'center',
+            margin: [2, 4, 2, 4]
+          }
+        ]
+      ]
+    },
+    layout: {
+      hLineWidth: (i: number, node: any) => (i === node.table.body.length ? 1.5 : 0),
+      vLineWidth: () => 0,
+      hLineColor: () => '#000000',
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 2
+    },
+    margin: [0, 0, 0, 16]
+  };
+}
+
+export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any): Promise<Buffer> {
   const logoDataUri = getLogoBase64();
-  
+  const hasLogo = Boolean(logoDataUri);
+
   // Format Department Name
   const rawDept = cf.department || cf.faculty?.department || subject?.department || 'Computer Engineering';
   const deptName = rawDept.toLowerCase().startsWith('department of')
     ? rawDept
     : `Department of ${rawDept}`;
 
-  // Format School Name (Full, no (SOE) abbreviation)
+  // Format School Name
   const rawSchool = cf.school || cf.faculty?.school || subject?.school || 'School of Engineering';
   const schoolName = (rawSchool.toUpperCase() === 'SOE' || rawSchool === 'School of Engineering')
     ? 'School of Engineering'
@@ -69,7 +123,340 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
     try { return JSON.parse(it.subItemsJson); } catch { return null; }
   };
 
-  // Render Item 1 Tables HTML
+  const content: any[] = [];
+
+  // ─────────────────────────────────────────────────────────────
+  // 1. COVER PAGE
+  // ─────────────────────────────────────────────────────────────
+  content.push(
+    { text: 'P P SAVANI UNIVERSITY', fontSize: 24, bold: true, alignment: 'center', margin: [0, 35, 0, 8] },
+    { text: `(${schoolName})`, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 24] },
+    hasLogo
+      ? { image: 'logo', fit: [200, 80], alignment: 'center', margin: [0, 0, 0, 30] }
+      : { text: '', margin: [0, 20, 0, 20] },
+    { text: deptName, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 36] },
+    { text: 'Faculty Name', fontSize: 13, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
+    { text: facultyName, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 36] },
+    { text: 'Subject', fontSize: 13, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
+    { text: code, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
+    { text: title, fontSize: 18, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
+    { text: '(Course File)', fontSize: 14, bold: true, alignment: 'center', margin: [0, 0, 0, 0] }
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. TABLE OF CONTENTS
+  // ─────────────────────────────────────────────────────────────
+  content.push(
+    { text: '', pageBreak: 'before' },
+    buildPageHeader(schoolName, hasLogo),
+    { text: 'Table of Content', fontSize: 18, bold: true, alignment: 'center', margin: [0, 8, 0, 16] },
+    {
+      table: {
+        headerRows: 1,
+        widths: [60, '*'],
+        body: [
+          [
+            { text: 'Sr. No.', bold: true, alignment: 'center', fillColor: '#f5f5f5' },
+            { text: 'Content', bold: true, alignment: 'left', fillColor: '#f5f5f5' }
+          ],
+          ...CHECKLIST_ITEMS.map(item => [
+            { text: String(item.index), alignment: 'center', fontSize: 10 },
+            { text: item.name, fontSize: 10 }
+          ])
+        ]
+      },
+      layout: {
+        hLineWidth: () => 1,
+        vLineWidth: () => 1,
+        hLineColor: () => '#000000',
+        vLineColor: () => '#000000',
+        paddingLeft: () => 8,
+        paddingRight: () => 8,
+        paddingTop: () => 4,
+        paddingBottom: () => 4
+      }
+    }
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // 3. CHECKLIST SECTIONS (1 TO 20)
+  // ─────────────────────────────────────────────────────────────
+  CHECKLIST_ITEMS.forEach(item => {
+    // A. Divider Page
+    content.push(
+      { text: '', pageBreak: 'before' },
+      {
+        text: item.name.toUpperCase(),
+        fontSize: 22,
+        bold: true,
+        alignment: 'center',
+        margin: [0, 260, 0, 0]
+      }
+    );
+
+    // B. Content Page
+    const sectionContent: any[] = [];
+    sectionContent.push(
+      { text: '', pageBreak: 'before' },
+      buildPageHeader(schoolName, hasLogo),
+      {
+        text: `${item.index}. ${item.name.toUpperCase()}`,
+        fontSize: 12,
+        bold: true,
+        decoration: 'underline',
+        margin: [0, 0, 0, 14]
+      }
+    );
+
+    if (item.index === 1) {
+      const item1Sub = subs(1);
+      if (item1Sub) {
+        const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+        subKeys.forEach(sk => {
+          const text = item1Sub[sk]?.textContent;
+          if (!text?.trim()) return;
+          const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+          const isMission = sk === 'mission';
+          const isPeo = sk === 'peo';
+          const isPso = sk === 'pso';
+          const isPo = sk === 'po';
+
+          let col1Header = '';
+          let col2Header = '';
+          let prefix = '';
+
+          if (isPeo) {
+            col1Header = 'PEO No';
+            col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+            prefix = 'PEO ';
+          } else if (isPso) {
+            col1Header = 'PSO No';
+            col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+            prefix = 'PSO ';
+          } else if (isPo) {
+            col1Header = 'PO No';
+            col2Header = 'PROGRAMME OUTCOMES';
+            prefix = 'PO ';
+          } else if (isMission) {
+            col2Header = 'INSTITUTE MISSION';
+          } else {
+            col2Header = 'INSTITUTE VISION';
+          }
+
+          if (isPeo || isPso || isPo) {
+            const rows = lines.map((line: string, idx: number) => {
+              const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+              return [
+                { text: `${prefix}${idx + 1}`, bold: true, alignment: 'center', fontSize: 10 },
+                { text: cleanText, fontSize: 10, alignment: 'justify' }
+              ];
+            });
+
+            sectionContent.push({
+              margin: [0, 0, 0, 14],
+              table: {
+                headerRows: 1,
+                widths: [70, '*'],
+                body: [
+                  [
+                    { text: col1Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
+                    { text: col2Header, bold: true, alignment: 'left', fillColor: '#d9ead3', fontSize: 10 }
+                  ],
+                  ...rows
+                ]
+              },
+              layout: {
+                hLineWidth: () => 1,
+                vLineWidth: () => 1,
+                hLineColor: () => '#000000',
+                vLineColor: () => '#000000',
+                paddingLeft: () => 6,
+                paddingRight: () => 6,
+                paddingTop: () => 5,
+                paddingBottom: () => 5
+              }
+            });
+          } else if (isMission || lines.length > 1) {
+            const rows = lines.map((line: string, idx: number) => {
+              const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+              return [
+                { text: `${idx + 1}.`, bold: true, alignment: 'center', fontSize: 10 },
+                { text: cleanText, fontSize: 10, alignment: 'justify' }
+              ];
+            });
+
+            sectionContent.push({
+              margin: [0, 0, 0, 14],
+              table: {
+                headerRows: 1,
+                widths: [40, '*'],
+                body: [
+                  [
+                    { text: col2Header, colSpan: 2, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
+                    {}
+                  ],
+                  ...rows
+                ]
+              },
+              layout: {
+                hLineWidth: () => 1,
+                vLineWidth: () => 1,
+                hLineColor: () => '#000000',
+                vLineColor: () => '#000000',
+                paddingLeft: () => 6,
+                paddingRight: () => 6,
+                paddingTop: () => 5,
+                paddingBottom: () => 5
+              }
+            });
+          } else {
+            sectionContent.push({
+              margin: [0, 0, 0, 14],
+              table: {
+                headerRows: 1,
+                widths: ['*'],
+                body: [
+                  [{ text: col2Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
+                  [{ text: text, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
+                ]
+              },
+              layout: {
+                hLineWidth: () => 1,
+                vLineWidth: () => 1,
+                hLineColor: () => '#000000',
+                vLineColor: () => '#000000',
+                paddingLeft: () => 6,
+                paddingRight: () => 6,
+                paddingTop: () => 5,
+                paddingBottom: () => 5
+              }
+            });
+          }
+        });
+      } else {
+        sectionContent.push({
+          text: '— Content Pending —',
+          alignment: 'center',
+          color: '#777777',
+          margin: [0, 40, 0, 0]
+        });
+      }
+    } else {
+      const db = dbi(item.index);
+      if (db && db.fileName) {
+        sectionContent.push({
+          margin: [0, 20, 0, 0],
+          table: {
+            widths: ['*'],
+            body: [
+              [
+                {
+                  fillColor: '#fafafa',
+                  margin: [10, 20, 10, 20],
+                  stack: [
+                    { text: `Attachment: ${db.fileName}`, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
+                    { text: 'Uploaded Document Attachment', fontSize: 10, color: '#555555', alignment: 'center' }
+                  ]
+                }
+              ]
+            ]
+          },
+          layout: {
+            hLineWidth: () => 1,
+            vLineWidth: () => 1,
+            hLineColor: () => '#cccccc',
+            vLineColor: () => '#cccccc'
+          }
+        });
+      } else {
+        sectionContent.push({
+          margin: [0, 20, 0, 0],
+          table: {
+            widths: ['*'],
+            body: [
+              [
+                {
+                  fillColor: '#fafafa',
+                  margin: [10, 20, 10, 20],
+                  stack: [
+                    { text: 'Document not yet uploaded', bold: true, fontSize: 11, color: '#888888', alignment: 'center', margin: [0, 0, 0, 4] },
+                    { text: item.name, fontSize: 9, color: '#aaaaaa', alignment: 'center' }
+                  ]
+                }
+              ]
+            ]
+          },
+          layout: {
+            hLineWidth: () => 1,
+            vLineWidth: () => 1,
+            hLineColor: () => '#e0e0e0',
+            vLineColor: () => '#e0e0e0'
+          }
+        });
+      }
+    }
+
+    content.push(...sectionContent);
+  });
+
+  const docDef: any = {
+    pageSize: 'A4',
+    pageMargins: [40, 40, 40, 40],
+    defaultStyle: {
+      font: 'Times',
+      fontSize: 11,
+      lineHeight: 1.2
+    },
+    images: hasLogo ? { logo: logoDataUri } : {},
+    content
+  };
+
+  const doc = pdfmake.createPdf(docDef);
+  return await doc.getBuffer();
+}
+
+/**
+ * Kept for backwards compatibility if referenced elsewhere.
+ */
+export async function generatePdfBufferFromHtml(htmlContent: string): Promise<Buffer> {
+  const docDef: any = {
+    pageSize: 'A4',
+    pageMargins: [40, 40, 40, 40],
+    defaultStyle: { font: 'Times', fontSize: 11 },
+    content: [{ text: 'Course File Document' }]
+  };
+  const doc = pdfmake.createPdf(docDef);
+  return await doc.getBuffer();
+}
+
+export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: any): string {
+  const logoDataUri = getLogoBase64();
+  
+  const rawDept = cf.department || cf.faculty?.department || subject?.department || 'Computer Engineering';
+  const deptName = rawDept.toLowerCase().startsWith('department of')
+    ? rawDept
+    : `Department of ${rawDept}`;
+
+  const rawSchool = cf.school || cf.faculty?.school || subject?.school || 'School of Engineering';
+  const schoolName = (rawSchool.toUpperCase() === 'SOE' || rawSchool === 'School of Engineering')
+    ? 'School of Engineering'
+    : rawSchool;
+
+  const faculty = cf.facultyName || cf.faculty?.name || 'Faculty Member';
+  const facultyName = (faculty.toLowerCase().startsWith('mr.') || faculty.toLowerCase().startsWith('dr.') || faculty.toLowerCase().startsWith('ms.') || faculty.toLowerCase().startsWith('prof.'))
+    ? faculty
+    : `Mr. ${faculty}`;
+
+  const code = cf.courseCode || subject?.code || 'COURSE CODE';
+  const title = cf.courseTitle || subject?.title || 'COURSE TITLE';
+
+  const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
+  const subs = (idx: number): any => {
+    const it = dbi(idx);
+    if (!it?.subItemsJson) return null;
+    try { return JSON.parse(it.subItemsJson); } catch { return null; }
+  };
+
   const item1Sub = subs(1);
   let item1Html = '';
   if (item1Sub) {
@@ -178,7 +565,6 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
     });
   }
 
-  // Header Banner for Pages 2+
   const pageHeaderHtml = `
     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 24px; font-family: 'Times New Roman', Times, serif;">
       <div>
@@ -189,7 +575,6 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
       </div>
     </div>`;
 
-  // Render Table of Contents Rows
   const tocRowsHtml = CHECKLIST_ITEMS.map((item) => `
     <tr>
       <td style="border: 1px solid #000; padding: 6px 10px; text-align: center; font-size: 13px; width: 70px;">${item.index}</td>
@@ -197,7 +582,6 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
     </tr>
   `).join('');
 
-  // Render Section Pages
   const sectionPagesHtml = CHECKLIST_ITEMS.map((item) => {
     let itemContentHtml = '';
     if (item.index === 1) {
@@ -216,14 +600,12 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
     }
 
     return `
-      <!-- TOPIC DIVIDER PAGE -->
       <div class="page page-divider">
         <div style="font-weight: bold; font-size: 24px; text-transform: uppercase; letter-spacing: 0.5px; max-width: 85%; line-height: 1.5; font-family: 'Times New Roman', Times, serif;">
           ${item.name}
         </div>
       </div>
 
-      <!-- TOPIC CONTENT PAGE -->
       <div class="page">
         ${pageHeaderHtml}
         <div style="font-weight: bold; font-size: 14px; text-decoration: underline; text-transform: uppercase; margin-bottom: 20px; letter-spacing: 0.3px;">
@@ -240,76 +622,29 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
   <meta charset="UTF-8">
   <title>Merged Course File</title>
   <style>
-    @page {
-      size: A4 portrait;
-      margin: 0;
-    }
-    * {
-      box-sizing: border-box;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #fff;
-      font-family: 'Times New Roman', Times, serif;
-      color: #000;
-    }
-    .page {
-      width: 210mm;
-      min-height: 297mm;
-      padding: 20mm 20mm;
-      margin: 0 auto;
-      background: #fff;
-      page-break-after: always;
-      break-after: page;
-      position: relative;
-    }
-    .page-divider {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-    }
-    .cover-page {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-    }
+    @page { size: A4 portrait; margin: 0; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html, body { margin: 0; padding: 0; background: #fff; font-family: 'Times New Roman', Times, serif; color: #000; }
+    .page { width: 210mm; min-height: 297mm; padding: 20mm 20mm; margin: 0 auto; background: #fff; page-break-after: always; break-after: page; position: relative; }
+    .page-divider { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .cover-page { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
   </style>
 </head>
 <body>
-
-  <!-- PAGE 1: COVER PAGE -->
   <div class="page cover-page">
     <div style="font-weight: bold; font-size: 26px; letter-spacing: 1px; margin-bottom: 12px;">P P SAVANI UNIVERSITY</div>
     <div style="font-weight: bold; font-size: 18px; margin-bottom: 30px;">(${schoolName})</div>
-    
-    <!-- ROUND PPSU SEAL EMBLEM ALONE -->
     <div style="width: 130px; height: 130px; margin: 10px auto 35px auto; position: relative; overflow: hidden; border-radius: 50%;">
       ${logoDataUri ? `<img src="${logoDataUri}" alt="PPSU Seal" style="height: 130px; max-width: none; position: absolute; left: 0; top: 0;" />` : ''}
     </div>
-    
-    <div style="font-weight: bold; font-size: 18px; margin-bottom: 36px;">
-      ${deptName}
-    </div>
-    
+    <div style="font-weight: bold; font-size: 18px; margin-bottom: 36px;">${deptName}</div>
     <div style="font-weight: bold; font-size: 16px; margin-bottom: 4px;">Faculty Name</div>
-    <div style="font-weight: bold; font-size: 18px; margin-bottom: 36px;">
-      ${facultyName}
-    </div>
-    
+    <div style="font-weight: bold; font-size: 18px; margin-bottom: 36px;">${facultyName}</div>
     <div style="font-weight: bold; font-size: 16px; margin-bottom: 4px;">Subject</div>
     <div style="font-weight: bold; font-size: 18px; margin-bottom: 2px;">${code}</div>
     <div style="font-weight: bold; font-size: 20px; margin-bottom: 4px;">${title}</div>
     <div style="font-weight: bold; font-size: 16px;">(Course File)</div>
   </div>
-
-  <!-- PAGE 2: TABLE OF CONTENTS -->
   <div class="page">
     ${pageHeaderHtml}
     <div style="text-align: center; margin-bottom: 24px;">
@@ -327,96 +662,7 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
       </tbody>
     </table>
   </div>
-
-  <!-- PAGES 3+: CHECKLIST ITEMS -->
   ${sectionPagesHtml}
-
 </body>
 </html>`;
-}
-
-export async function generatePdfBufferFromHtml(htmlContent: string): Promise<Buffer> {
-  const isWindows = process.platform === 'win32';
-  // VERCEL env var is set to "1" automatically in Vercel serverless functions
-  const isServerless = !isWindows && (!!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME);
-
-  let executablePath: string;
-  let launchArgs: string[];
-
-  if (isWindows) {
-    // ── Local Windows dev ──────────────────────────────────────────────────
-    // Use the system-installed Edge or Chrome directly.
-    const localPaths = [
-      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
-    ];
-    const found = localPaths.find((p) => fs.existsSync(p));
-    if (!found) {
-      throw new Error(
-        'No Chrome/Edge binary found locally. Install Microsoft Edge or Google Chrome, ' +
-        'or set the CHROME_PATH environment variable to the browser executable.'
-      );
-    }
-    executablePath = found;
-    launchArgs = [
-      '--headless=new',
-      '--disable-gpu',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-web-security',
-    ];
-  } else if (isServerless) {
-    // ── Vercel / AWS Lambda ────────────────────────────────────────────────
-    // @sparticuz/chromium bundles a stripped Chromium binary for Linux serverless.
-    executablePath = await chromium.executablePath();
-    launchArgs = [
-      ...chromium.args,
-      '--disable-web-security',
-    ];
-  } else {
-    // ── Other Linux (e.g. local Docker / CI) ──────────────────────────────
-    const linuxPaths = [
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-    ];
-    const found = linuxPaths.find((p) => fs.existsSync(p));
-    if (found) {
-      executablePath = found;
-      launchArgs = ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-web-security'];
-    } else {
-      // Fallback: try @sparticuz/chromium even outside serverless
-      executablePath = await chromium.executablePath();
-      launchArgs = [...chromium.args, '--disable-web-security'];
-    }
-  }
-
-  const browser = await puppeteer.launch({
-    args: launchArgs,
-    defaultViewport: { width: 1200, height: 1697 }, // A4 proportions at 144 dpi
-    executablePath,
-    headless: true,
-  });
-
-  try {
-    const page = await browser.newPage();
-
-    // Load the HTML directly from string — avoids file:// cross-origin issues
-    await page.setContent(htmlContent, { waitUntil: 'load', timeout: 30000 });
-
-    const pdfUint8Array = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      displayHeaderFooter: false,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    });
-
-    // page.pdf() returns Uint8Array in newer puppeteer — normalise to Buffer
-    return Buffer.from(pdfUint8Array);
-  } finally {
-    await browser.close();
-  }
 }
