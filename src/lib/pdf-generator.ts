@@ -161,6 +161,7 @@ function getUploadedPdfBuffers(item: any, subsObj: any): Buffer[] {
   const urls: string[] = [];
 
   if (item?.fileUrl) urls.push(item.fileUrl);
+  if (item?.sharedFileUrl) urls.push(item.sharedFileUrl);
   if (subsObj?.fileUrl) urls.push(subsObj.fileUrl);
 
   const subFileObjects = [
@@ -180,6 +181,28 @@ function getUploadedPdfBuffers(item: any, subsObj: any): Buffer[] {
   subFileObjects.forEach((sf) => {
     if (sf?.fileUrl) urls.push(sf.fileUrl);
   });
+
+  ['vision', 'mission', 'peo', 'pso', 'po'].forEach((k) => {
+    if (subsObj?.[k]?.fileUrl) urls.push(subsObj[k].fileUrl);
+  });
+
+  if (subsObj?.sectionFiles && typeof subsObj.sectionFiles === 'object') {
+    Object.values(subsObj.sectionFiles).forEach((sf: any) => {
+      if (sf?.fileUrl) urls.push(sf.fileUrl);
+    });
+  }
+
+  if (Array.isArray(subsObj?.batches)) {
+    subsObj.batches.forEach((b: any) => {
+      if (b?.fileUrl) urls.push(b.fileUrl);
+    });
+  }
+
+  if (Array.isArray(subsObj?.sheets)) {
+    subsObj.sheets.forEach((s: any) => {
+      if (s?.fileUrl) urls.push(s.fileUrl);
+    });
+  }
 
   if (Array.isArray(subsObj?.documents)) {
     subsObj.documents.forEach((d: any) => {
@@ -221,24 +244,12 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
   const logoDataUri = getLogoBase64();
   const hasLogo = Boolean(logoDataUri);
 
-  // Collect (itemIndex -> Buffer[]) mapping before building pdfmake doc
-  // so we know which items have uploaded PDFs to append
   const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
   const subs = (idx: number): any => {
     const it = dbi(idx);
     if (!it?.subItemsJson) return null;
     try { return JSON.parse(it.subItemsJson); } catch { return null; }
   };
-
-  const uploadedPdfsByItem: Map<number, Buffer[]> = new Map();
-  for (const item of CHECKLIST_ITEMS) {
-    const db = dbi(item.index);
-    const sb = subs(item.index);
-    const buffers = getUploadedPdfBuffers(db, sb);
-    if (buffers.length > 0) {
-      uploadedPdfsByItem.set(item.index, buffers);
-    }
-  }
 
   // Format Department Name
   const rawDept = cf.department || cf.faculty?.department || subject?.department || 'Computer Engineering';
@@ -260,14 +271,42 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
   const code = cf.courseCode || subject?.code || 'COURSE CODE';
   const title = cf.courseTitle || subject?.title || 'COURSE TITLE';
 
-  // (already defined above before uploadedPdfsByItem collection)
+  const mergedDoc = await PDFDocument.create();
 
-  const content: any[] = [];
+  async function appendPdfMakeDoc(docContent: any[]) {
+    const docDef: any = {
+      pageSize: 'A4',
+      pageMargins: [35, 35, 35, 35],
+      defaultStyle: {
+        font: 'Roboto',
+        fontSize: 10,
+        lineHeight: 1.15
+      },
+      images: hasLogo ? { logo: logoDataUri } : {},
+      content: docContent
+    };
+    const chunkPdf = pdfmake.createPdf(docDef);
+    const chunkBuffer: Buffer = await chunkPdf.getBuffer();
+    const chunkLoaded = await PDFDocument.load(chunkBuffer);
+    const copiedPages = await mergedDoc.copyPages(chunkLoaded, Array.from({ length: chunkLoaded.getPageCount() }, (_, i) => i));
+    copiedPages.forEach((p) => mergedDoc.addPage(p));
+  }
 
-  // ─────────────────────────────────────────────────────────────
-  // 1. COVER PAGE
-  // ─────────────────────────────────────────────────────────────
-  content.push(
+  async function appendRawPdfBuffers(buffers: Buffer[]) {
+    for (const buf of buffers) {
+      try {
+        const uploadedDoc = await PDFDocument.load(buf, { ignoreEncryption: true });
+        const count = uploadedDoc.getPageCount();
+        const copied = await mergedDoc.copyPages(uploadedDoc, Array.from({ length: count }, (_, i) => i));
+        copied.forEach((p) => mergedDoc.addPage(p));
+      } catch (err) {
+        console.error('Could not append uploaded PDF buffer:', err);
+      }
+    }
+  }
+
+  // 1. COVER PAGE & TABLE OF CONTENTS
+  const headerContent: any[] = [
     { text: 'P P SAVANI UNIVERSITY', fontSize: 24, bold: true, alignment: 'center', margin: [0, 35, 0, 8] },
     { text: `(${schoolName})`, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 24] },
     hasLogo
@@ -279,13 +318,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     { text: 'Subject', fontSize: 13, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
     { text: code, fontSize: 16, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
     { text: title, fontSize: 18, bold: true, alignment: 'center', margin: [0, 0, 0, 4] },
-    { text: '(Course File)', fontSize: 14, bold: true, alignment: 'center', margin: [0, 0, 0, 0] }
-  );
+    { text: '(Course File)', fontSize: 14, bold: true, alignment: 'center', margin: [0, 0, 0, 0] },
 
-  // ─────────────────────────────────────────────────────────────
-  // 2. TABLE OF CONTENTS
-  // ─────────────────────────────────────────────────────────────
-  content.push(
     { text: '', pageBreak: 'before' },
     buildPageHeader(schoolName, hasLogo),
     { text: 'Table of Content', fontSize: 18, bold: true, alignment: 'center', margin: [0, 8, 0, 16] },
@@ -298,7 +332,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
             { text: 'Sr. No.', bold: true, alignment: 'center', fillColor: '#f5f5f5' },
             { text: 'Content', bold: true, alignment: 'left', fillColor: '#f5f5f5' }
           ],
-          ...CHECKLIST_ITEMS.map(item => [
+          ...CHECKLIST_ITEMS.map((item) => [
             { text: String(item.index), alignment: 'center', fontSize: 10 },
             { text: item.name, fontSize: 10 }
           ])
@@ -315,15 +349,17 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         paddingBottom: () => 4
       }
     }
-  );
+  ];
 
-  // ─────────────────────────────────────────────────────────────
-  // 3. CHECKLIST SECTIONS (1 TO 20)
-  // ─────────────────────────────────────────────────────────────
-  CHECKLIST_ITEMS.forEach(item => {
-    // A. Divider Page
-    content.push(
-      { text: '', pageBreak: 'before' },
+  await appendPdfMakeDoc(headerContent);
+
+  // 2. PROCESS EACH CHECKLIST ITEM SEQUENTIALLY
+  for (const item of CHECKLIST_ITEMS) {
+    const db = dbi(item.index);
+    const sb = subs(item.index);
+    const uploadedBuffers = getUploadedPdfBuffers(db, sb);
+
+    const itemDividerContent: any[] = [
       {
         text: item.name.toUpperCase(),
         fontSize: 22,
@@ -331,161 +367,144 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         alignment: 'center',
         margin: [0, 260, 0, 0]
       }
-    );
+    ];
 
-    // B. Content Page
-    const sectionContent: any[] = [];
-    sectionContent.push(
-      { text: '', pageBreak: 'before' },
-      buildPageHeader(schoolName, hasLogo),
-      {
-        text: `${item.index}. ${item.name.toUpperCase()}`,
-        fontSize: 12,
-        bold: true,
-        decoration: 'underline',
-        margin: [0, 0, 0, 14]
-      }
-    );
-
+    const structuredContent: any[] = [];
     let hasStructuredContent = false;
 
     if (item.index === 1) {
       const item1Sub = subs(1);
       if (item1Sub) {
-        hasStructuredContent = true;
         const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
-        subKeys.forEach(sk => {
-          const text = item1Sub[sk]?.textContent;
-          if (!text?.trim()) return;
-          const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-          const isMission = sk === 'mission';
-          const isPeo = sk === 'peo';
-          const isPso = sk === 'pso';
-          const isPo = sk === 'po';
+        const hasText = subKeys.some((sk) => item1Sub[sk]?.textContent?.trim());
+        if (hasText) {
+          hasStructuredContent = true;
+          subKeys.forEach((sk) => {
+            const text = item1Sub[sk]?.textContent;
+            if (!text?.trim()) return;
+            const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+            const isMission = sk === 'mission';
+            const isPeo = sk === 'peo';
+            const isPso = sk === 'pso';
+            const isPo = sk === 'po';
 
-          let col1Header = '';
-          let col2Header = '';
-          let prefix = '';
+            let col1Header = '';
+            let col2Header = '';
+            let prefix = '';
 
-          if (isPeo) {
-            col1Header = 'PEO No';
-            col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-            prefix = 'PEO ';
-          } else if (isPso) {
-            col1Header = 'PSO No';
-            col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-            prefix = 'PSO ';
-          } else if (isPo) {
-            col1Header = 'PO No';
-            col2Header = 'PROGRAMME OUTCOMES';
-            prefix = 'PO ';
-          } else if (isMission) {
-            col2Header = 'INSTITUTE MISSION';
-          } else {
-            col2Header = 'INSTITUTE VISION';
-          }
+            if (isPeo) {
+              col1Header = 'PEO No';
+              col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+              prefix = 'PEO ';
+            } else if (isPso) {
+              col1Header = 'PSO No';
+              col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+              prefix = 'PSO ';
+            } else if (isPo) {
+              col1Header = 'PO No';
+              col2Header = 'PROGRAMME OUTCOMES';
+              prefix = 'PO ';
+            } else if (isMission) {
+              col2Header = 'INSTITUTE MISSION';
+            } else {
+              col2Header = 'INSTITUTE VISION';
+            }
 
-          if (isPeo || isPso || isPo) {
-            const rows = lines.map((line: string, idx: number) => {
-              const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
-              return [
-                { text: `${prefix}${idx + 1}`, bold: true, alignment: 'center', fontSize: 10 },
-                { text: cleanText, fontSize: 10, alignment: 'justify' }
-              ];
-            });
+            if (isPeo || isPso || isPo) {
+              const rows = lines.map((line: string, idx: number) => {
+                const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                return [
+                  { text: `${prefix}${idx + 1}`, bold: true, alignment: 'center', fontSize: 10 },
+                  { text: cleanText, fontSize: 10, alignment: 'justify' }
+                ];
+              });
 
-            sectionContent.push({
-              margin: [0, 0, 0, 14],
-              table: {
-                headerRows: 1,
-                dontBreakRows: true,
-                keepWithHeaderRows: 1,
-                widths: [70, '*'],
-                body: [
-                  [
-                    { text: col1Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
-                    { text: col2Header, bold: true, alignment: 'left', fillColor: '#d9ead3', fontSize: 10 }
-                  ],
-                  ...rows
-                ]
-              },
-              layout: standardTableLayout
-            });
-          } else if (isMission || lines.length > 1) {
-            const rows = lines.map((line: string, idx: number) => {
-              const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
-              return [
-                { text: `${idx + 1}.`, bold: true, alignment: 'center', fontSize: 10 },
-                { text: cleanText, fontSize: 10, alignment: 'justify' }
-              ];
-            });
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: [70, '*'],
+                  body: [
+                    [
+                      { text: col1Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
+                      { text: col2Header, bold: true, alignment: 'left', fillColor: '#d9ead3', fontSize: 10 }
+                    ],
+                    ...rows
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            } else if (isMission || lines.length > 1) {
+              const rows = lines.map((line: string, idx: number) => {
+                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                return [
+                  { text: `${idx + 1}.`, bold: true, alignment: 'center', fontSize: 10 },
+                  { text: cleanText, fontSize: 10, alignment: 'justify' }
+                ];
+              });
 
-            sectionContent.push({
-              margin: [0, 0, 0, 14],
-              table: {
-                headerRows: 1,
-                dontBreakRows: true,
-                keepWithHeaderRows: 1,
-                widths: [40, '*'],
-                body: [
-                  [
-                    { text: col2Header, colSpan: 2, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
-                    {}
-                  ],
-                  ...rows
-                ]
-              },
-              layout: standardTableLayout
-            });
-          } else {
-            sectionContent.push({
-              margin: [0, 0, 0, 14],
-              table: {
-                headerRows: 1,
-                dontBreakRows: true,
-                keepWithHeaderRows: 1,
-                widths: ['*'],
-                body: [
-                  [{ text: col2Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
-                  [{ text: text, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
-                ]
-              },
-              layout: standardTableLayout
-            });
-          }
-        });
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: [40, '*'],
+                  body: [
+                    [
+                      { text: col2Header, colSpan: 2, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
+                      {}
+                    ],
+                    ...rows
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            } else {
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: ['*'],
+                  body: [
+                    [{ text: col2Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
+                    [{ text: text, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            }
+          });
+        }
       }
     } else if (item.index === 4) {
-      // ─────────────────────────────────────────────────────────────
-      // ITEM 4: STUDENT NAME LIST
-      // ─────────────────────────────────────────────────────────────
       const item4Sub = subs(4);
-      let students: any[] = [];
-      if (item4Sub) {
-        students = Array.isArray(item4Sub.students) ? item4Sub.students : (Array.isArray(item4Sub) ? item4Sub : []);
-      }
-
-      if (students.length > 0) {
+      const students = item4Sub?.students;
+      if (Array.isArray(students) && students.length > 0) {
         hasStructuredContent = true;
-        sectionContent.push({
+        structuredContent.push({
           margin: [0, 0, 0, 14],
           table: {
             headerRows: 1,
             dontBreakRows: true,
             keepWithHeaderRows: 1,
-            widths: [35, '*', 120, 50],
+            widths: [30, '*', 120, 60],
             body: [
               [
-                { text: 'Sr No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 },
-                { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 9 },
-                { text: 'Enrolment Number', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 },
-                { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 }
+                { text: 'Sr No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 10 },
+                { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 10 },
+                { text: 'Enrolment Number', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 10 },
+                { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 10 }
               ],
               ...students.map((st: any, i: number) => [
-                { text: String(i + 1), alignment: 'center', fontSize: 9 },
-                { text: st.name || st.studentName || '—', fontSize: 9 },
-                { text: st.enrolmentNumber || st.rollNo || '—', alignment: 'center', fontSize: 9 },
-                { text: st.batch || 'A', alignment: 'center', fontSize: 9 }
+                { text: String(i + 1), alignment: 'center', fontSize: 9.5 },
+                { text: st.name || st.studentName || '—', fontSize: 9.5 },
+                { text: st.enrolmentNumber || st.rollNo || '—', alignment: 'center', fontSize: 9.5 },
+                { text: st.batch || 'A', alignment: 'center', fontSize: 9.5 }
               ])
             ]
           },
@@ -493,19 +512,14 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         });
       }
     } else if (item.index === 8) {
-      // ─────────────────────────────────────────────────────────────
-      // ITEM 8: LABORATORY RUBRICS
-      // ─────────────────────────────────────────────────────────────
       const item4Sub = subs(4);
       let item4Students: any[] = [];
       if (item4Sub) {
         item4Students = Array.isArray(item4Sub.students) ? item4Sub.students : (Array.isArray(item4Sub) ? item4Sub : []);
       }
-
       const item8Sub = subs(8);
       const rawStudents = item8Sub?.students || item8Sub?.rows || item8Sub?.item8Rows || [];
       const studentsMap = new Map<string, any>();
-
       item4Students.forEach((s: any) => {
         const id = s.id || s.studentId || s.enrolmentNumber;
         if (id) {
@@ -522,7 +536,6 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           });
         }
       });
-
       rawStudents.forEach((s: any) => {
         const id = s.studentId || s.id || s.enrolmentNumber;
         if (id) {
@@ -545,34 +558,13 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           });
         }
       });
-
       const studentRows = Array.from(studentsMap.values());
       const numP = Number(item8Sub?.numPracticals) || 4;
 
       if (studentRows.length > 0) {
         hasStructuredContent = true;
-
-        // 1. CE Header
-        sectionContent.push({
-          text: 'CE — Continuous Evaluation (Laboratory)',
-          fontSize: 11,
-          bold: true,
-          color: '#1e293b',
-          margin: [0, 4, 0, 6]
-        });
-
-        // 2.1 Practical Marks Table
-        const pHeaders = Array.from({ length: numP }, (_, i) => ({
-          text: `P${i + 1}`,
-          bold: true,
-          alignment: 'center',
-          fillColor: '#f5f5f5',
-          fontSize: 8
-        }));
-
-        const pWidths = Array.from({ length: numP }, () => 20);
-
-        sectionContent.push(
+        structuredContent.push(
+          { text: 'CE — Continuous Evaluation (Laboratory)', fontSize: 11, bold: true, color: '#1e293b', margin: [0, 4, 0, 6] },
           { text: '2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)', fontSize: 9.5, bold: true, margin: [0, 2, 0, 4] },
           {
             margin: [0, 0, 0, 12],
@@ -580,15 +572,15 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
               headerRows: 1,
               dontBreakRows: true,
               keepWithHeaderRows: 1,
-              widths: [28, '*', 70, ...pWidths, 36, 36],
+              widths: [28, '*', 70, ...Array.from({ length: numP }, () => 20), 40, 40],
               body: [
                 [
                   { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
-                  ...pHeaders,
-                  { text: 'Avg (10)', bold: true, alignment: 'center', fillColor: '#e0f2fe', fontSize: 8 },
-                  { text: 'Avg (20)', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                  ...Array.from({ length: numP }, (_, i) => ({ text: `P${i + 1}`, bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 })),
+                  { text: 'Avg 10', bold: true, alignment: 'center', fillColor: '#e0f2fe', fontSize: 8 },
+                  { text: 'Avg 20', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
                 ],
                 ...studentRows.map((st: any) => {
                   const { avg10, avg20 } = calcStudentAverages(st, numP);
@@ -612,8 +604,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           }
         );
 
-        // 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
-        sectionContent.push(
+        structuredContent.push(
           { text: '2.2 Practicals Auto-Generated 4-Criteria Breakdown Table', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
           {
             margin: [0, 0, 0, 12],
@@ -653,8 +644,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           }
         );
 
-        // 2.3 Internal Viva Evaluation & Auto-Breakdown
-        sectionContent.push(
+        structuredContent.push(
           { text: '2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
           {
             margin: [0, 0, 0, 12],
@@ -696,17 +686,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           }
         );
 
-        // 3. ESE Header
-        sectionContent.push({
-          text: 'ESE — End Semester Exam (Laboratory)',
-          fontSize: 11,
-          bold: true,
-          color: '#1e293b',
-          margin: [0, 8, 0, 6]
-        });
-
-        // 3.1 Performance / Quiz Evaluation & Breakdown
-        sectionContent.push(
+        structuredContent.push(
+          { text: 'ESE — End Semester Exam (Laboratory)', fontSize: 11, bold: true, color: '#1e293b', margin: [0, 8, 0, 6] },
           { text: '3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)', fontSize: 9.5, bold: true, margin: [0, 2, 0, 4] },
           {
             margin: [0, 0, 0, 12],
@@ -714,13 +695,13 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
               headerRows: 1,
               dontBreakRows: true,
               keepWithHeaderRows: 1,
-              widths: [28, '*', 70, 45, 26, 26, 26, 26, 36],
+              widths: [28, '*', 70, 50, 26, 26, 26, 26, 36],
               body: [
                 [
                   { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
-                  { text: 'Quiz (30)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Perf/Quiz (30)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'A', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'B', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
                   { text: 'C', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
@@ -748,16 +729,15 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           }
         );
 
-        // 3.2 External Viva Evaluation & Breakdown
-        sectionContent.push(
+        structuredContent.push(
           { text: '3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
           {
-            margin: [0, 0, 0, 14],
+            margin: [0, 0, 0, 12],
             table: {
               headerRows: 1,
               dontBreakRows: true,
               keepWithHeaderRows: 1,
-              widths: [28, '*', 70, 45, 26, 26, 26, 26, 36],
+              widths: [28, '*', 70, 50, 26, 26, 26, 26, 36],
               body: [
                 [
                   { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
@@ -792,9 +772,6 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         );
       }
     } else if (item.index === 9) {
-      // ─────────────────────────────────────────────────────────────
-      // ITEM 9: THEORY CONTINUOUS EVALUATION RUBRICS
-      // ─────────────────────────────────────────────────────────────
       const item9Sub = subs(9);
       const students = item9Sub?.students || [];
       const criteria = item9Sub?.criteria || [
@@ -813,7 +790,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         }));
         const crWidths = criteria.map(() => 45);
 
-        sectionContent.push({
+        structuredContent.push({
           margin: [0, 0, 0, 14],
           table: {
             headerRows: 1,
@@ -846,12 +823,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         });
       }
     } else if (item.index === 11 || item.index === 12) {
-      // ─────────────────────────────────────────────────────────────
-      // ITEM 11 & 12: INTERNAL ASSESSMENTS
-      // ─────────────────────────────────────────────────────────────
       const itemSub = subs(item.index);
       const students = itemSub?.students || [];
-
       if (students.length > 0) {
         hasStructuredContent = true;
         const qKeys = Object.keys(students[0] || {}).filter((k) => /^q\d+$/i.test(k));
@@ -864,7 +837,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         }));
         const qWidths = qKeys.map(() => 30);
 
-        sectionContent.push({
+        structuredContent.push({
           margin: [0, 0, 0, 14],
           table: {
             headerRows: 1,
@@ -899,70 +872,68 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         });
       }
     } else if (item.index === 20) {
-      // ─────────────────────────────────────────────────────────────
-      // ITEM 20: COURSE FACULTY SIGNATURE
-      // ─────────────────────────────────────────────────────────────
       hasStructuredContent = true;
-      sectionContent.push(
-        {
-          margin: [0, 40, 0, 0],
-          table: {
-            widths: ['*'],
-            body: [
-              [
-                {
-                  fillColor: '#fafafa',
-                  margin: [20, 24, 20, 24],
-                  stack: [
-                    { text: 'Course Faculty Signature', bold: true, fontSize: 13, alignment: 'center', margin: [0, 0, 0, 20] },
-                    { text: facultyName, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
-                    { text: `Signed by: ${cf.facultySignatureName || facultyName}`, fontSize: 10, color: '#555555', alignment: 'center' }
-                  ]
-                }
-              ]
+      structuredContent.push({
+        margin: [0, 40, 0, 0],
+        table: {
+          widths: ['*'],
+          body: [
+            [
+              {
+                fillColor: '#fafafa',
+                margin: [20, 24, 20, 24],
+                stack: [
+                  { text: 'Course Faculty Signature', bold: true, fontSize: 13, alignment: 'center', margin: [0, 0, 0, 20] },
+                  { text: facultyName, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
+                  { text: `Signed by: ${cf.facultySignatureName || facultyName}`, fontSize: 10, color: '#555555', alignment: 'center' }
+                ]
+              }
             ]
-          },
-          layout: {
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => '#cccccc',
-            vLineColor: () => '#cccccc'
-          }
+          ]
+        },
+        layout: {
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          hLineColor: () => '#cccccc',
+          vLineColor: () => '#cccccc'
         }
-      );
+      });
     }
 
-    if (!hasStructuredContent) {
-      const db = dbi(item.index);
-      const isJsonFile = db?.fileName?.toLowerCase().endsWith('.json');
-
-      if (db && db.fileName && !isJsonFile) {
-        sectionContent.push({
-          margin: [0, 20, 0, 0],
-          table: {
-            widths: ['*'],
-            body: [
-              [
-                {
-                  fillColor: '#fafafa',
-                  margin: [10, 20, 10, 20],
-                  stack: [
-                    { text: `Attachment: ${db.fileName}`, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
-                    { text: 'Uploaded Document Attachment', fontSize: 10, color: '#555555', alignment: 'center' }
-                  ]
-                }
-              ]
-            ]
-          },
-          layout: {
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => '#cccccc',
-            vLineColor: () => '#cccccc'
-          }
-        });
-      } else {
-        sectionContent.push({
+    if (hasStructuredContent) {
+      const chunk = [
+        ...itemDividerContent,
+        { text: '', pageBreak: 'before' },
+        buildPageHeader(schoolName, hasLogo),
+        {
+          text: `${item.index}. ${item.name.toUpperCase()}`,
+          fontSize: 12,
+          bold: true,
+          decoration: 'underline',
+          margin: [0, 0, 0, 14]
+        },
+        ...structuredContent
+      ];
+      await appendPdfMakeDoc(chunk);
+      if (uploadedBuffers.length > 0) {
+        await appendRawPdfBuffers(uploadedBuffers);
+      }
+    } else if (uploadedBuffers.length > 0) {
+      await appendPdfMakeDoc(itemDividerContent);
+      await appendRawPdfBuffers(uploadedBuffers);
+    } else {
+      const chunk = [
+        ...itemDividerContent,
+        { text: '', pageBreak: 'before' },
+        buildPageHeader(schoolName, hasLogo),
+        {
+          text: `${item.index}. ${item.name.toUpperCase()}`,
+          fontSize: 12,
+          bold: true,
+          decoration: 'underline',
+          margin: [0, 0, 0, 14]
+        },
+        {
           margin: [0, 20, 0, 0],
           table: {
             widths: ['*'],
@@ -985,60 +956,14 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
             hLineColor: () => '#e0e0e0',
             vLineColor: () => '#e0e0e0'
           }
-        });
-      }
-    }
-
-    content.push(...sectionContent);
-  });
-
-  const docDef: any = {
-    pageSize: 'A4',
-    pageMargins: [35, 35, 35, 35],
-    defaultStyle: {
-      font: 'Roboto',
-      fontSize: 10,
-      lineHeight: 1.15
-    },
-    images: hasLogo ? { logo: logoDataUri } : {},
-    content
-  };
-
-  const doc = pdfmake.createPdf(docDef);
-  const baseBuffer: Buffer = await doc.getBuffer();
-
-  // ─────────────────────────────────────────────────────────────
-  // MERGE UPLOADED PDF PAGES USING PDF-LIB
-  // For items that have uploaded PDFs, we cannot embed them inside
-  // pdfmake directly, so we append their pages to the final PDF
-  // using pdf-lib after the pdfmake document is generated.
-  // ─────────────────────────────────────────────────────────────
-  if (uploadedPdfsByItem.size === 0) {
-    return baseBuffer;
-  }
-
-  try {
-    const mergedDoc = await PDFDocument.load(baseBuffer);
-
-    for (const [, buffers] of uploadedPdfsByItem) {
-      for (const buf of buffers) {
-        try {
-          const uploadedDoc = await PDFDocument.load(buf, { ignoreEncryption: true });
-          const pageCount = uploadedDoc.getPageCount();
-          const copiedPages = await mergedDoc.copyPages(uploadedDoc, Array.from({ length: pageCount }, (_, i) => i));
-          copiedPages.forEach((page) => mergedDoc.addPage(page));
-        } catch (innerErr) {
-          console.error('Could not merge one uploaded PDF, skipping:', innerErr);
         }
-      }
+      ];
+      await appendPdfMakeDoc(chunk);
     }
-
-    const mergedBytes = await mergedDoc.save();
-    return Buffer.from(mergedBytes);
-  } catch (mergeErr) {
-    console.error('PDF merge failed, returning base pdfmake PDF:', mergeErr);
-    return baseBuffer;
   }
+
+  const mergedBytes = await mergedDoc.save();
+  return Buffer.from(mergedBytes);
 }
 
 /**
@@ -1163,7 +1088,7 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
             <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-family: 'Times New Roman', Times, serif;">
               <thead>
                 <tr style="background-color: #d9ead3; border-bottom: 1px solid #000;">
-                  <th colSpan="2" style="padding: 6px 10px; font-weight: bold; font-size: 13px; text-transform: uppercase; text-align: center;">${col2Header}</th>
+                  <th colSpan={2} style="padding: 6px 10px; font-weight: bold; font-size: 13px; text-transform: uppercase; text-align: center;">${col2Header}</th>
                 </tr>
               </thead>
               <tbody>${rowsHtml}</tbody>

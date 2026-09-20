@@ -30,7 +30,8 @@ const TH: React.CSSProperties = { border: '1px solid #000', padding: '6px 10px',
 const TD: React.CSSProperties = { border: '1px solid #000', padding: '5px 10px', verticalAlign: 'middle', fontSize: '12px' };
 const TDC: React.CSSProperties = { ...TD, textAlign: 'center' };
 const TBLSTYLE: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontFamily: "'Times New Roman', Times, serif" };
-const PAGE: React.CSSProperties = { padding: '60px 70px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: "'Times New Roman', Times, serif", color: '#000', background: '#fff' };
+const PAGE: React.CSSProperties = { padding: '60px 70px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: "'Times New Roman', Times, serif", color: '#000', background: '#fff', boxSizing: 'border-box' };
+const RAW_PAGE: React.CSSProperties = { width: '100%', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', background: '#fff', lineHeight: 0, padding: 0, margin: 0, boxSizing: 'border-box' };
 
 function hashString(str: string) {
   let hash = 0;
@@ -122,9 +123,8 @@ function loadPdfJs(): Promise<any> {
 }
 
 /**
- * Renders each page of an uploaded PDF as a full-width image.
- * Pages are shown seamlessly — no browser chrome, no toolbar, no thumbnails.
- * Just the raw PDF content extracted page-by-page.
+ * Extracts each page of an uploaded PDF and renders each page
+ * as its own clean, full-bleed standalone A4 page.
  */
 function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
   const [pages, setPages] = useState<string[]>([]);
@@ -150,12 +150,12 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
-            rendered.push(canvas.toDataURL('image/jpeg', 0.92));
+            rendered.push(canvas.toDataURL('image/jpeg', 0.95));
           }
         }
         if (active) { setPages(rendered); setLoading(false); }
       } catch (e) {
-        console.error('PDF page render error:', e);
+        console.error('PDF page extraction error:', e);
         if (active) { setError(true); setLoading(false); }
       }
     }
@@ -164,57 +164,63 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
   }, [url]);
 
   if (loading) return (
-    <div style={{ padding: '32px', textAlign: 'center', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '4px' }}>
-      <Spinner animation="border" size="sm" variant="secondary" className="me-2" />
-      <span style={{ fontSize: '13px', color: '#64748b' }}>Rendering pages of {name || 'document'}…</span>
+    <div className="preview-page" style={{ ...PAGE, minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <Spinner animation="border" size="sm" variant="secondary" className="mb-2" />
+      <span style={{ fontSize: '13px', color: '#64748b' }}>Extracting pages of {name || 'document'}…</span>
     </div>
   );
 
   if (error || pages.length === 0) return (
-    <div style={{ padding: '24px', textAlign: 'center', background: '#fef9f0', border: '1px solid #fed7aa', borderRadius: '4px' }}>
-      <div style={{ fontSize: '13px', color: '#92400e', marginBottom: '10px' }}>Could not render PDF pages inline</div>
+    <div className="preview-page" style={{ ...PAGE, minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '12px' }}>Could not extract PDF pages inline</div>
       <a href={url} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-warning">Open {name || 'PDF'} ↗</a>
     </div>
   );
 
-  // Clean full-width pages — no gaps, no chrome, no borders between pages
   return (
-    <div style={{ lineHeight: 0 }}>
+    <>
       {pages.map((src, i) => (
-        <img
-          key={i}
-          src={src}
-          alt={`Page ${i + 1}`}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-        />
+        <div key={i} className="preview-page raw-page" style={{ ...RAW_PAGE }}>
+          <img
+            src={src}
+            alt={`${name || 'PDF'} - Page ${i + 1}`}
+            style={{ width: '100%', height: 'auto', display: 'block' }}
+          />
+        </div>
       ))}
-    </div>
+    </>
   );
 }
 
-function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string; height?: string }) {
+function FileEmbed({ url, name }: { url: string; name?: string }) {
   if (!url) return null;
   const isImg = name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
   const isDoc = name?.match(/\.(docx|doc|xlsx|xls|csv|txt)$/i);
 
   if (isImg) {
-    return <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: height, objectFit: 'contain', display: 'block', margin: '0 auto' }} />;
-  }
-
-  if (isDoc) {
     return (
-      <div style={{ padding: '24px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', margin: '16px 0' }}>
-        <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
-        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'Document File'}</div>
-        <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Office / Text Document</div>
-        <a href={url} download={name || 'document'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
-          Download / Open {name}
-        </a>
+      <div className="preview-page raw-page" style={{ ...RAW_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '1050px' }}>
+        <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: '1000px', objectFit: 'contain', display: 'block' }} />
       </div>
     );
   }
 
-  // PDF → extract all pages and show as clean full-width images
+  if (isDoc) {
+    return (
+      <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ padding: '30px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', maxWidth: '450px' }}>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
+          <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'Document File'}</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>Office / Text Document</div>
+          <a href={url} download={name || 'document'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
+            Download / Open {name}
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // PDF → extract all pages and render as clean full-bleed standalone pages
   return <PdfPagesViewer url={url} name={name} />;
 }
 
@@ -270,7 +276,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         @media print {
           @page {
             size: A4 portrait;
-            margin: 12mm 15mm;
+            margin: 0;
           }
           html, body {
             background: #fff !important;
@@ -282,12 +288,6 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           .no-print {
             display: none !important;
           }
-          .print-hide-iframe {
-            display: none !important;
-          }
-          .print-only-fallback {
-            display: block !important;
-          }
           .preview-outer-wrapper {
             background: #fff !important;
             padding: 0 !important;
@@ -298,14 +298,24 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             max-width: none !important;
             box-shadow: none !important;
             margin: 0 !important;
+            width: 100% !important;
           }
           .preview-page {
             page-break-after: always !important;
             break-after: page !important;
-            min-height: auto !important;
-            padding: 20px 0 !important;
+            min-height: 100vh !important;
             border-bottom: none !important;
             box-shadow: none !important;
+            box-sizing: border-box !important;
+          }
+          .raw-page {
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .raw-page img {
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
           }
           table {
             page-break-inside: auto;
@@ -315,6 +325,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           }
         }
       `}</style>
+
+      {/* Top Navbar */}
       <div className="no-print sticky-top bg-dark text-white p-3 shadow d-flex justify-content-between align-items-center flex-wrap gap-2" style={{ zIndex: 1050 }}>
         <div>
           <h6 className="fw-bold mb-0 text-white">Merged Course File Preview</h6>
@@ -324,6 +336,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
           <a href={`/api/course-files/${courseFileId}/merged-report`} download={`merged-course-file-${code}.docx`} className="btn btn-outline-success btn-sm">Download DOCX</a>
           <a href={`/api/course-files/${courseFileId}/merged-pdf`} target="_blank" rel="noreferrer" className="btn btn-warning btn-sm fw-bold px-3">📄 Download PDF Report</a>
+          <Button variant="light" size="sm" className="fw-bold" onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
         </div>
       </div>
 
@@ -375,190 +388,235 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           </table>
         </div>
 
-        {/* PAGES 3+: ONE PER CHECKLIST ITEM */}
+        {/* PAGES 3+: CHECKLIST ITEMS */}
         {CHECKLIST_ITEMS.map((item) => {
           const db = dbi(item.index);
           const sb = subs(item.index);
           const url = db?.fileUrl || db?.sharedFileUrl;
           const fn  = db?.fileName || db?.sharedFileName;
-          let content: React.ReactNode;
+
+          const dividerPage = (
+            <div key={`div-${item.index}`} className="preview-page" style={{ ...PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxSizing: 'border-box' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '24px', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: '85%', lineHeight: 1.5, fontFamily: "'Times New Roman', Times, serif" }}>
+                {item.name}
+              </div>
+            </div>
+          );
 
           if (item.index === 1) {
             const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
-            content = (
-              <div>
-                {(['vision', 'mission', 'peo', 'pso', 'po'] as const).map((key) => {
-                  const sub = sb?.[key];
-                  const text = sub?.textContent;
-                  const isMission = key === 'mission';
-                  const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
+            const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+            const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.length > 0;
+            const attachedFiles = subKeys.map((k) => sb?.[k]).filter((s: any) => s && s.fileUrl);
 
-                  if (text?.trim()) {
-                    const headerBg = '#d9ead3';
-                    const isPeo = key === 'peo';
-                    const isPso = key === 'pso';
-                    const isPo = key === 'po';
+            if (hasAnyText) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  {/* Structured Vision/Mission content in template page */}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
+                    </div>
+                    <div>
+                      {subKeys.map((key) => {
+                        const sub = sb?.[key];
+                        const text = sub?.textContent;
+                        const isMission = key === 'mission';
+                        const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
+                        if (!text?.trim()) return null;
 
-                    let col1Header = '';
-                    let col2Header = '';
-                    let prefix = '';
+                        const headerBg = '#d9ead3';
+                        const isPeo = key === 'peo';
+                        const isPso = key === 'pso';
+                        const isPo = key === 'po';
 
-                    if (isPeo) {
-                      col1Header = 'PEO No';
-                      col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-                      prefix = 'PEO ';
-                    } else if (isPso) {
-                      col1Header = 'PSO No';
-                      col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-                      prefix = 'PSO ';
-                    } else if (isPo) {
-                      col1Header = 'PO No';
-                      col2Header = 'PROGRAMME OUTCOMES';
-                      prefix = 'PO ';
-                    } else if (isMission) {
-                      col1Header = '';
-                      col2Header = 'INSTITUTE MISSION';
-                    } else {
-                      col1Header = '';
-                      col2Header = `INSTITUTE ${key.toUpperCase()}`;
-                    }
+                        let col1Header = '';
+                        let col2Header = '';
+                        let prefix = '';
 
-                    if (isPeo || isPso || isPo) {
-                      return (
-                        <div key={key} style={{ marginBottom: '24px' }}>
+                        if (isPeo) {
+                          col1Header = 'PEO No';
+                          col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+                          prefix = 'PEO ';
+                        } else if (isPso) {
+                          col1Header = 'PSO No';
+                          col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+                          prefix = 'PSO ';
+                        } else if (isPo) {
+                          col1Header = 'PO No';
+                          col2Header = 'PROGRAMME OUTCOMES';
+                          prefix = 'PO ';
+                        } else if (isMission) {
+                          col2Header = 'INSTITUTE MISSION';
+                        } else {
+                          col2Header = `INSTITUTE ${key.toUpperCase()}`;
+                        }
+
+                        if (isPeo || isPso || isPo) {
+                          return (
+                            <div key={key} style={{ marginBottom: '24px' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                                <thead>
+                                  <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                    <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>{col1Header}</th>
+                                    <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>{col2Header}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lines.map((line: string, idx: number) => {
+                                    const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                    return (
+                                      <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                        <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{prefix}{idx + 1}</td>
+                                        <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>{cleanText}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        }
+
+                        if (isMission || lines.length > 1) {
+                          return (
+                            <div key={key} style={{ marginBottom: '24px' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                                <thead>
+                                  <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                    <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{col2Header}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lines.map((line: string, idx: number) => {
+                                    const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                    return (
+                                      <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                        <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>
+                                        <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>{cleanText}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={key} style={{ marginBottom: '24px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                              <thead>
+                                <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                  <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{col2Header}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>{text}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })}
+
+                      {customSecs.map((sec: any) => (
+                        <div key={sec.id} style={{ marginBottom: '24px' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
                             <thead>
-                              <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
-                                  {col1Header}
-                                </th>
-                                <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
-                                  {col2Header}
-                                </th>
+                              <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
+                                <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{sec.title.toUpperCase()}</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {lines.map((line: string, idx: number) => {
-                                const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
-                                return (
-                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                    <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                      {prefix}{idx + 1}
-                                    </td>
-                                    <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                      {cleanText}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                          {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
-                        </div>
-                      );
-                    }
-
-                    if (isMission || lines.length > 1) {
-                      return (
-                        <div key={key} style={{ marginBottom: '24px' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                            <thead>
-                              <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                  {col2Header}
-                                </th>
+                              <tr>
+                                <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>{sec.textContent}</td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {lines.map((line: string, idx: number) => {
-                                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
-                                return (
-                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                    <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                      {idx + 1}.
-                                    </td>
-                                    <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                      {cleanText}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
                             </tbody>
                           </table>
-                          {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
                         </div>
-                      );
-                    }
-
-                    return (
-                      <div key={key} style={{ marginBottom: '24px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                          <thead>
-                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                {col2Header}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
-                                {text}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                        {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
-                      </div>
-                    );
-                  }
-
-                  if (sub?.fileUrl) {
-                    return (
-                      <div key={key} style={{ marginBottom: '24px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{key.toUpperCase()}</div>
-                        <FileEmbed url={sub.fileUrl} name={sub.fileName} height="480px" />
-                      </div>
-                    );
-                  }
-
-                  return <Pending key={key} name={key.toUpperCase()} />;
-                })}
-
-                {/* Custom Sections */}
-                {customSecs.map((sec: any) => (
-                  <div key={sec.id} style={{ marginBottom: '24px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                      <thead>
-                        <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                            {sec.title.toUpperCase()}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
-                            {sec.textContent}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                      ))}
+                    </div>
                   </div>
-                ))}
+                  {/* Any sub-section attached PDF pages rendered as direct standalone pages */}
+                  {attachedFiles.map((sf: any, i: number) => (
+                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
+                  ))}
+                </div>
+              );
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
               </div>
             );
-          } else if (item.index === 4) {
+          }
+
+          if (item.index === 4) {
             const students = sb?.students;
             if (students?.length > 0) {
-              content = (
-                <table style={TBLSTYLE}>
-                  <thead><tr><th style={{ ...TH, width: '50px' }}>Sr No</th><th style={TH}>Student Name</th><th style={TH}>Enrolment Number</th><th style={{ ...TH, width: '80px' }}>Batch</th></tr></thead>
-                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.enrolmentNumber || st.rollNo || '—'}</td><td style={TDC}>{st.batch || 'A'}</td></tr>))}</tbody>
-                </table>
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
+                    </div>
+                    <table style={TBLSTYLE}>
+                      <thead><tr><th style={{ ...TH, width: '50px' }}>Sr No</th><th style={TH}>Student Name</th><th style={TH}>Enrolment Number</th><th style={{ ...TH, width: '80px' }}>Batch</th></tr></thead>
+                      <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.enrolmentNumber || st.rollNo || '—'}</td><td style={TDC}>{st.batch || 'A'}</td></tr>))}</tbody>
+                    </table>
+                  </div>
+                  {url && <FileEmbed url={url} name={fn} />}
+                </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 6) {
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 6) {
             const subFiles = [
               sb?.lessonPlanLecture,
               sb?.lessonPlanLab,
@@ -568,18 +626,40 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             ].filter((f: any) => f && f.fileUrl);
 
             if (subFiles.length > 0) {
-              content = (
-                <div>
+              return (
+                <div key={item.index}>
+                  {dividerPage}
                   {subFiles.map((sf: any, i: number) => (
-                    <div key={i} style={{ marginBottom: '28px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>{sf.fileName || `Lesson Plan File ${i + 1}`}</div>
-                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
-                    </div>
+                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
                   ))}
                 </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 8) {
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 8) {
             const item4 = checklist.find((c: any) => c.itemIndex === 4);
             let item4Students: any[] = [];
             if (item4?.subItemsJson) {
@@ -637,249 +717,277 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             const batches = sb?.batches || [];
 
             if (studentRows.length > 0) {
-              content = (
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px' }}>
-                    CE — Continuous Evaluation (Laboratory)
-                  </div>
-
-                  {/* 2.1 Practical Marks Table */}
-                  <div style={{ marginBottom: '28px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-                      2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
                     </div>
-                    <table style={TBLSTYLE}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...TH, width: '45px' }}>Batch</th>
-                          <th style={TH}>Student Name</th>
-                          <th style={TH}>Enrolment Number</th>
-                          {Array.from({ length: numP }).map((_, i) => (
-                            <th key={i} style={{ ...TH, width: '45px' }}>P{i + 1}</th>
-                          ))}
-                          <th style={{ ...TH, width: '70px', background: '#e0f2fe' }}>Avg of 10</th>
-                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Avg of 20</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentRows.map((st: any, i: number) => {
-                          const { avg10, avg20 } = calcStudentAverages(st, numP);
-                          return (
-                            <tr key={i}>
-                              <td style={TDC}>{st.batch || 'A'}</td>
-                              <td style={TD}>{st.name || '—'}</td>
-                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
-                              {Array.from({ length: numP }).map((_, pi) => (
-                                <td key={pi} style={TDC}>{st.practicals?.[`P${pi + 1}`] ?? 0}</td>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px' }}>
+                        CE — Continuous Evaluation (Laboratory)
+                      </div>
+
+                      {/* 2.1 Practical Marks Table */}
+                      <div style={{ marginBottom: '28px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                          2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)
+                        </div>
+                        <table style={TBLSTYLE}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, width: '45px' }}>Batch</th>
+                              <th style={TH}>Student Name</th>
+                              <th style={TH}>Enrolment Number</th>
+                              {Array.from({ length: numP }).map((_, i) => (
+                                <th key={i} style={{ ...TH, width: '45px' }}>P{i + 1}</th>
                               ))}
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0284c7' }}>{avg10}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#b45309' }}>{avg20}</td>
+                              <th style={{ ...TH, width: '70px', background: '#e0f2fe' }}>Avg of 10</th>
+                              <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Avg of 20</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {studentRows.map((st: any, i: number) => {
+                              const { avg10, avg20 } = calcStudentAverages(st, numP);
+                              return (
+                                <tr key={i}>
+                                  <td style={TDC}>{st.batch || 'A'}</td>
+                                  <td style={TD}>{st.name || '—'}</td>
+                                  <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                                  {Array.from({ length: numP }).map((_, pi) => (
+                                    <td key={pi} style={TDC}>{st.practicals?.[`P${pi + 1}`] ?? 0}</td>
+                                  ))}
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#0284c7' }}>{avg10}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#b45309' }}>{avg20}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                  {/* 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table */}
-                  <div style={{ marginBottom: '28px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-                      2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
+                      {/* 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table */}
+                      <div style={{ marginBottom: '28px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                          2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
+                        </div>
+                        <table style={TBLSTYLE}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, width: '45px' }}>Batch</th>
+                              <th style={TH}>Student Name</th>
+                              <th style={TH}>Enrolment Number</th>
+                              <th style={{ ...TH, width: '110px' }}>A (Understanding)</th>
+                              <th style={{ ...TH, width: '110px' }}>B (Performance)</th>
+                              <th style={{ ...TH, width: '110px' }}>C (Record Maint.)</th>
+                              <th style={{ ...TH, width: '110px' }}>D (Viva)</th>
+                              <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {studentRows.map((st: any, i: number) => {
+                              const { avg20 } = calcStudentAverages(st, numP);
+                              const bd = generateBreakdown(avg20, `${st.studentId}-ce-prac`);
+                              return (
+                                <tr key={i}>
+                                  <td style={TDC}>{st.batch || 'A'}</td>
+                                  <td style={TD}>{st.name || '—'}</td>
+                                  <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                                  <td style={TDC}>{bd.a}</td>
+                                  <td style={TDC}>{bd.b}</td>
+                                  <td style={TDC}>{bd.c}</td>
+                                  <td style={TDC}>{bd.d}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* 2.3 Internal Viva Evaluation & Breakdown */}
+                      <div style={{ marginBottom: '28px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                          2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
+                        </div>
+                        <table style={TBLSTYLE}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, width: '45px' }}>Batch</th>
+                              <th style={TH}>Student Name</th>
+                              <th style={TH}>Enrolment Number</th>
+                              <th style={{ ...TH, width: '110px' }}>Internal Viva (20)</th>
+                              <th style={{ ...TH, width: '55px' }}>A</th>
+                              <th style={{ ...TH, width: '55px' }}>B</th>
+                              <th style={{ ...TH, width: '55px' }}>C</th>
+                              <th style={{ ...TH, width: '55px' }}>D</th>
+                              <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {studentRows.map((st: any, i: number) => {
+                              const mark = st.internalViva ?? 0;
+                              const bd = generateBreakdown(mark, `${st.studentId}-ce-iv`);
+                              return (
+                                <tr key={i}>
+                                  <td style={TDC}>{st.batch || 'A'}</td>
+                                  <td style={TD}>{st.name || '—'}</td>
+                                  <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                                  <td style={TDC}>{bd.a}</td>
+                                  <td style={TDC}>{bd.b}</td>
+                                  <td style={TDC}>{bd.c}</td>
+                                  <td style={TDC}>{bd.d}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px', marginTop: '36px' }}>
+                        ESE — End Semester Exam (Laboratory)
+                      </div>
+
+                      {/* 3.1 Performance / Quiz Evaluation & Breakdown */}
+                      <div style={{ marginBottom: '28px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                          3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)
+                        </div>
+                        <table style={TBLSTYLE}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, width: '45px' }}>Batch</th>
+                              <th style={TH}>Student Name</th>
+                              <th style={TH}>Enrolment Number</th>
+                              <th style={{ ...TH, width: '120px' }}>Perf / Quiz (30)</th>
+                              <th style={{ ...TH, width: '55px' }}>A</th>
+                              <th style={{ ...TH, width: '55px' }}>B</th>
+                              <th style={{ ...TH, width: '55px' }}>C</th>
+                              <th style={{ ...TH, width: '55px' }}>D</th>
+                              <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {studentRows.map((st: any, i: number) => {
+                              const mark = st.esePerformance ?? 0;
+                              const bd = generateBreakdown(mark, `${st.studentId}-ese-pq`, 30);
+                              return (
+                                <tr key={i}>
+                                  <td style={TDC}>{st.batch || 'A'}</td>
+                                  <td style={TD}>{st.name || '—'}</td>
+                                  <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                                  <td style={TDC}>{bd.a}</td>
+                                  <td style={TDC}>{bd.b}</td>
+                                  <td style={TDC}>{bd.c}</td>
+                                  <td style={TDC}>{bd.d}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* 3.2 External Viva Evaluation & Breakdown */}
+                      <div style={{ marginBottom: '28px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
+                          3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)
+                        </div>
+                        <table style={TBLSTYLE}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, width: '45px' }}>Batch</th>
+                              <th style={TH}>Student Name</th>
+                              <th style={TH}>Enrolment Number</th>
+                              <th style={{ ...TH, width: '120px' }}>Ext Viva (30)</th>
+                              <th style={{ ...TH, width: '55px' }}>A</th>
+                              <th style={{ ...TH, width: '55px' }}>B</th>
+                              <th style={{ ...TH, width: '55px' }}>C</th>
+                              <th style={{ ...TH, width: '55px' }}>D</th>
+                              <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {studentRows.map((st: any, i: number) => {
+                              const mark = st.eseExternalViva ?? st.eseViva ?? 0;
+                              const bd = generateBreakdown(mark, `${st.studentId}-ese-ev`, 30);
+                              return (
+                                <tr key={i}>
+                                  <td style={TDC}>{st.batch || 'A'}</td>
+                                  <td style={TD}>{st.name || '—'}</td>
+                                  <td style={TDC}>{st.enrolmentNumber || '—'}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
+                                  <td style={TDC}>{bd.a}</td>
+                                  <td style={TDC}>{bd.b}</td>
+                                  <td style={TDC}>{bd.c}</td>
+                                  <td style={TDC}>{bd.d}</td>
+                                  <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    <table style={TBLSTYLE}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...TH, width: '45px' }}>Batch</th>
-                          <th style={TH}>Student Name</th>
-                          <th style={TH}>Enrolment Number</th>
-                          <th style={{ ...TH, width: '110px' }}>A (Understanding)</th>
-                          <th style={{ ...TH, width: '110px' }}>B (Performance)</th>
-                          <th style={{ ...TH, width: '110px' }}>C (Record Maint.)</th>
-                          <th style={{ ...TH, width: '110px' }}>D (Viva)</th>
-                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentRows.map((st: any, i: number) => {
-                          const { avg20 } = calcStudentAverages(st, numP);
-                          const bd = generateBreakdown(avg20, `${st.studentId}-ce-prac`);
-                          return (
-                            <tr key={i}>
-                              <td style={TDC}>{st.batch || 'A'}</td>
-                              <td style={TD}>{st.name || '—'}</td>
-                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
-                              <td style={TDC}>{bd.a}</td>
-                              <td style={TDC}>{bd.b}</td>
-                              <td style={TDC}>{bd.c}</td>
-                              <td style={TDC}>{bd.d}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
                   </div>
-
-                  {/* 2.3 Internal Viva Evaluation & Breakdown */}
-                  <div style={{ marginBottom: '28px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-                      2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)
-                    </div>
-                    <table style={TBLSTYLE}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...TH, width: '45px' }}>Batch</th>
-                          <th style={TH}>Student Name</th>
-                          <th style={TH}>Enrolment Number</th>
-                          <th style={{ ...TH, width: '110px' }}>Internal Viva (20)</th>
-                          <th style={{ ...TH, width: '55px' }}>A</th>
-                          <th style={{ ...TH, width: '55px' }}>B</th>
-                          <th style={{ ...TH, width: '55px' }}>C</th>
-                          <th style={{ ...TH, width: '55px' }}>D</th>
-                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentRows.map((st: any, i: number) => {
-                          const mark = st.internalViva ?? 0;
-                          const bd = generateBreakdown(mark, `${st.studentId}-ce-iv`);
-                          return (
-                            <tr key={i}>
-                              <td style={TDC}>{st.batch || 'A'}</td>
-                              <td style={TD}>{st.name || '—'}</td>
-                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
-                              <td style={TDC}>{bd.a}</td>
-                              <td style={TDC}>{bd.b}</td>
-                              <td style={TDC}>{bd.c}</td>
-                              <td style={TDC}>{bd.d}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#0f766e' }}>{bd.total}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '16px', borderBottom: '2px solid #000', paddingBottom: '6px', marginTop: '36px' }}>
-                    ESE — End Semester Exam (Laboratory)
-                  </div>
-
-                  {/* 3.1 Performance / Quiz Evaluation & Breakdown */}
-                  <div style={{ marginBottom: '28px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-                      3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)
-                    </div>
-                    <table style={TBLSTYLE}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...TH, width: '45px' }}>Batch</th>
-                          <th style={TH}>Student Name</th>
-                          <th style={TH}>Enrolment Number</th>
-                          <th style={{ ...TH, width: '120px' }}>Perf / Quiz (30)</th>
-                          <th style={{ ...TH, width: '55px' }}>A</th>
-                          <th style={{ ...TH, width: '55px' }}>B</th>
-                          <th style={{ ...TH, width: '55px' }}>C</th>
-                          <th style={{ ...TH, width: '55px' }}>D</th>
-                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentRows.map((st: any, i: number) => {
-                          const mark = st.esePerformance ?? 0;
-                          const bd = generateBreakdown(mark, `${st.studentId}-ese-pq`, 30);
-                          return (
-                            <tr key={i}>
-                              <td style={TDC}>{st.batch || 'A'}</td>
-                              <td style={TD}>{st.name || '—'}</td>
-                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
-                              <td style={TDC}>{bd.a}</td>
-                              <td style={TDC}>{bd.b}</td>
-                              <td style={TDC}>{bd.c}</td>
-                              <td style={TDC}>{bd.d}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* 3.2 External Viva Evaluation & Breakdown */}
-                  <div style={{ marginBottom: '28px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>
-                      3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)
-                    </div>
-                    <table style={TBLSTYLE}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...TH, width: '45px' }}>Batch</th>
-                          <th style={TH}>Student Name</th>
-                          <th style={TH}>Enrolment Number</th>
-                          <th style={{ ...TH, width: '120px' }}>Ext Viva (30)</th>
-                          <th style={{ ...TH, width: '55px' }}>A</th>
-                          <th style={{ ...TH, width: '55px' }}>B</th>
-                          <th style={{ ...TH, width: '55px' }}>C</th>
-                          <th style={{ ...TH, width: '55px' }}>D</th>
-                          <th style={{ ...TH, width: '70px', background: '#fef3c7' }}>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentRows.map((st: any, i: number) => {
-                          const mark = st.eseExternalViva ?? st.eseViva ?? 0;
-                          const bd = generateBreakdown(mark, `${st.studentId}-ese-ev`, 30);
-                          return (
-                            <tr key={i}>
-                              <td style={TDC}>{st.batch || 'A'}</td>
-                              <td style={TD}>{st.name || '—'}</td>
-                              <td style={TDC}>{st.enrolmentNumber || '—'}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold' }}>{mark}</td>
-                              <td style={TDC}>{bd.a}</td>
-                              <td style={TDC}>{bd.b}</td>
-                              <td style={TDC}>{bd.c}</td>
-                              <td style={TDC}>{bd.d}</td>
-                              <td style={{ ...TDC, fontWeight: 'bold', color: '#15803d' }}>{bd.total}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Render any section files if present */}
                   {secFiles.map((sf: any, idx: number) => (
-                    <div key={idx} style={{ marginTop: '24px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>Uploaded Document: {sf.fileName}</div>
-                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
-                    </div>
+                    <FileEmbed key={idx} url={sf.fileUrl} name={sf.fileName} />
                   ))}
                 </div>
               );
-            } else if (batches.length > 0) {
-              content = (
-                <div>
-                  {batches.map((batch: any) => (
-                    <div key={batch.id || batch.batch} style={{ marginBottom: '28px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Batch {batch.batch || batch.id} Rubrics</div>
-                      {batch.fileUrl ? <FileEmbed url={batch.fileUrl} name={batch.fileName} /> : <Pending name={`Batch ${batch.batch || batch.id} Rubrics`} />}
-                    </div>
-                  ))}
+            }
+
+            if (batches.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  {batches.map((batch: any) => batch.fileUrl ? (
+                    <FileEmbed key={batch.id || batch.batch} url={batch.fileUrl} name={batch.fileName} />
+                  ) : null)}
                 </div>
               );
-            } else if (secFiles.length > 0) {
-              content = (
-                <div>
+            }
+
+            if (secFiles.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
                   {secFiles.map((sf: any, idx: number) => (
-                    <div key={idx} style={{ marginBottom: '28px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>Uploaded Document: {sf.fileName}</div>
-                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
-                    </div>
+                    <FileEmbed key={idx} url={sf.fileUrl} name={sf.fileName} />
                   ))}
                 </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 9) {
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 9) {
             const students = sb?.students || [];
             const criteria = sb?.criteria || [
               { id: 'internal-1', label: 'Internal 1' },
@@ -888,46 +996,80 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             const sheets = sb?.sheets || [];
 
             if (students.length > 0) {
-              content = (
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '12px' }}>Theory Continuous Evaluation Rubrics</div>
-                  <table style={TBLSTYLE}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...TH, width: '40px' }}>Sr</th>
-                        <th style={TH}>Enrolment No</th>
-                        <th style={TH}>Student Name</th>
-                        {criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((st: any, i: number) => (
-                        <tr key={i}>
-                          <td style={TDC}>{i + 1}</td>
-                          <td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td>
-                          <td style={TD}>{st.name || st.studentName || '—'}</td>
-                          {criteria.map((cr: any) => (
-                            <td key={cr.id} style={TDC}>{st.marks?.[cr.id] ?? '—'}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            } else if (sheets.length > 0) {
-              content = (
-                <div>
-                  {sheets.map((sheet: any, si: number) => (
-                    <div key={si} style={{ marginBottom: '28px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Experiment {si + 1}</div>
-                      {sheet.fileUrl ? <FileEmbed url={sheet.fileUrl} name={sheet.fileName} /> : <Pending name={`Experiment ${si + 1}`} />}
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
                     </div>
-                  ))}
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '12px' }}>Theory Continuous Evaluation Rubrics</div>
+                      <table style={TBLSTYLE}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...TH, width: '40px' }}>Sr</th>
+                            <th style={TH}>Enrolment No</th>
+                            <th style={TH}>Student Name</th>
+                            {criteria.map((cr: any) => <th key={cr.id} style={TH}>{cr.label}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {students.map((st: any, i: number) => (
+                            <tr key={i}>
+                              <td style={TDC}>{i + 1}</td>
+                              <td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td>
+                              <td style={TD}>{st.name || st.studentName || '—'}</td>
+                              {criteria.map((cr: any) => (
+                                <td key={cr.id} style={TDC}>{st.marks?.[cr.id] ?? '—'}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {url && <FileEmbed url={url} name={fn} />}
                 </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 11 || item.index === 12) {
+            }
+
+            if (sheets.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  {sheets.map((sheet: any, si: number) => sheet.fileUrl ? (
+                    <FileEmbed key={si} url={sheet.fileUrl} name={sheet.fileName} />
+                  ) : null)}
+                </div>
+              );
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 11 || item.index === 12) {
             const subDocs = [
               sb?.timetable && { label: 'Timetable', ...sb.timetable },
               sb?.questionPaper && { label: 'Question Paper', ...sb.questionPaper },
@@ -937,86 +1079,203 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
 
             const students = sb?.students || [];
 
-            if (subDocs.length > 0) {
-              content = (
-                <div>
-                  {subDocs.map((sd: any, idx: number) => (
-                    <div key={idx} style={{ marginBottom: '32px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{sd.label}: {sd.fileName}</div>
-                      <FileEmbed url={sd.fileUrl} name={sd.fileName} />
+            if (students.length > 0) {
+              const qKeys = Object.keys(students[0] || {}).filter((k) => /^q\d+$/i.test(k));
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
                     </div>
+                    <table style={TBLSTYLE}>
+                      <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{qKeys.map((q) => <th key={q} style={TH}>{q.toUpperCase()}</th>)}<th style={TH}>Total</th></tr></thead>
+                      <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{qKeys.map((q) => <td key={q} style={TDC}>{st[q] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
+                    </table>
+                  </div>
+                  {subDocs.map((sd: any, idx: number) => (
+                    <FileEmbed key={idx} url={sd.fileUrl} name={sd.fileName} />
                   ))}
                 </div>
               );
-            } else if (students.length > 0) {
-              const qKeys = Object.keys(students[0]).filter((k) => /^qd+$/i.test(k));
-              content = (
-                <table style={TBLSTYLE}>
-                  <thead><tr><th style={{ ...TH, width: '40px' }}>Sr</th><th style={TH}>Enrolment No</th><th style={TH}>Student Name</th>{qKeys.map((q) => <th key={q} style={TH}>{q.toUpperCase()}</th>)}<th style={TH}>Total</th></tr></thead>
-                  <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{qKeys.map((q) => <td key={q} style={TDC}>{st[q] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
-                </table>
+            }
+
+            if (subDocs.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  {subDocs.map((sd: any, idx: number) => (
+                    <FileEmbed key={idx} url={sd.fileUrl} name={sd.fileName} />
+                  ))}
+                </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 13) {
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 13) {
             const subFiles = [
               sb?.sampleAssignment && { label: 'Sample Assignment', ...sb.sampleAssignment },
               sb?.marksFile && { label: 'Evaluation Marks Sheet', ...sb.marksFile }
             ].filter((f: any) => f && f.fileUrl);
 
             if (subFiles.length > 0) {
-              content = (
-                <div>
+              return (
+                <div key={item.index}>
+                  {dividerPage}
                   {subFiles.map((sf: any, i: number) => (
-                    <div key={i} style={{ marginBottom: '28px' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>{sf.label}: {sf.fileName}</div>
-                      <FileEmbed url={sf.fileUrl} name={sf.fileName} />
-                    </div>
+                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
                   ))}
                 </div>
               );
-            } else { content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />; }
-          } else if (item.index === 18) {
-            const sharedUrl = sb?.fileUrl || url;
-            const sharedName = sb?.fileName || fn;
-            content = sharedUrl ? <FileEmbed url={sharedUrl} name={sharedName} /> : <Pending name={item.name} />;
-          } else if (item.index === 19) {
-            let docs: any[] = [];
-            if (db?.subItemsJson) { try { const p = JSON.parse(db.subItemsJson); if (Array.isArray(p.documents)) docs = p.documents; } catch {} }
-            if (docs.length === 0 && url) docs = [{ id: 'leg', name: 'Lecture Notes', fileName: fn, fileUrl: url }];
-            content = docs.length === 0 ? <Pending name={item.name} /> : (
-              <div>{docs.map((doc: any) => (<div key={doc.id} style={{ marginBottom: '36px' }}><div style={{ fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '10px' }}>{doc.name}</div><FileEmbed url={doc.fileUrl} name={doc.fileName} height="650px" /></div>))}</div>
-            );
-          } else if (item.index === 20) {
-            const sigUrl = url || cf.facultySignatureUrl;
-            content = (
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '16px', fontSize: '14px' }}>Course Faculty Signature</div>
-                {sigUrl
-                  ? <img src={sigUrl} alt="Signature" style={{ maxHeight: '150px', maxWidth: '300px', objectFit: 'contain', border: '1px solid #ccc', padding: '8px' }} />
-                  : <div style={{ height: '80px', width: '280px', margin: '0 auto', border: '1px solid #ccc', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '8px', fontSize: '12px', color: '#888' }}>{faculty}</div>
-                }
-                <div style={{ marginTop: '10px', fontSize: '12px', color: '#555' }}>Signed by: {cf.facultySignatureName || faculty}</div>
+            }
+
+            if (url) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={url} name={fn} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
               </div>
             );
-          } else {
-            content = url ? <FileEmbed url={url} name={fn} /> : <Pending name={item.name} />;
+          }
+
+          if (item.index === 18) {
+            const sharedUrl = sb?.fileUrl || url;
+            const sharedName = sb?.fileName || fn;
+            if (sharedUrl) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <FileEmbed url={sharedUrl} name={sharedName} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 19) {
+            let docs: any[] = [];
+            if (db?.subItemsJson) {
+              try { const p = JSON.parse(db.subItemsJson); if (Array.isArray(p.documents)) docs = p.documents; } catch {}
+            }
+            if (docs.length === 0 && url) docs = [{ id: 'leg', name: 'Lecture Notes', fileName: fn, fileUrl: url }];
+            const validDocs = docs.filter((d) => d && d.fileUrl);
+
+            if (validDocs.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  {validDocs.map((doc: any) => (
+                    <FileEmbed key={doc.id || doc.fileUrl} url={doc.fileUrl} name={doc.fileName || doc.name} />
+                  ))}
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <Pending name={item.name} />
+                </div>
+              </div>
+            );
+          }
+
+          if (item.index === 20) {
+            const sigUrl = url || cf.facultySignatureUrl;
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <div className="preview-page" style={{ ...PAGE }}>
+                  <PageHeader cf={cf} />
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                    {item.index}. {item.name}
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '20px', fontSize: '15px' }}>Course Faculty Signature</div>
+                    {sigUrl
+                      ? <img src={sigUrl} alt="Signature" style={{ maxHeight: '160px', maxWidth: '320px', objectFit: 'contain', border: '1px solid #ccc', padding: '8px' }} />
+                      : <div style={{ height: '90px', width: '280px', margin: '0 auto', border: '1px solid #ccc', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '8px', fontSize: '12px', color: '#888' }}>{faculty}</div>
+                    }
+                    <div style={{ marginTop: '14px', fontSize: '13px', color: '#333', fontWeight: '500' }}>Signed by: {cf.facultySignatureName || faculty}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // General items (2, 3, 5, 7, 10, 14, 15, 16, 17)
+          if (url) {
+            return (
+              <div key={item.index}>
+                {dividerPage}
+                <FileEmbed url={url} name={fn} />
+              </div>
+            );
           }
 
           return (
             <div key={item.index}>
-              {/* Section divider */}
-              <div className="preview-page" style={{ ...PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxSizing: 'border-box' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '24px', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: '85%', lineHeight: 1.5, fontFamily: "'Times New Roman', Times, serif" }}>
-                  {item.name}
-                </div>
-              </div>
-              {/* Content page */}
+              {dividerPage}
               <div className="preview-page" style={{ ...PAGE }}>
                 <PageHeader cf={cf} />
                 <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
                   {item.index}. {item.name}
                 </div>
-                {content}
+                <Pending name={item.name} />
               </div>
             </div>
           );
