@@ -336,39 +336,66 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
 }
 
 export async function generatePdfBufferFromHtml(htmlContent: string): Promise<Buffer> {
-  // Resolve executable path — @sparticuz/chromium bundles a Chromium binary for serverless
-  // environments (Vercel / AWS Lambda). On local Windows dev it falls back to the system
-  // Edge or Chrome that puppeteer-core can find via common install paths.
-  let executablePath: string;
+  const isWindows = process.platform === 'win32';
+  // VERCEL env var is set to "1" automatically in Vercel serverless functions
+  const isServerless = !isWindows && (!!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-  try {
-    // In a serverless environment @sparticuz/chromium resolves to the bundled binary
-    executablePath = await chromium.executablePath();
-  } catch {
-    // Local Windows fallback: find Edge or Chrome on the host machine
+  let executablePath: string;
+  let launchArgs: string[];
+
+  if (isWindows) {
+    // ── Local Windows dev ──────────────────────────────────────────────────
+    // Use the system-installed Edge or Chrome directly.
     const localPaths = [
       'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
       'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
     ];
     const found = localPaths.find((p) => fs.existsSync(p));
     if (!found) {
       throw new Error(
-        'No Chrome/Edge binary found for PDF generation. ' +
-        'On Vercel, @sparticuz/chromium should resolve automatically. ' +
-        'Locally, install Chrome or Microsoft Edge.'
+        'No Chrome/Edge binary found locally. Install Microsoft Edge or Google Chrome, ' +
+        'or set the CHROME_PATH environment variable to the browser executable.'
       );
     }
     executablePath = found;
+    launchArgs = [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-web-security',
+    ];
+  } else if (isServerless) {
+    // ── Vercel / AWS Lambda ────────────────────────────────────────────────
+    // @sparticuz/chromium bundles a stripped Chromium binary for Linux serverless.
+    executablePath = await chromium.executablePath();
+    launchArgs = [
+      ...chromium.args,
+      '--disable-web-security',
+    ];
+  } else {
+    // ── Other Linux (e.g. local Docker / CI) ──────────────────────────────
+    const linuxPaths = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+    ];
+    const found = linuxPaths.find((p) => fs.existsSync(p));
+    if (found) {
+      executablePath = found;
+      launchArgs = ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-web-security'];
+    } else {
+      // Fallback: try @sparticuz/chromium even outside serverless
+      executablePath = await chromium.executablePath();
+      launchArgs = [...chromium.args, '--disable-web-security'];
+    }
   }
 
   const browser = await puppeteer.launch({
-    args: [
-      ...chromium.args,
-      '--no-pdf-header-footer',
-      '--disable-web-security',
-    ],
+    args: launchArgs,
     defaultViewport: { width: 1200, height: 1697 }, // A4 proportions at 144 dpi
     executablePath,
     headless: true,
