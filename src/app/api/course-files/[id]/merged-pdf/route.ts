@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCourseFileById, getMergedChecklistItems, getSubjectById } from '@/lib/mock-data';
+import {
+  getCourseFileDetailWithChecklist,
+  getSubjectById,
+  getSubjectSharedDocuments,
+  getSchoolSharedDocuments,
+  normalizeSchoolCode,
+  mergeChecklistItemsInMemory
+} from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 import { generatePdfBuffer } from '@/lib/pdf-generator';
@@ -16,19 +23,29 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const { id } = await props.params;
-    const courseFile = await getCourseFileById(id);
+    const courseFile = await getCourseFileDetailWithChecklist(id);
     if (!courseFile) {
       return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     }
 
-    const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
+    const subject = courseFile.subject || (courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null);
     if (payload.role === 'COORDINATOR' && subject?.evaluatorId !== payload.userId) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const checklist = await getMergedChecklistItems(id);
-    const pdfBuffer = await generatePdfBuffer(courseFile, checklist, subject);
+    const targetSubjectId = subject?.id || courseFile.subjectId;
+    const schoolCode = normalizeSchoolCode(subject?.school || courseFile.school);
+    const subjectSharedDocs = targetSubjectId ? await getSubjectSharedDocuments(targetSubjectId) : [];
+    const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
+    const checklist = mergeChecklistItemsInMemory(
+      courseFile.checklistItems || [],
+      courseFile.labSubmissions || [],
+      subject,
+      subjectSharedDocs,
+      schoolSharedDocs
+    );
 
+    const pdfBuffer = await generatePdfBuffer(courseFile, checklist, subject);
     const safeCode = (courseFile.courseCode || 'course-file').replace(/[^a-z0-9_-]/gi, '_');
 
     return new NextResponse(pdfBuffer as any, {
