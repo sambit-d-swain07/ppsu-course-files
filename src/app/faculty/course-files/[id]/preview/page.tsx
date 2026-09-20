@@ -98,42 +98,96 @@ function PageHeader({ cf }: { cf: any }) {
   );
 }
 
-function PdfEmbed({ url, name }: { url: string; name?: string }) {
-  // Calculate height: A4 aspect ratio is ~1.414, show multiple pages
-  // Use a tall iframe so all pages are visible without clipping
+let pdfjsPromise: Promise<any> | null = null;
+
+function loadPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('SSR'));
+  if ((window as any).pdfjsLib) return Promise.resolve((window as any).pdfjsLib);
+  if (pdfjsPromise) return pdfjsPromise;
+  pdfjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.async = true;
+    s.onload = () => {
+      const lib = (window as any).pdfjsLib;
+      if (lib) {
+        lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(lib);
+      } else reject(new Error('pdfjsLib not found'));
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return pdfjsPromise;
+}
+
+/**
+ * Renders each page of an uploaded PDF as a full-width image.
+ * Pages are shown seamlessly — no browser chrome, no toolbar, no thumbnails.
+ * Just the raw PDF content extracted page-by-page.
+ */
+function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
+  const [pages, setPages] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function run() {
+      try {
+        setLoading(true);
+        setError(false);
+        const pdfjs = await loadPdfJs();
+        const pdf = await pdfjs.getDocument(url).promise;
+        if (!active) return;
+        const rendered: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const vp = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            rendered.push(canvas.toDataURL('image/jpeg', 0.92));
+          }
+        }
+        if (active) { setPages(rendered); setLoading(false); }
+      } catch (e) {
+        console.error('PDF page render error:', e);
+        if (active) { setError(true); setLoading(false); }
+      }
+    }
+    run();
+    return () => { active = false; };
+  }, [url]);
+
+  if (loading) return (
+    <div style={{ padding: '32px', textAlign: 'center', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '4px' }}>
+      <Spinner animation="border" size="sm" variant="secondary" className="me-2" />
+      <span style={{ fontSize: '13px', color: '#64748b' }}>Rendering pages of {name || 'document'}…</span>
+    </div>
+  );
+
+  if (error || pages.length === 0) return (
+    <div style={{ padding: '24px', textAlign: 'center', background: '#fef9f0', border: '1px solid #fed7aa', borderRadius: '4px' }}>
+      <div style={{ fontSize: '13px', color: '#92400e', marginBottom: '10px' }}>Could not render PDF pages inline</div>
+      <a href={url} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-warning">Open {name || 'PDF'} ↗</a>
+    </div>
+  );
+
+  // Clean full-width pages — no gaps, no chrome, no borders between pages
   return (
-    <div style={{ width: '100%', margin: '8px 0' }}>
-      {/* Label bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: '#f1f5f9', border: '1px solid #e2e8f0', borderBottom: 'none',
-        borderRadius: '6px 6px 0 0', padding: '7px 14px'
-      }}>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>📄 {name || 'PDF Document'}</span>
-        <a href={url} target="_blank" rel="noreferrer"
-          className="no-print"
-          style={{ fontSize: '11px', color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}
-        >Open in new tab ↗</a>
-      </div>
-      {/* Native browser PDF viewer — shows actual PDF pages, not screenshots */}
-      <iframe
-        src={url}
-        title={name || 'PDF Document'}
-        className="print-hide-iframe"
-        style={{
-          width: '100%',
-          height: '1100px',
-          border: '1px solid #e2e8f0',
-          borderRadius: '0 0 6px 6px',
-          display: 'block',
-          background: '#fff'
-        }}
-      />
-      {/* Print fallback — shown only when printing */}
-      <div className="print-only-fallback" style={{ display: 'none', textAlign: 'center', padding: '20px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '4px' }}>
-        <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>📄 {name || 'Attached PDF'}</div>
-        <div style={{ fontSize: '11px', color: '#555' }}>See merged PDF for full page content</div>
-      </div>
+    <div style={{ lineHeight: 0 }}>
+      {pages.map((src, i) => (
+        <img
+          key={i}
+          src={src}
+          alt={`Page ${i + 1}`}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
+        />
+      ))}
     </div>
   );
 }
@@ -160,8 +214,8 @@ function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string
     );
   }
 
-  // For PDFs: embed using native browser PDF viewer (actual pages, not canvas screenshots)
-  return <PdfEmbed url={url} name={name} />;
+  // PDF → extract all pages and show as clean full-width images
+  return <PdfPagesViewer url={url} name={name} />;
 }
 
 function Pending({ name }: { name: string }) {
