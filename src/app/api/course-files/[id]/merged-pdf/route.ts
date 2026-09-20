@@ -5,6 +5,7 @@ import { noStoreJson } from '@/lib/api-response';
 import { renderCleanCourseFileHtml, generatePdfBufferFromHtml } from '@/lib/pdf-generator';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // seconds — headless Chromium rendering needs more than the default
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {

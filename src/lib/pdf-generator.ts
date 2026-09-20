@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import os from 'os';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO' },
@@ -336,43 +336,60 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
 }
 
 export async function generatePdfBufferFromHtml(htmlContent: string): Promise<Buffer> {
-  const tmpDir = os.tmpdir();
-  const inputPath = path.join(tmpDir, `ppsu_cf_in_${Date.now()}_${Math.random().toString(36).substring(7)}.html`);
-  const outputPath = path.join(tmpDir, `ppsu_cf_out_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`);
-
-  fs.writeFileSync(inputPath, htmlContent, 'utf8');
-
-  // Locate Microsoft Edge or Google Chrome binary on Windows
-  const edgePaths = [
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
-  ];
-
-  let browserPath = edgePaths.find((p) => fs.existsSync(p));
-
-  if (!browserPath) {
-    browserPath = 'msedge';
-  }
+  // Resolve executable path — @sparticuz/chromium bundles a Chromium binary for serverless
+  // environments (Vercel / AWS Lambda). On local Windows dev it falls back to the system
+  // Edge or Chrome that puppeteer-core can find via common install paths.
+  let executablePath: string;
 
   try {
-    const cmd = `"${browserPath}" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf="${outputPath}" "${inputPath}"`;
-    execSync(cmd, { timeout: 30000 });
-
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('PDF output file was not created by browser process.');
+    // In a serverless environment @sparticuz/chromium resolves to the bundled binary
+    executablePath = await chromium.executablePath();
+  } catch {
+    // Local Windows fallback: find Edge or Chrome on the host machine
+    const localPaths = [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ];
+    const found = localPaths.find((p) => fs.existsSync(p));
+    if (!found) {
+      throw new Error(
+        'No Chrome/Edge binary found for PDF generation. ' +
+        'On Vercel, @sparticuz/chromium should resolve automatically. ' +
+        'Locally, install Chrome or Microsoft Edge.'
+      );
     }
+    executablePath = found;
+  }
 
-    const pdfBuffer = fs.readFileSync(outputPath);
+  const browser = await puppeteer.launch({
+    args: [
+      ...chromium.args,
+      '--no-pdf-header-footer',
+      '--disable-web-security',
+    ],
+    defaultViewport: { width: 1200, height: 1697 }, // A4 proportions at 144 dpi
+    executablePath,
+    headless: true,
+  });
 
-    try { fs.unlinkSync(inputPath); } catch {}
-    try { fs.unlinkSync(outputPath); } catch {}
+  try {
+    const page = await browser.newPage();
 
-    return pdfBuffer;
-  } catch (err: any) {
-    try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch {}
-    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch {}
-    throw new Error(`Server PDF generation error: ${err.message}`);
+    // Load the HTML directly from string — avoids file:// cross-origin issues
+    await page.setContent(htmlContent, { waitUntil: 'load', timeout: 30000 });
+
+    const pdfUint8Array = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      displayHeaderFooter: false,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    });
+
+    // page.pdf() returns Uint8Array in newer puppeteer — normalise to Buffer
+    return Buffer.from(pdfUint8Array);
+  } finally {
+    await browser.close();
   }
 }
