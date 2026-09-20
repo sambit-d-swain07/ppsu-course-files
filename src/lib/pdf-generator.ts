@@ -96,6 +96,69 @@ function buildPageHeader(schoolName: string, hasLogo: boolean) {
   };
 }
 
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function generateBreakdown(totalMark: number, seedKey: string, maxMark = 20): { a: number; b: number; c: number; d: number; total: number } {
+  const roundedTotal = Number(totalMark || 0);
+  if (roundedTotal === 0) return { a: 0, b: 0, c: 0, d: 0, total: 0 };
+  const hash = hashString(`${seedKey}-${roundedTotal}`);
+  const targetUnits = Math.round(roundedTotal * 2);
+  const maxUnitsPerCol = Math.round((maxMark / 4) * 2);
+  const baseAvg = Math.floor(targetUnits / 4);
+  const units = [baseAvg, baseAvg, baseAvg, baseAvg];
+  const remainder = targetUnits - (baseAvg * 4);
+  const shift = hash % 4;
+  const shuffledOrder = [(0 + shift) % 4, (1 + shift) % 4, (2 + shift) % 4, (3 + shift) % 4];
+  for (let i = 0; i < remainder; i++) { units[shuffledOrder[i % 4]]++; }
+  for (let i = 0; i < 4; i++) {
+    if (units[i] > maxUnitsPerCol) {
+      const overflow = units[i] - maxUnitsPerCol;
+      units[i] = maxUnitsPerCol;
+      for (let j = 0; j < 4; j++) {
+        if (i !== j && units[j] + overflow <= maxUnitsPerCol) {
+          units[j] += overflow;
+          break;
+        }
+      }
+    }
+  }
+  const a = units[0] / 2;
+  const b = units[1] / 2;
+  const c = units[2] / 2;
+  const d = units[3] / 2;
+  const sum = Number((a + b + c + d).toFixed(1));
+  return { a, b, c, d, total: sum };
+}
+
+function calcStudentAverages(row: any, numP: number): { avg10: number; avg20: number } {
+  const practicals = row.practicals || {};
+  let sum = 0;
+  for (let i = 1; i <= numP; i++) {
+    sum += Number(practicals[`P${i}`]) || 0;
+  }
+  const avg10 = numP > 0 ? Number((sum / numP).toFixed(2)) : 0;
+  const avg20 = Number((avg10 * 2).toFixed(2));
+  return { avg10, avg20 };
+}
+
+const standardTableLayout = {
+  hLineWidth: () => 1,
+  vLineWidth: () => 1,
+  hLineColor: () => '#000000',
+  vLineColor: () => '#000000',
+  paddingLeft: () => 4,
+  paddingRight: () => 4,
+  paddingTop: () => 3,
+  paddingBottom: () => 3
+};
+
 export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any): Promise<Buffer> {
   const logoDataUri = getLogoBase64();
   const hasLogo = Boolean(logoDataUri);
@@ -212,9 +275,12 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
       }
     );
 
+    let hasStructuredContent = false;
+
     if (item.index === 1) {
       const item1Sub = subs(1);
       if (item1Sub) {
+        hasStructuredContent = true;
         const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
         subKeys.forEach(sk => {
           const text = item1Sub[sk]?.textContent;
@@ -260,6 +326,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
               margin: [0, 0, 0, 14],
               table: {
                 headerRows: 1,
+                dontBreakRows: true,
+                keepWithHeaderRows: 1,
                 widths: [70, '*'],
                 body: [
                   [
@@ -269,16 +337,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                   ...rows
                 ]
               },
-              layout: {
-                hLineWidth: () => 1,
-                vLineWidth: () => 1,
-                hLineColor: () => '#000000',
-                vLineColor: () => '#000000',
-                paddingLeft: () => 6,
-                paddingRight: () => 6,
-                paddingTop: () => 5,
-                paddingBottom: () => 5
-              }
+              layout: standardTableLayout
             });
           } else if (isMission || lines.length > 1) {
             const rows = lines.map((line: string, idx: number) => {
@@ -293,6 +352,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
               margin: [0, 0, 0, 14],
               table: {
                 headerRows: 1,
+                dontBreakRows: true,
+                keepWithHeaderRows: 1,
                 widths: [40, '*'],
                 body: [
                   [
@@ -302,52 +363,508 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                   ...rows
                 ]
               },
-              layout: {
-                hLineWidth: () => 1,
-                vLineWidth: () => 1,
-                hLineColor: () => '#000000',
-                vLineColor: () => '#000000',
-                paddingLeft: () => 6,
-                paddingRight: () => 6,
-                paddingTop: () => 5,
-                paddingBottom: () => 5
-              }
+              layout: standardTableLayout
             });
           } else {
             sectionContent.push({
               margin: [0, 0, 0, 14],
               table: {
                 headerRows: 1,
+                dontBreakRows: true,
+                keepWithHeaderRows: 1,
                 widths: ['*'],
                 body: [
                   [{ text: col2Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
                   [{ text: text, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
                 ]
               },
-              layout: {
-                hLineWidth: () => 1,
-                vLineWidth: () => 1,
-                hLineColor: () => '#000000',
-                vLineColor: () => '#000000',
-                paddingLeft: () => 6,
-                paddingRight: () => 6,
-                paddingTop: () => 5,
-                paddingBottom: () => 5
-              }
+              layout: standardTableLayout
             });
           }
         });
-      } else {
+      }
+    } else if (item.index === 4) {
+      // ─────────────────────────────────────────────────────────────
+      // ITEM 4: STUDENT NAME LIST
+      // ─────────────────────────────────────────────────────────────
+      const item4Sub = subs(4);
+      let students: any[] = [];
+      if (item4Sub) {
+        students = Array.isArray(item4Sub.students) ? item4Sub.students : (Array.isArray(item4Sub) ? item4Sub : []);
+      }
+
+      if (students.length > 0) {
+        hasStructuredContent = true;
         sectionContent.push({
-          text: '— Content Pending —',
-          alignment: 'center',
-          color: '#777777',
-          margin: [0, 40, 0, 0]
+          margin: [0, 0, 0, 14],
+          table: {
+            headerRows: 1,
+            dontBreakRows: true,
+            keepWithHeaderRows: 1,
+            widths: [35, '*', 120, 50],
+            body: [
+              [
+                { text: 'Sr No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 },
+                { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 9 },
+                { text: 'Enrolment Number', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 },
+                { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 9 }
+              ],
+              ...students.map((st: any, i: number) => [
+                { text: String(i + 1), alignment: 'center', fontSize: 9 },
+                { text: st.name || st.studentName || '—', fontSize: 9 },
+                { text: st.enrolmentNumber || st.rollNo || '—', alignment: 'center', fontSize: 9 },
+                { text: st.batch || 'A', alignment: 'center', fontSize: 9 }
+              ])
+            ]
+          },
+          layout: standardTableLayout
         });
       }
-    } else {
+    } else if (item.index === 8) {
+      // ─────────────────────────────────────────────────────────────
+      // ITEM 8: LABORATORY RUBRICS
+      // ─────────────────────────────────────────────────────────────
+      const item4Sub = subs(4);
+      let item4Students: any[] = [];
+      if (item4Sub) {
+        item4Students = Array.isArray(item4Sub.students) ? item4Sub.students : (Array.isArray(item4Sub) ? item4Sub : []);
+      }
+
+      const item8Sub = subs(8);
+      const rawStudents = item8Sub?.students || item8Sub?.rows || item8Sub?.item8Rows || [];
+      const studentsMap = new Map<string, any>();
+
+      item4Students.forEach((s: any) => {
+        const id = s.id || s.studentId || s.enrolmentNumber;
+        if (id) {
+          studentsMap.set(id, {
+            studentId: id,
+            name: s.name || s.studentName || '—',
+            enrolmentNumber: s.enrolmentNumber || s.rollNo || '—',
+            batch: s.batch || 'A',
+            practicals: {},
+            termWork: 0,
+            internalViva: 0,
+            esePerformance: 0,
+            eseExternalViva: 0
+          });
+        }
+      });
+
+      rawStudents.forEach((s: any) => {
+        const id = s.studentId || s.id || s.enrolmentNumber;
+        if (id) {
+          const existing = studentsMap.get(id) || {
+            studentId: id,
+            name: s.name || s.studentName || '—',
+            enrolmentNumber: s.enrolmentNumber || s.rollNo || '—',
+            batch: s.batch || 'A'
+          };
+          studentsMap.set(id, {
+            ...existing,
+            name: s.name || existing.name,
+            enrolmentNumber: s.enrolmentNumber || existing.enrolmentNumber,
+            batch: s.batch || existing.batch,
+            practicals: s.practicals || existing.practicals || {},
+            termWork: s.termWork ?? existing.termWork ?? 0,
+            internalViva: s.internalViva ?? existing.internalViva ?? 0,
+            esePerformance: s.esePerformance ?? existing.esePerformance ?? 0,
+            eseExternalViva: s.eseExternalViva ?? s.eseViva ?? existing.eseExternalViva ?? 0
+          });
+        }
+      });
+
+      const studentRows = Array.from(studentsMap.values());
+      const numP = Number(item8Sub?.numPracticals) || 4;
+
+      if (studentRows.length > 0) {
+        hasStructuredContent = true;
+
+        // 1. CE Header
+        sectionContent.push({
+          text: 'CE — Continuous Evaluation (Laboratory)',
+          fontSize: 11,
+          bold: true,
+          color: '#1e293b',
+          margin: [0, 4, 0, 6]
+        });
+
+        // 2.1 Practical Marks Table
+        const pHeaders = Array.from({ length: numP }, (_, i) => ({
+          text: `P${i + 1}`,
+          bold: true,
+          alignment: 'center',
+          fillColor: '#f5f5f5',
+          fontSize: 8
+        }));
+
+        const pWidths = Array.from({ length: numP }, () => 20);
+
+        sectionContent.push(
+          { text: '2.1 Practical Marks Table (Out of 10 per Practical) (Term Work)', fontSize: 9.5, bold: true, margin: [0, 2, 0, 4] },
+          {
+            margin: [0, 0, 0, 12],
+            table: {
+              headerRows: 1,
+              dontBreakRows: true,
+              keepWithHeaderRows: 1,
+              widths: [28, '*', 70, ...pWidths, 36, 36],
+              body: [
+                [
+                  { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  ...pHeaders,
+                  { text: 'Avg (10)', bold: true, alignment: 'center', fillColor: '#e0f2fe', fontSize: 8 },
+                  { text: 'Avg (20)', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                ],
+                ...studentRows.map((st: any) => {
+                  const { avg10, avg20 } = calcStudentAverages(st, numP);
+                  const pCols = Array.from({ length: numP }, (_, pi) => ({
+                    text: String(st.practicals?.[`P${pi + 1}`] ?? 0),
+                    alignment: 'center',
+                    fontSize: 8
+                  }));
+                  return [
+                    { text: st.batch || 'A', alignment: 'center', fontSize: 8 },
+                    { text: st.name || '—', fontSize: 8 },
+                    { text: st.enrolmentNumber || '—', alignment: 'center', fontSize: 8 },
+                    ...pCols,
+                    { text: String(avg10), bold: true, color: '#0284c7', alignment: 'center', fontSize: 8 },
+                    { text: String(avg20), bold: true, color: '#b45309', alignment: 'center', fontSize: 8 }
+                  ];
+                })
+              ]
+            },
+            layout: standardTableLayout
+          }
+        );
+
+        // 2.2 Practicals Auto-Generated 4-Criteria Breakdown Table
+        sectionContent.push(
+          { text: '2.2 Practicals Auto-Generated 4-Criteria Breakdown Table', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
+          {
+            margin: [0, 0, 0, 12],
+            table: {
+              headerRows: 1,
+              dontBreakRows: true,
+              keepWithHeaderRows: 1,
+              widths: [28, '*', 70, 36, 36, 36, 36, 36],
+              body: [
+                [
+                  { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'A (Und.)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'B (Perf.)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'C (Rec.)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'D (Viva)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Total', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                ],
+                ...studentRows.map((st: any) => {
+                  const { avg20 } = calcStudentAverages(st, numP);
+                  const bd = generateBreakdown(avg20, `${st.studentId}-ce-prac`);
+                  return [
+                    { text: st.batch || 'A', alignment: 'center', fontSize: 8 },
+                    { text: st.name || '—', fontSize: 8 },
+                    { text: st.enrolmentNumber || '—', alignment: 'center', fontSize: 8 },
+                    { text: String(bd.a), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.b), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.c), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.d), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.total), bold: true, color: '#0f766e', alignment: 'center', fontSize: 8 }
+                  ];
+                })
+              ]
+            },
+            layout: standardTableLayout
+          }
+        );
+
+        // 2.3 Internal Viva Evaluation & Auto-Breakdown
+        sectionContent.push(
+          { text: '2.3 Internal Viva Evaluation & Auto-Breakdown (Score out of 20)', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
+          {
+            margin: [0, 0, 0, 12],
+            table: {
+              headerRows: 1,
+              dontBreakRows: true,
+              keepWithHeaderRows: 1,
+              widths: [28, '*', 70, 45, 26, 26, 26, 26, 36],
+              body: [
+                [
+                  { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Int Viva (20)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'A', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'B', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'C', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'D', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Total', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                ],
+                ...studentRows.map((st: any) => {
+                  const mark = st.internalViva ?? 0;
+                  const bd = generateBreakdown(mark, `${st.studentId}-ce-iv`);
+                  return [
+                    { text: st.batch || 'A', alignment: 'center', fontSize: 8 },
+                    { text: st.name || '—', fontSize: 8 },
+                    { text: st.enrolmentNumber || '—', alignment: 'center', fontSize: 8 },
+                    { text: String(mark), bold: true, alignment: 'center', fontSize: 8 },
+                    { text: String(bd.a), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.b), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.c), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.d), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.total), bold: true, color: '#0f766e', alignment: 'center', fontSize: 8 }
+                  ];
+                })
+              ]
+            },
+            layout: standardTableLayout
+          }
+        );
+
+        // 3. ESE Header
+        sectionContent.push({
+          text: 'ESE — End Semester Exam (Laboratory)',
+          fontSize: 11,
+          bold: true,
+          color: '#1e293b',
+          margin: [0, 8, 0, 6]
+        });
+
+        // 3.1 Performance / Quiz Evaluation & Breakdown
+        sectionContent.push(
+          { text: '3.1 Performance / Quiz Evaluation & Auto-Breakdown (Score out of 30)', fontSize: 9.5, bold: true, margin: [0, 2, 0, 4] },
+          {
+            margin: [0, 0, 0, 12],
+            table: {
+              headerRows: 1,
+              dontBreakRows: true,
+              keepWithHeaderRows: 1,
+              widths: [28, '*', 70, 45, 26, 26, 26, 26, 36],
+              body: [
+                [
+                  { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Quiz (30)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'A', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'B', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'C', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'D', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Total', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                ],
+                ...studentRows.map((st: any) => {
+                  const mark = st.esePerformance ?? 0;
+                  const bd = generateBreakdown(mark, `${st.studentId}-ese-pq`, 30);
+                  return [
+                    { text: st.batch || 'A', alignment: 'center', fontSize: 8 },
+                    { text: st.name || '—', fontSize: 8 },
+                    { text: st.enrolmentNumber || '—', alignment: 'center', fontSize: 8 },
+                    { text: String(mark), bold: true, alignment: 'center', fontSize: 8 },
+                    { text: String(bd.a), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.b), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.c), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.d), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.total), bold: true, color: '#15803d', alignment: 'center', fontSize: 8 }
+                  ];
+                })
+              ]
+            },
+            layout: standardTableLayout
+          }
+        );
+
+        // 3.2 External Viva Evaluation & Breakdown
+        sectionContent.push(
+          { text: '3.2 External Viva Evaluation & Auto-Breakdown (Score out of 30)', fontSize: 9.5, bold: true, margin: [0, 4, 0, 4] },
+          {
+            margin: [0, 0, 0, 14],
+            table: {
+              headerRows: 1,
+              dontBreakRows: true,
+              keepWithHeaderRows: 1,
+              widths: [28, '*', 70, 45, 26, 26, 26, 26, 36],
+              body: [
+                [
+                  { text: 'Batch', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Ext Viva (30)', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'A', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'B', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'C', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'D', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8 },
+                  { text: 'Total', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8 }
+                ],
+                ...studentRows.map((st: any) => {
+                  const mark = st.eseExternalViva ?? st.eseViva ?? 0;
+                  const bd = generateBreakdown(mark, `${st.studentId}-ese-ev`, 30);
+                  return [
+                    { text: st.batch || 'A', alignment: 'center', fontSize: 8 },
+                    { text: st.name || '—', fontSize: 8 },
+                    { text: st.enrolmentNumber || '—', alignment: 'center', fontSize: 8 },
+                    { text: String(mark), bold: true, alignment: 'center', fontSize: 8 },
+                    { text: String(bd.a), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.b), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.c), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.d), alignment: 'center', fontSize: 8 },
+                    { text: String(bd.total), bold: true, color: '#15803d', alignment: 'center', fontSize: 8 }
+                  ];
+                })
+              ]
+            },
+            layout: standardTableLayout
+          }
+        );
+      }
+    } else if (item.index === 9) {
+      // ─────────────────────────────────────────────────────────────
+      // ITEM 9: THEORY CONTINUOUS EVALUATION RUBRICS
+      // ─────────────────────────────────────────────────────────────
+      const item9Sub = subs(9);
+      const students = item9Sub?.students || [];
+      const criteria = item9Sub?.criteria || [
+        { id: 'internal-1', label: 'Internal 1' },
+        { id: 'internal-2', label: 'Internal 2' }
+      ];
+
+      if (students.length > 0) {
+        hasStructuredContent = true;
+        const crHeaders = criteria.map((cr: any) => ({
+          text: cr.label,
+          bold: true,
+          alignment: 'center',
+          fillColor: '#f5f5f5',
+          fontSize: 8.5
+        }));
+        const crWidths = criteria.map(() => 45);
+
+        sectionContent.push({
+          margin: [0, 0, 0, 14],
+          table: {
+            headerRows: 1,
+            dontBreakRows: true,
+            keepWithHeaderRows: 1,
+            widths: [25, 80, '*', ...crWidths],
+            body: [
+              [
+                { text: 'Sr', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8.5 },
+                { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8.5 },
+                { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8.5 },
+                ...crHeaders
+              ],
+              ...students.map((st: any, i: number) => {
+                const crCols = criteria.map((cr: any) => ({
+                  text: String(st.marks?.[cr.id] ?? '—'),
+                  alignment: 'center',
+                  fontSize: 8.5
+                }));
+                return [
+                  { text: String(i + 1), alignment: 'center', fontSize: 8.5 },
+                  { text: st.enrolmentNumber || st.studentId || '—', alignment: 'center', fontSize: 8.5 },
+                  { text: st.name || st.studentName || '—', fontSize: 8.5 },
+                  ...crCols
+                ];
+              })
+            ]
+          },
+          layout: standardTableLayout
+        });
+      }
+    } else if (item.index === 11 || item.index === 12) {
+      // ─────────────────────────────────────────────────────────────
+      // ITEM 11 & 12: INTERNAL ASSESSMENTS
+      // ─────────────────────────────────────────────────────────────
+      const itemSub = subs(item.index);
+      const students = itemSub?.students || [];
+
+      if (students.length > 0) {
+        hasStructuredContent = true;
+        const qKeys = Object.keys(students[0] || {}).filter((k) => /^q\d+$/i.test(k));
+        const qHeaders = qKeys.map((q) => ({
+          text: q.toUpperCase(),
+          bold: true,
+          alignment: 'center',
+          fillColor: '#f5f5f5',
+          fontSize: 8.5
+        }));
+        const qWidths = qKeys.map(() => 30);
+
+        sectionContent.push({
+          margin: [0, 0, 0, 14],
+          table: {
+            headerRows: 1,
+            dontBreakRows: true,
+            keepWithHeaderRows: 1,
+            widths: [25, 80, '*', ...qWidths, 35],
+            body: [
+              [
+                { text: 'Sr', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8.5 },
+                { text: 'Enrolment No', bold: true, alignment: 'center', fillColor: '#f5f5f5', fontSize: 8.5 },
+                { text: 'Student Name', bold: true, alignment: 'left', fillColor: '#f5f5f5', fontSize: 8.5 },
+                ...qHeaders,
+                { text: 'Total', bold: true, alignment: 'center', fillColor: '#fef3c7', fontSize: 8.5 }
+              ],
+              ...students.map((st: any, i: number) => {
+                const qCols = qKeys.map((q) => ({
+                  text: String(st[q] ?? '—'),
+                  alignment: 'center',
+                  fontSize: 8.5
+                }));
+                return [
+                  { text: String(i + 1), alignment: 'center', fontSize: 8.5 },
+                  { text: st.enrolmentNumber || st.studentId || '—', alignment: 'center', fontSize: 8.5 },
+                  { text: st.name || st.studentName || '—', fontSize: 8.5 },
+                  ...qCols,
+                  { text: String(st.total ?? '—'), bold: true, alignment: 'center', fontSize: 8.5 }
+                ];
+              })
+            ]
+          },
+          layout: standardTableLayout
+        });
+      }
+    } else if (item.index === 20) {
+      // ─────────────────────────────────────────────────────────────
+      // ITEM 20: COURSE FACULTY SIGNATURE
+      // ─────────────────────────────────────────────────────────────
+      hasStructuredContent = true;
+      sectionContent.push(
+        {
+          margin: [0, 40, 0, 0],
+          table: {
+            widths: ['*'],
+            body: [
+              [
+                {
+                  fillColor: '#fafafa',
+                  margin: [20, 24, 20, 24],
+                  stack: [
+                    { text: 'Course Faculty Signature', bold: true, fontSize: 13, alignment: 'center', margin: [0, 0, 0, 20] },
+                    { text: facultyName, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
+                    { text: `Signed by: ${cf.facultySignatureName || facultyName}`, fontSize: 10, color: '#555555', alignment: 'center' }
+                  ]
+                }
+              ]
+            ]
+          },
+          layout: {
+            hLineWidth: () => 1,
+            vLineWidth: () => 1,
+            hLineColor: () => '#cccccc',
+            vLineColor: () => '#cccccc'
+          }
+        }
+      );
+    }
+
+    if (!hasStructuredContent) {
       const db = dbi(item.index);
-      if (db && db.fileName) {
+      const isJsonFile = db?.fileName?.toLowerCase().endsWith('.json');
+
+      if (db && db.fileName && !isJsonFile) {
         sectionContent.push({
           margin: [0, 20, 0, 0],
           table: {
@@ -405,11 +922,11 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
 
   const docDef: any = {
     pageSize: 'A4',
-    pageMargins: [40, 40, 40, 40],
+    pageMargins: [35, 35, 35, 35],
     defaultStyle: {
       font: 'Roboto',
-      fontSize: 11,
-      lineHeight: 1.2
+      fontSize: 10,
+      lineHeight: 1.15
     },
     images: hasLogo ? { logo: logoDataUri } : {},
     content
