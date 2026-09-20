@@ -98,6 +98,144 @@ function PageHeader({ cf }: { cf: any }) {
   );
 }
 
+let pdfjsPromise: Promise<any> | null = null;
+
+function loadPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Window not available'));
+  if ((window as any).pdfjsLib) return Promise.resolve((window as any).pdfjsLib);
+  if (pdfjsPromise) return pdfjsPromise;
+
+  pdfjsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.async = true;
+    script.onload = () => {
+      const pdfjs = (window as any).pdfjsLib;
+      if (pdfjs) {
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(pdfjs);
+      } else {
+        reject(new Error('pdfjsLib not found'));
+      }
+    };
+    script.onerror = (e) => reject(e);
+    document.head.appendChild(script);
+  });
+
+  return pdfjsPromise;
+}
+
+function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
+  const [pages, setPages] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [numPages, setNumPages] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function extractPages() {
+      try {
+        setLoading(true);
+        setError(false);
+        const pdfjs = await loadPdfJs();
+        const loadingTask = pdfjs.getDocument(url);
+        const pdf = await loadingTask.promise;
+        if (!active) return;
+
+        setNumPages(pdf.numPages);
+        const rendered: string[] = [];
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            await page.render({ canvasContext: context, viewport }).promise;
+            rendered.push(canvas.toDataURL('image/png'));
+          }
+        }
+
+        if (active) {
+          setPages(rendered);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error rendering PDF pages:', err);
+        if (active) {
+          setError(true);
+          setLoading(false);
+        }
+      }
+    }
+
+    extractPages();
+    return () => { active = false; };
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '36px 16px', textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', margin: '16px 0' }}>
+        <Spinner animation="border" size="sm" variant="primary" className="me-2" />
+        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Extracting pages from {name || 'document'}...</span>
+      </div>
+    );
+  }
+
+  if (error || pages.length === 0) {
+    return (
+      <div style={{ padding: '24px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', margin: '16px 0' }}>
+        <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
+        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'PDF Document'}</div>
+        <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Could not render inline page view</div>
+        <a href={url} download={name || 'document.pdf'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
+          Download / Open {name}
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', margin: '16px 0' }}>
+      {pages.map((imgDataUrl, idx) => (
+        <div
+          key={idx}
+          className="extracted-pdf-page"
+          style={{
+            background: '#fff',
+            border: '1px solid #d1d5db',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+            pageBreakInside: 'avoid',
+            breakInside: 'avoid'
+          }}
+        >
+          {numPages > 1 && (
+            <div className="no-print" style={{ background: '#f8fafc', padding: '6px 12px', fontSize: '11px', fontWeight: 600, color: '#64748b', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Page {idx + 1} of {numPages}</span>
+              <span>{name || 'Attached PDF Document'}</span>
+            </div>
+          )}
+          <img
+            src={imgDataUrl}
+            alt={`Page ${idx + 1}`}
+            style={{
+              width: '100%',
+              height: 'auto',
+              display: 'block'
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string; height?: string }) {
   if (!url) return null;
   const isImg = name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
@@ -120,20 +258,9 @@ function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string
     );
   }
 
-  return (
-    <div>
-      <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none', borderRadius: '4px' }} className="print-hide-iframe" />
-      <div className="no-print text-center mt-1" style={{ fontSize: '11px', color: '#666' }}>
-        Having trouble viewing? <a href={url} target="_blank" rel="noreferrer" className="text-decoration-underline">Open PDF in new tab</a>
-      </div>
-      <div className="print-only-fallback d-none p-3 border border-dark rounded text-center my-3">
-        <div style={{ fontWeight: 'bold', fontSize: '14px' }}>📄 {name || 'Attached PDF Document'}</div>
-        <div style={{ fontSize: '12px', color: '#555' }}>Uploaded Document Attachment</div>
-      </div>
-    </div>
-  );
+  // Extract all pages of the uploaded PDF and render them seamlessly inside the section
+  return <PdfPagesViewer url={url} name={name} />;
 }
-
 
 function Pending({ name }: { name: string }) {
   return (

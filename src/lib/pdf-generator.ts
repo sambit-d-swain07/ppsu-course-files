@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { PDFDocument } from 'pdf-lib';
+import { getFileFromStore } from './file-storage';
 
 // Require pdfmake directly to ensure compatibility across Node / Next.js serverless runtimes
 const pdfmake = require('pdfmake');
@@ -148,6 +150,62 @@ function calcStudentAverages(row: any, numP: number): { avg10: number; avg20: nu
   return { avg10, avg20 };
 }
 
+function extractFileId(url?: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/api\/upload\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+function getUploadedPdfBuffers(item: any, subsObj: any): Buffer[] {
+  const buffers: Buffer[] = [];
+  const urls: string[] = [];
+
+  if (item?.fileUrl) urls.push(item.fileUrl);
+  if (subsObj?.fileUrl) urls.push(subsObj.fileUrl);
+
+  const subFileObjects = [
+    subsObj?.lessonPlanLecture,
+    subsObj?.lessonPlanLab,
+    subsObj?.lessonPlanTutorial,
+    subsObj?.outcomeLecture,
+    subsObj?.outcomeLab,
+    subsObj?.sampleAssignment,
+    subsObj?.marksFile,
+    subsObj?.timetable,
+    subsObj?.questionPaper,
+    subsObj?.sampleAnswerSheet,
+    subsObj?.file
+  ];
+
+  subFileObjects.forEach((sf) => {
+    if (sf?.fileUrl) urls.push(sf.fileUrl);
+  });
+
+  if (Array.isArray(subsObj?.documents)) {
+    subsObj.documents.forEach((d: any) => {
+      if (d?.fileUrl) urls.push(d.fileUrl);
+    });
+  }
+
+  urls.forEach((url) => {
+    const fileId = extractFileId(url);
+    if (fileId) {
+      const stored = getFileFromStore(fileId);
+      if (stored?.buffer) {
+        if (
+          stored.buffer.subarray(0, 4).toString() === '%PDF' ||
+          stored.fileName?.toLowerCase().endsWith('.pdf') ||
+          stored.mimeType === 'application/pdf'
+        ) {
+          buffers.push(stored.buffer);
+        }
+      }
+    }
+  });
+
+  return buffers;
+}
+
 const standardTableLayout = {
   hLineWidth: () => 1,
   vLineWidth: () => 1,
@@ -162,6 +220,25 @@ const standardTableLayout = {
 export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any): Promise<Buffer> {
   const logoDataUri = getLogoBase64();
   const hasLogo = Boolean(logoDataUri);
+
+  // Collect (itemIndex -> Buffer[]) mapping before building pdfmake doc
+  // so we know which items have uploaded PDFs to append
+  const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
+  const subs = (idx: number): any => {
+    const it = dbi(idx);
+    if (!it?.subItemsJson) return null;
+    try { return JSON.parse(it.subItemsJson); } catch { return null; }
+  };
+
+  const uploadedPdfsByItem: Map<number, Buffer[]> = new Map();
+  for (const item of CHECKLIST_ITEMS) {
+    const db = dbi(item.index);
+    const sb = subs(item.index);
+    const buffers = getUploadedPdfBuffers(db, sb);
+    if (buffers.length > 0) {
+      uploadedPdfsByItem.set(item.index, buffers);
+    }
+  }
 
   // Format Department Name
   const rawDept = cf.department || cf.faculty?.department || subject?.department || 'Computer Engineering';
@@ -183,12 +260,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
   const code = cf.courseCode || subject?.code || 'COURSE CODE';
   const title = cf.courseTitle || subject?.title || 'COURSE TITLE';
 
-  const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
-  const subs = (idx: number): any => {
-    const it = dbi(idx);
-    if (!it?.subItemsJson) return null;
-    try { return JSON.parse(it.subItemsJson); } catch { return null; }
-  };
+  // (already defined above before uploadedPdfsByItem collection)
 
   const content: any[] = [];
 
@@ -933,7 +1005,40 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
   };
 
   const doc = pdfmake.createPdf(docDef);
-  return await doc.getBuffer();
+  const baseBuffer: Buffer = await doc.getBuffer();
+
+  // ─────────────────────────────────────────────────────────────
+  // MERGE UPLOADED PDF PAGES USING PDF-LIB
+  // For items that have uploaded PDFs, we cannot embed them inside
+  // pdfmake directly, so we append their pages to the final PDF
+  // using pdf-lib after the pdfmake document is generated.
+  // ─────────────────────────────────────────────────────────────
+  if (uploadedPdfsByItem.size === 0) {
+    return baseBuffer;
+  }
+
+  try {
+    const mergedDoc = await PDFDocument.load(baseBuffer);
+
+    for (const [, buffers] of uploadedPdfsByItem) {
+      for (const buf of buffers) {
+        try {
+          const uploadedDoc = await PDFDocument.load(buf, { ignoreEncryption: true });
+          const pageCount = uploadedDoc.getPageCount();
+          const copiedPages = await mergedDoc.copyPages(uploadedDoc, Array.from({ length: pageCount }, (_, i) => i));
+          copiedPages.forEach((page) => mergedDoc.addPage(page));
+        } catch (innerErr) {
+          console.error('Could not merge one uploaded PDF, skipping:', innerErr);
+        }
+      }
+    }
+
+    const mergedBytes = await mergedDoc.save();
+    return Buffer.from(mergedBytes);
+  } catch (mergeErr) {
+    console.error('PDF merge failed, returning base pdfmake PDF:', mergeErr);
+    return baseBuffer;
+  }
 }
 
 /**
