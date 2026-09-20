@@ -122,9 +122,13 @@ function FileEmbed({ url, name, height = '650px' }: { url: string; name?: string
 
   return (
     <div>
-      <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none', borderRadius: '4px' }} />
+      <iframe src={url} title={name || 'doc'} width="100%" height={height} style={{ border: 'none', borderRadius: '4px' }} className="print-hide-iframe" />
       <div className="no-print text-center mt-1" style={{ fontSize: '11px', color: '#666' }}>
         Having trouble viewing? <a href={url} target="_blank" rel="noreferrer" className="text-decoration-underline">Open PDF in new tab</a>
+      </div>
+      <div className="print-only-fallback d-none p-3 border border-dark rounded text-center my-3">
+        <div style={{ fontWeight: 'bold', fontSize: '14px' }}>📄 {name || 'Attached PDF Document'}</div>
+        <div style={{ fontSize: '12px', color: '#555' }}>Uploaded Document Attachment</div>
       </div>
     </div>
   );
@@ -178,7 +182,56 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
   const title  = cf.courseTitle || '';
 
   return (
-    <div style={{ background: '#525659', minHeight: '100vh', paddingBottom: '40px' }}>
+    <div className="preview-outer-wrapper" style={{ background: '#525659', minHeight: '100vh', paddingBottom: '40px' }}>
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+          }
+          html, body {
+            background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-hide-iframe {
+            display: none !important;
+          }
+          .print-only-fallback {
+            display: block !important;
+          }
+          .preview-outer-wrapper {
+            background: #fff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: auto !important;
+          }
+          .preview-page-container {
+            max-width: none !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+          }
+          .preview-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            min-height: auto !important;
+            padding: 20px 0 !important;
+            border-bottom: none !important;
+            box-shadow: none !important;
+          }
+          table {
+            page-break-inside: auto;
+          }
+          tr {
+            page-break-inside: avoid;
+          }
+        }
+      `}</style>
       <div className="no-print sticky-top bg-dark text-white p-3 shadow d-flex justify-content-between align-items-center flex-wrap gap-2" style={{ zIndex: 1050 }}>
         <div>
           <h6 className="fw-bold mb-0 text-white">Merged Course File Preview</h6>
@@ -191,10 +244,10 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
       </div>
 
-      <div className="mx-auto my-4 shadow-lg" style={{ maxWidth: '920px' }}>
+      <div className="preview-page-container mx-auto my-4 shadow-lg" style={{ maxWidth: '920px' }}>
 
         {/* PAGE 1: COVER PAGE */}
-        <div style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
+        <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
           <div style={{ fontWeight: 'bold', fontSize: '26px', letterSpacing: '1px', marginBottom: '12px' }}>P P SAVANI UNIVERSITY</div>
           <div style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '28px' }}>({school})</div>
           
@@ -216,7 +269,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
 
         {/* PAGE 2: TABLE OF CONTENTS */}
-        <div style={{ ...PAGE }}>
+        <div className="preview-page" style={{ ...PAGE }}>
           <PageHeader cf={cf} />
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '20px', fontFamily: "'Times New Roman', Times, serif" }}>Table of Content</div>
@@ -869,13 +922,13 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           return (
             <div key={item.index}>
               {/* Section divider */}
-              <div style={{ ...PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxSizing: 'border-box' }}>
+              <div className="preview-page" style={{ ...PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxSizing: 'border-box' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '24px', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: '85%', lineHeight: 1.5, fontFamily: "'Times New Roman', Times, serif" }}>
                   {item.name}
                 </div>
               </div>
               {/* Content page */}
-              <div style={{ ...PAGE }}>
+              <div className="preview-page" style={{ ...PAGE }}>
                 <PageHeader cf={cf} />
                 <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
                   {item.index}. {item.name}
