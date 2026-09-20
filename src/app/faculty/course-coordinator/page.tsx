@@ -112,6 +112,7 @@ export default function FacultyCourseCoordinatorPage() {
 
   // Item 1 Text Entry & Custom Section State
   const [item1TextDrafts, setItem1TextDrafts] = useState<Record<string, string>>({});
+  const [item1RowDrafts, setItem1RowDrafts] = useState<Record<string, string[]>>({});
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [newCustomTitle, setNewCustomTitle] = useState('');
   const [newCustomText, setNewCustomText] = useState('');
@@ -673,29 +674,109 @@ export default function FacultyCourseCoordinatorPage() {
                               {item.subKeys?.map((sk) => {
                                 const skData = parsedSubs[sk] || {};
                                 const config = SUB_KEY_CONFIG[sk] || { label: sk };
-                                const currentDraft = item1TextDrafts[sk] ?? (skData.textContent || '');
-                                const lines = currentDraft.split('\n').map((l: string) => l.trim()).filter(Boolean);
+                                const isVision = sk === 'vision';
+
+                                const savedText = skData.textContent || '';
+                                const currentTextDraft = item1TextDrafts[sk] ?? savedText;
+
+                                // For Vision: plain single textarea, NO row builder, NO + Add Row button
+                                if (isVision) {
+                                  return (
+                                    <div key={sk} className="p-3 border rounded bg-light">
+                                      <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                        <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
+                                          {config.label} {config.required && <span className="text-danger">*</span>}
+                                        </span>
+                                        <div className="d-flex align-items-center gap-2">
+                                          {skData.fileName && (
+                                            <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu" style={{ fontSize: 11 }}>
+                                              ✓ File: {skData.fileName}
+                                            </span>
+                                          )}
+                                          {skData.textContent && (
+                                            <span className="badge bg-primary-subtle text-primary border border-primary-subtle" style={{ fontSize: 11 }}>
+                                              ✓ Text Saved
+                                            </span>
+                                          )}
+                                          <label className="btn btn-outline-primary btn-sm py-0.5 px-2 m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                            {skData.fileName ? 'Replace File' : 'Upload File'}
+                                            <input
+                                              type="file"
+                                              className="d-none"
+                                              onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                if (f) handleUploadSubItem(1, sk, f);
+                                                e.currentTarget.value = '';
+                                              }}
+                                            />
+                                          </label>
+                                          {skData.fileUrl && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline-info"
+                                              style={{ fontSize: 11, padding: '2px 8px' }}
+                                              onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
+                                            >
+                                              View File
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <Form.Control
+                                        as="textarea"
+                                        rows={3}
+                                        size="sm"
+                                        placeholder="Type Vision statement directly here..."
+                                        value={currentTextDraft}
+                                        onChange={(e) => setItem1TextDrafts({ ...item1TextDrafts, vision: e.target.value })}
+                                        style={{ fontSize: 12, resize: 'vertical' }}
+                                      />
+
+                                      <div className="d-flex justify-content-end align-items-center mt-2">
+                                        <Button
+                                          size="sm"
+                                          variant="primary"
+                                          style={{ fontSize: 11, fontWeight: 600 }}
+                                          onClick={() => handleSaveTextSubItem(1, 'vision', item1TextDrafts['vision'] ?? savedText)}
+                                          disabled={uploadingItem === 1}
+                                        >
+                                          Save Text
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                // For Mission, PEO, PSO, PO: Row-by-Row array management
+                                // Get explicit rows array or derive from current text draft
+                                const textVal = currentTextDraft;
+                                const initialRows = textVal ? textVal.split('\n').map((l: string) => l.trim()).filter(Boolean) : [''];
+                                const rows = item1RowDrafts[sk] || (initialRows.length > 0 ? initialRows : ['']);
 
                                 const handleAddRow = () => {
-                                  const count = lines.length + 1;
-                                  let newPrefix = '';
-                                  if (sk === 'peo') newPrefix = `PEO ${count}: `;
-                                  else if (sk === 'pso') newPrefix = `PSO ${count}: `;
-                                  else if (sk === 'po') newPrefix = `PO ${count}: `;
-                                  else newPrefix = `${count}. `;
-                                  const updated = currentDraft.trim() ? `${currentDraft}\n${newPrefix}` : newPrefix;
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updated }));
+                                  const updatedRows = [...rows, ''];
+                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
                                 };
 
                                 const handleUpdateRow = (idx: number, text: string) => {
-                                  const updatedLines = [...lines];
-                                  updatedLines[idx] = text;
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedLines.join('\n') }));
+                                  const updatedRows = [...rows];
+                                  updatedRows[idx] = text;
+                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
                                 };
 
                                 const handleRemoveRow = (idx: number) => {
-                                  const updatedLines = lines.filter((_, i) => i !== idx);
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedLines.join('\n') }));
+                                  const updatedRows = rows.filter((_, i) => i !== idx);
+                                  const finalRows = updatedRows.length > 0 ? updatedRows : [''];
+                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: finalRows }));
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: finalRows.join('\n') }));
+                                };
+
+                                const handleSaveRows = () => {
+                                  const cleanText = rows.map((r) => r.trim()).filter(Boolean).join('\n');
+                                  handleSaveTextSubItem(1, sk, cleanText);
                                 };
 
                                 return (
@@ -703,11 +784,9 @@ export default function FacultyCourseCoordinatorPage() {
                                     <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                                       <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
                                         {config.label} {config.required && <span className="text-danger">*</span>}
-                                        {lines.length > 0 && (
-                                          <span className="badge bg-secondary ms-2 fw-normal" style={{ fontSize: 10 }}>
-                                            {lines.length} {lines.length === 1 ? 'row' : 'rows'}
-                                          </span>
-                                        )}
+                                        <span className="badge bg-secondary ms-2 fw-normal" style={{ fontSize: 10 }}>
+                                          {rows.filter((r) => r.trim()).length} {rows.filter((r) => r.trim()).length === 1 ? 'row' : 'rows'}
+                                        </span>
                                       </span>
                                       <div className="d-flex align-items-center gap-2">
                                         {skData.fileName && (
@@ -745,30 +824,27 @@ export default function FacultyCourseCoordinatorPage() {
                                       </div>
                                     </div>
 
-                                    {/* Line-by-Line Interactive Row Builder */}
-                                    {lines.length > 0 && (
-                                      <div className="mb-2 p-2 bg-white rounded border">
-                                        <div className="fw-semibold text-secondary mb-1" style={{ fontSize: 11 }}>
-                                          Row-by-Row Statements ({lines.length}):
-                                        </div>
-                                        <div className="d-flex flex-column gap-1.5">
-                                          {lines.map((line: string, idx: number) => {
-                                            const prefix = sk === 'peo' ? `PEO ${idx + 1}` : sk === 'pso' ? `PSO ${idx + 1}` : sk === 'po' ? `PO ${idx + 1}` : `${idx + 1}.`;
-                                            const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                    {/* Individual Row Inputs */}
+                                    <div className="mb-2 p-2 bg-white rounded border">
+                                      <div className="d-flex flex-column gap-2">
+                                        {rows.map((rowText: string, idx: number) => {
+                                          const prefix = sk === 'peo' ? `PEO ${idx + 1}` : sk === 'pso' ? `PSO ${idx + 1}` : sk === 'po' ? `PO ${idx + 1}` : `${idx + 1}.`;
+                                          const cleanText = rowText.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || rowText;
 
-                                            return (
-                                              <div key={idx} className="d-flex align-items-center gap-2">
-                                                <span className="badge bg-dark-subtle text-dark border font-mono-ppsu" style={{ width: '70px', flexShrink: 0, fontSize: 11, textAlign: 'center' }}>
-                                                  {prefix}
-                                                </span>
-                                                <Form.Control
-                                                  type="text"
-                                                  size="sm"
-                                                  value={cleanText}
-                                                  placeholder={`Statement for ${prefix}`}
-                                                  onChange={(e) => handleUpdateRow(idx, `${prefix}: ${e.target.value}`)}
-                                                  style={{ fontSize: 12 }}
-                                                />
+                                          return (
+                                            <div key={idx} className="d-flex align-items-center gap-2">
+                                              <span className="badge bg-dark-subtle text-dark border font-mono-ppsu" style={{ width: '70px', flexShrink: 0, fontSize: 11, textAlign: 'center' }}>
+                                                {prefix}
+                                              </span>
+                                              <Form.Control
+                                                type="text"
+                                                size="sm"
+                                                value={cleanText}
+                                                placeholder={`Statement for ${prefix} (paste or type text here)`}
+                                                onChange={(e) => handleUpdateRow(idx, `${prefix}: ${e.target.value}`)}
+                                                style={{ fontSize: 12 }}
+                                              />
+                                              {rows.length > 1 && (
                                                 <Button
                                                   size="sm"
                                                   variant="outline-danger"
@@ -779,23 +855,12 @@ export default function FacultyCourseCoordinatorPage() {
                                                 >
                                                   🗑️
                                                 </Button>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
                                       </div>
-                                    )}
-
-                                    {/* Multi-line Full Textarea */}
-                                    <Form.Control
-                                      as="textarea"
-                                      rows={sk === 'mission' ? 3 : 2}
-                                      size="sm"
-                                      placeholder={`Type or paste ${config.label} statements directly here...`}
-                                      value={currentDraft}
-                                      onChange={(e) => setItem1TextDrafts({ ...item1TextDrafts, [sk]: e.target.value })}
-                                      style={{ fontSize: 12, resize: 'vertical' }}
-                                    />
+                                    </div>
 
                                     <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
                                       <Button
@@ -810,7 +875,7 @@ export default function FacultyCourseCoordinatorPage() {
                                         size="sm"
                                         variant="primary"
                                         style={{ fontSize: 11, fontWeight: 600 }}
-                                        onClick={() => handleSaveTextSubItem(1, sk, currentDraft)}
+                                        onClick={handleSaveRows}
                                         disabled={uploadingItem === 1}
                                       >
                                         Save Text
