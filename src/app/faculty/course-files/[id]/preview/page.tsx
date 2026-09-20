@@ -255,28 +255,95 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                   const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
 
                   if (text?.trim()) {
-                    if (isMission) {
+                    const headerBg = '#d9ead3';
+                    const isPeo = key === 'peo';
+                    const isPso = key === 'pso';
+                    const isPo = key === 'po';
+
+                    let col1Header = '';
+                    let col2Header = '';
+                    let prefix = '';
+
+                    if (isPeo) {
+                      col1Header = 'PEO No';
+                      col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+                      prefix = 'PEO ';
+                    } else if (isPso) {
+                      col1Header = 'PSO No';
+                      col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+                      prefix = 'PSO ';
+                    } else if (isPo) {
+                      col1Header = 'PO No';
+                      col2Header = 'PROGRAMME OUTCOMES';
+                      prefix = 'PO ';
+                    } else if (isMission) {
+                      col1Header = '';
+                      col2Header = 'INSTITUTE MISSION';
+                    } else {
+                      col1Header = '';
+                      col2Header = `INSTITUTE ${key.toUpperCase()}`;
+                    }
+
+                    if (isPeo || isPso || isPo) {
                       return (
                         <div key={key} style={{ marginBottom: '24px' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                             <thead>
-                              <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                                <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
-                                  INSTITUTE MISSION
+                              <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
+                                  {col1Header}
+                                </th>
+                                <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
+                                  {col2Header}
                                 </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {lines.map((line: string, idx: number) => (
-                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #ccc' : 'none' }}>
-                                  <td style={{ width: '40px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #ccc', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                    {idx + 1}
-                                  </td>
-                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                    {line.replace(/^\d+[\.\)]\s*/, '')}
-                                  </td>
-                                </tr>
-                              ))}
+                              {lines.map((line: string, idx: number) => {
+                                const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                return (
+                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                    <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                      {prefix}{idx + 1}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                      {cleanText}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
+                        </div>
+                      );
+                    }
+
+                    if (isMission || lines.length > 1) {
+                      return (
+                        <div key={key} style={{ marginBottom: '24px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                            <thead>
+                              <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                  {col2Header}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line: string, idx: number) => {
+                                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                return (
+                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                    <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                      {idx + 1}.
+                                    </td>
+                                    <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                      {cleanText}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                           {sub?.fileUrl && <div style={{ marginTop: '8px' }}><FileEmbed url={sub.fileUrl} name={sub.fileName} height="400px" /></div>}
@@ -288,9 +355,9 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       <div key={key} style={{ marginBottom: '24px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                           <thead>
-                            <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
-                                INSTITUTE {key.toUpperCase()}
+                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                {col2Header}
                               </th>
                             </tr>
                           </thead>
@@ -324,8 +391,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                   <div key={sec.id} style={{ marginBottom: '24px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                       <thead>
-                        <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
+                        <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
+                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
                             {sec.title.toUpperCase()}
                           </th>
                         </tr>

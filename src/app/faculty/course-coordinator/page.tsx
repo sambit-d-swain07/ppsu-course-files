@@ -674,12 +674,40 @@ export default function FacultyCourseCoordinatorPage() {
                                 const skData = parsedSubs[sk] || {};
                                 const config = SUB_KEY_CONFIG[sk] || { label: sk };
                                 const currentDraft = item1TextDrafts[sk] ?? (skData.textContent || '');
+                                const lines = currentDraft.split('\n').map((l: string) => l.trim()).filter(Boolean);
+
+                                const handleAddRow = () => {
+                                  const count = lines.length + 1;
+                                  let newPrefix = '';
+                                  if (sk === 'peo') newPrefix = `PEO ${count}: `;
+                                  else if (sk === 'pso') newPrefix = `PSO ${count}: `;
+                                  else if (sk === 'po') newPrefix = `PO ${count}: `;
+                                  else newPrefix = `${count}. `;
+                                  const updated = currentDraft.trim() ? `${currentDraft}\n${newPrefix}` : newPrefix;
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updated }));
+                                };
+
+                                const handleUpdateRow = (idx: number, text: string) => {
+                                  const updatedLines = [...lines];
+                                  updatedLines[idx] = text;
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedLines.join('\n') }));
+                                };
+
+                                const handleRemoveRow = (idx: number) => {
+                                  const updatedLines = lines.filter((_, i) => i !== idx);
+                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedLines.join('\n') }));
+                                };
 
                                 return (
                                   <div key={sk} className="p-3 border rounded bg-light">
                                     <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                                       <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
                                         {config.label} {config.required && <span className="text-danger">*</span>}
+                                        {lines.length > 0 && (
+                                          <span className="badge bg-secondary ms-2 fw-normal" style={{ fontSize: 10 }}>
+                                            {lines.length} {lines.length === 1 ? 'row' : 'rows'}
+                                          </span>
+                                        )}
                                       </span>
                                       <div className="d-flex align-items-center gap-2">
                                         {skData.fileName && (
@@ -717,19 +745,67 @@ export default function FacultyCourseCoordinatorPage() {
                                       </div>
                                     </div>
 
+                                    {/* Line-by-Line Interactive Row Builder */}
+                                    {lines.length > 0 && (
+                                      <div className="mb-2 p-2 bg-white rounded border">
+                                        <div className="fw-semibold text-secondary mb-1" style={{ fontSize: 11 }}>
+                                          Row-by-Row Statements ({lines.length}):
+                                        </div>
+                                        <div className="d-flex flex-column gap-1.5">
+                                          {lines.map((line: string, idx: number) => {
+                                            const prefix = sk === 'peo' ? `PEO ${idx + 1}` : sk === 'pso' ? `PSO ${idx + 1}` : sk === 'po' ? `PO ${idx + 1}` : `${idx + 1}.`;
+                                            const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+
+                                            return (
+                                              <div key={idx} className="d-flex align-items-center gap-2">
+                                                <span className="badge bg-dark-subtle text-dark border font-mono-ppsu" style={{ width: '70px', flexShrink: 0, fontSize: 11, textAlign: 'center' }}>
+                                                  {prefix}
+                                                </span>
+                                                <Form.Control
+                                                  type="text"
+                                                  size="sm"
+                                                  value={cleanText}
+                                                  placeholder={`Statement for ${prefix}`}
+                                                  onChange={(e) => handleUpdateRow(idx, `${prefix}: ${e.target.value}`)}
+                                                  style={{ fontSize: 12 }}
+                                                />
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline-danger"
+                                                  className="py-0 px-2 border-0"
+                                                  style={{ fontSize: 13 }}
+                                                  onClick={() => handleRemoveRow(idx)}
+                                                  title="Remove Row"
+                                                >
+                                                  🗑️
+                                                </Button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Multi-line Full Textarea */}
                                     <Form.Control
                                       as="textarea"
                                       rows={sk === 'mission' ? 3 : 2}
                                       size="sm"
-                                      placeholder={`Type ${config.label} statement directly here...`}
+                                      placeholder={`Type or paste ${config.label} statements directly here...`}
                                       value={currentDraft}
                                       onChange={(e) => setItem1TextDrafts({ ...item1TextDrafts, [sk]: e.target.value })}
                                       style={{ fontSize: 12, resize: 'vertical' }}
                                     />
-                                    <div className="d-flex justify-content-between align-items-center mt-2">
-                                      <span className="text-muted" style={{ fontSize: 11 }}>
-                                        {sk === 'mission' ? '💡 Separate each mission statement on a new line to auto-format as numbered rows.' : 'Direct typed text auto-formats into structured table.'}
-                                      </span>
+
+                                    <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-success"
+                                        style={{ fontSize: 11, fontWeight: 600 }}
+                                        onClick={handleAddRow}
+                                      >
+                                        + Add Row
+                                      </Button>
                                       <Button
                                         size="sm"
                                         variant="primary"
@@ -765,7 +841,7 @@ export default function FacultyCourseCoordinatorPage() {
                               </div>
                             )}
 
-                            {/* Live Auto-Generated Formatted Document Output Preview (Shaded Header Table Style) */}
+                            {/* Live Auto-Generated Formatted Output Preview (Green Header Table Style matching NAAC/NBA format) */}
                             <div className="mt-4 p-3 border rounded bg-light">
                               <h6 className="fw-bold text-navy-900 mb-3 small text-uppercase" style={{ letterSpacing: 0.5 }}>
                                 📋 Auto-Generated Formatted Output Preview
@@ -775,31 +851,97 @@ export default function FacultyCourseCoordinatorPage() {
                                   const text = parsedSubs[sk]?.textContent || item1TextDrafts[sk];
                                   const label = SUB_KEY_CONFIG[sk]?.label || sk.toUpperCase();
                                   if (!text?.trim()) return null;
-                                  const isMission = sk === 'mission';
                                   const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
 
-                                  if (isMission) {
+                                  const headerBg = '#d9ead3';
+                                  const isPeo = sk === 'peo';
+                                  const isPso = sk === 'pso';
+                                  const isPo = sk === 'po';
+                                  const isMission = sk === 'mission';
+
+                                  let col1Header = '';
+                                  let col2Header = '';
+                                  let prefix = '';
+
+                                  if (isPeo) {
+                                    col1Header = 'PEO No';
+                                    col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+                                    prefix = 'PEO ';
+                                  } else if (isPso) {
+                                    col1Header = 'PSO No';
+                                    col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+                                    prefix = 'PSO ';
+                                  } else if (isPo) {
+                                    col1Header = 'PO No';
+                                    col2Header = 'PROGRAMME OUTCOMES';
+                                    prefix = 'PO ';
+                                  } else if (isMission) {
+                                    col1Header = '';
+                                    col2Header = 'INSTITUTE MISSION';
+                                  } else {
+                                    col1Header = '';
+                                    col2Header = `INSTITUTE ${label.toUpperCase()}`;
+                                  }
+
+                                  if (isPeo || isPso || isPo) {
                                     return (
                                       <div key={sk} className="mb-3">
                                         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                                           <thead>
-                                            <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                                              <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
-                                                INSTITUTE MISSION
+                                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                              <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
+                                                {col1Header}
+                                              </th>
+                                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
+                                                {col2Header}
                                               </th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {lines.map((line: string, idx: number) => (
-                                              <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #ccc' : 'none' }}>
-                                                <td style={{ width: '40px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #ccc', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                                  {idx + 1}
-                                                </td>
-                                                <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                                  {line.replace(/^\d+[\.\)]\s*/, '')}
-                                                </td>
-                                              </tr>
-                                            ))}
+                                            {lines.map((line: string, idx: number) => {
+                                              const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                              return (
+                                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                                  <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                                    {prefix}{idx + 1}
+                                                  </td>
+                                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                                    {cleanText}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    );
+                                  }
+
+                                  if (isMission || lines.length > 1) {
+                                    return (
+                                      <div key={sk} className="mb-3">
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                                          <thead>
+                                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                              <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                                {col2Header}
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {lines.map((line: string, idx: number) => {
+                                              const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                              return (
+                                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                                  <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                                    {idx + 1}.
+                                                  </td>
+                                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                                    {cleanText}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
                                       </div>
@@ -810,9 +952,9 @@ export default function FacultyCourseCoordinatorPage() {
                                     <div key={sk} className="mb-3">
                                       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                                         <thead>
-                                          <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                                            <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
-                                              INSTITUTE {label.toUpperCase()}
+                                          <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                            <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                              {col2Header}
                                             </th>
                                           </tr>
                                         </thead>
@@ -833,8 +975,8 @@ export default function FacultyCourseCoordinatorPage() {
                                   <div key={sec.id} className="mb-3">
                                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
                                       <thead>
-                                        <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #000' }}>
-                                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'left', color: '#000' }}>
+                                        <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
+                                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
                                             {sec.title.toUpperCase()}
                                           </th>
                                         </tr>
