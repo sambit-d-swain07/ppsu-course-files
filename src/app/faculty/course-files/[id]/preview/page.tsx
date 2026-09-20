@@ -240,7 +240,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         <div className="d-flex align-items-center gap-2">
           <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
           <a href={`/api/course-files/${courseFileId}/merged-report`} download={`merged-course-file-${code}.docx`} className="btn btn-outline-success btn-sm">Download DOCX</a>
-          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={() => window.print()}>Print / Save PDF</Button>
+          <a href={`/api/course-files/${courseFileId}/merged-pdf`} target="_blank" rel="noreferrer" className="btn btn-warning btn-sm fw-bold px-3">📄 Download PDF Report</a>
         </div>
       </div>
 
