@@ -917,6 +917,135 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     await saveStructuredItem(8, { ...subs, sectionFiles, numPracticals, students: item8RowsRef.current }, 'UPLOADED');
   };
 
+  const handleDownloadTheoryCsvTemplate = () => {
+    const students = item9Rows.length > 0 ? item9Rows : getStudentList();
+    const FIXED_CRITERIA = [
+      { id: 'internal-1', label: 'Internal 1', max: 30 },
+      { id: 'internal-2', label: 'Internal 2', max: 30 },
+    ];
+    const selectedCriteria = item9Criteria.filter((c: any) => !c.fixed);
+    const allCriteria = [...FIXED_CRITERIA, ...selectedCriteria];
+
+    const criteriaHeaders = allCriteria.map((c: any) => `${c.label} (${c.max})`);
+    const headers = ['Enrollment No', 'Name', 'Batch', ...criteriaHeaders];
+
+    const dataRows = students.map((s: any) => {
+      const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
+      const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
+      const batch = `"${(s.batch || '').replace(/"/g, '""')}"`;
+      const criterionValues = allCriteria.map((c: any) => {
+        const val = s.marks?.[c.id];
+        return val !== undefined && val !== null ? val : '';
+      });
+      return [enrol, name, batch, ...criterionValues].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Theory_Continuous_Evaluation_Rubrics_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleItem9FileUpload = async (file?: File) => {
+    if (isLocked) return;
+    const subs = getSubItems(9) || {};
+
+    if (!file) {
+      subs.file = null;
+      await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
+      setActionSuccess('Theory Rubrics file removed.');
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    subs.file = {
+      fileName: file.name,
+      fileUrl: dataUrl,
+      uploadDate: new Date().toISOString().split('T')[0]
+    };
+
+    // Auto-parse if CSV
+    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
+      try {
+        const text = await file.text();
+        const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (rawLines.length > 1) {
+          const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
+          const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
+          const nameIdx = header.findIndex(h => h.includes('name'));
+
+          if (enrolIdx !== -1 || nameIdx !== -1) {
+            let updated = false;
+            const selectedCriteria = item9Criteria.filter((c: any) => !c.fixed);
+
+            const newRows = item9Rows.map(row => {
+              const matchLine = rawLines.slice(1).find(l => {
+                const cols = parseCsvLine(l);
+                if (enrolIdx !== -1 && cols[enrolIdx]) {
+                  const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                  const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                  if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
+                }
+                if (nameIdx !== -1 && cols[nameIdx]) {
+                  const csvName = cols[nameIdx].toLowerCase().trim();
+                  const rowName = String(row.name || '').toLowerCase().trim();
+                  if (csvName && rowName && csvName === rowName) return true;
+                }
+                return false;
+              });
+
+              if (!matchLine) return row;
+              const cols = parseCsvLine(matchLine);
+              const updatedRow = { ...row, marks: { ...(row.marks || {}) } };
+
+              header.forEach((h, idx) => {
+                const rawVal = cols[idx];
+                if (rawVal === undefined || rawVal === '') return;
+                const val = Number(rawVal);
+                if (isNaN(val)) return;
+
+                if (h.includes('internal 1') || h.includes('internal1') || h.includes('int 1')) {
+                  updatedRow.marks['internal-1'] = Math.min(30, Math.max(0, val));
+                  updated = true;
+                } else if (h.includes('internal 2') || h.includes('internal2') || h.includes('int 2')) {
+                  updatedRow.marks['internal-2'] = Math.min(30, Math.max(0, val));
+                  updated = true;
+                } else {
+                  selectedCriteria.forEach((c: any) => {
+                    const labelNorm = String(c.label || '').toLowerCase().trim();
+                    const idNorm = String(c.id || '').toLowerCase().trim();
+                    if (labelNorm && (h.includes(labelNorm) || h === idNorm)) {
+                      updatedRow.marks[c.id] = Math.min(c.max, Math.max(0, val));
+                      updated = true;
+                    }
+                  });
+                }
+              });
+
+              return updatedRow;
+            });
+
+            if (updated) {
+              setItem9Rows(newRows);
+              item9RowsRef.current = newRows;
+              subs.students = newRows;
+              setActionSuccess(`CSV parsed successfully! Theory Rubrics marks populated into table.`);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Error parsing Item 9 CSV:', err);
+      }
+    }
+
+    await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
+  };
+
   const handleDownloadCsvTemplate = () => {
     const csvContent = 'Enrollment No,Name,Batch\n';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -4036,12 +4165,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       <div className="mt-3 ps-4 border-start border-2 border-success ms-2 w-100">
 
                         {/* Header row */}
-                        <div className="d-flex justify-content-between align-items-center mb-2">
+                        <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                           <span className="small text-secondary fw-semibold">Theory Continuous Evaluation Rubrics — per-student marks</span>
                           {!isLocked && access.mode !== 'LAB_BATCH' && (
-                            <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
-                              + Add Student
-                            </Button>
+                            <div className="d-flex align-items-center gap-2">
+                              <Button variant="outline-success" size="sm" style={{ fontSize: 11 }} onClick={handleDownloadTheoryCsvTemplate}>
+                                ⬇ Theory Rubrics Template.csv
+                              </Button>
+                              <label className="btn btn-outline-primary btn-sm m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                📤 Upload Marks CSV
+                                <input type="file" className="d-none" accept=".csv,.txt" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem9FileUpload(file); e.currentTarget.value = ''; }} />
+                              </label>
+                              <Button variant="outline-primary" size="sm" style={{ fontSize: 11 }} onClick={() => handleManualAddStudent(9)}>
+                                + Add Student
+                              </Button>
+                            </div>
                           )}
                         </div>
 
@@ -4266,20 +4404,36 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </Table>
                         </div>
 
-                        {/* File upload */}
-                        <div className="d-flex align-items-center gap-2 mt-2 small">
+                        {/* Attached document slot for Item 9 (CSV or PDF) */}
+                        <div className="d-flex align-items-center gap-2 mt-3 p-3 bg-light rounded border">
+                          <span className="small text-secondary fw-semibold">
+                            Item 9 Attached Document (CSV or PDF):
+                          </span>
                           {subs.file?.fileName ? (
-                            <>
-                              <span className="text-success fw-semibold">✓ {subs.file.fileName}</span>
-                              <Button size="sm" variant="outline-info" onClick={() => setViewingDoc({ title: 'Theory Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
-                              {!isLocked && <Button size="sm" variant="outline-danger" onClick={() => handleStructuredFileUpload(9)}>Remove</Button>}
-                            </>
+                            <div className="d-flex align-items-center gap-2 small ms-auto">
+                              <span className="text-success fw-bold font-mono-ppsu">✓ {subs.file.fileName}</span>
+                              <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: 'Theory Continuous Evaluation Rubrics', fileName: subs.file.fileName, fileUrl: subs.file.fileUrl })}>View</Button>
+                              {!isLocked && (
+                                <>
+                                  <label className="btn btn-outline-secondary btn-sm p-0 px-2 m-0" style={{ fontSize: 10, cursor: 'pointer' }}>
+                                    Replace
+                                    <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem9FileUpload(file); e.currentTarget.value = ''; }} />
+                                  </label>
+                                  <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => handleItem9FileUpload(undefined)}>Remove</Button>
+                                </>
+                              )}
+                            </div>
                           ) : (
                             !isLocked && (
-                              <label className="btn btn-outline-secondary btn-sm">
-                                Upload File
-                                <input type="file" className="d-none" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleStructuredFileUpload(9, file); }} />
-                              </label>
+                              <div className="d-flex align-items-center gap-2 ms-auto">
+                                <Button size="sm" variant="outline-success" style={{ fontSize: 11 }} onClick={handleDownloadTheoryCsvTemplate}>
+                                  ⬇ Theory Rubrics Template.csv
+                                </Button>
+                                <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                  Upload Theory Rubrics File (CSV / PDF)
+                                  <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem9FileUpload(file); e.currentTarget.value = ''; }} />
+                                </label>
+                              </div>
                             )
                           )}
                         </div>
