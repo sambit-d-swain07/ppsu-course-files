@@ -439,11 +439,11 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       const item1 = items.find((i: any) => i.itemIndex === 1);
       let parsedItem1: any = {};
       try { if (item1?.subItemsJson) parsedItem1 = JSON.parse(item1.subItemsJson); } catch (e) {}
-      const item1Keys = ['vision', 'mission', 'peo', 'pso', 'po'];
+      const item1Keys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
       const item1AllText = item1Keys.every(k => parsedItem1[k]?.textContent?.trim());
       const item1AllFile = item1Keys.every(k => parsedItem1[k]?.fileName);
       if (!item1AllText && !item1AllFile && !item1?.coordinatorUploaded && !item1?.fileName) {
-        missingShared.push('Item 1 (Vision/Mission/PEO/PSO/PO)');
+        missingShared.push('Item 1 (Vision/Mission/Dept Vision/Dept Mission/PEO/PSO/PO)');
       }
 
       const item18 = items.find((i: any) => i.itemIndex === 18);

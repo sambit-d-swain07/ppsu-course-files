@@ -6,7 +6,7 @@ import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, Table, Nav,
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const SHARED_ITEMS = [
-  { index: 1,  name: 'Item 1 — Institute Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'peo', 'pso', 'po'] },
+  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
@@ -18,8 +18,11 @@ const SHARED_ITEMS = [
 ];
 
 const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
-  vision: { label: 'Vision', required: true },
-  mission: { label: 'Mission', required: true },
+  vision: { label: 'Institute Vision', required: true },
+  mission: { label: 'Institute Mission', required: true },
+  deptVision: { label: 'Department Vision', required: true },
+  deptMission: { label: 'Department Mission', required: true },
+
   peo: { label: 'PEO', required: true },
   pso: { label: 'PSO', required: true },
   po: { label: 'PO', required: true },
@@ -138,7 +141,7 @@ export default function FacultyCourseCoordinatorPage() {
         try {
           const p = JSON.parse(doc1.subItemsJson);
           const drafts: Record<string, string> = {};
-          ['vision', 'mission', 'peo', 'pso', 'po'].forEach((key) => {
+          ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((key) => {
             if (p[key]?.textContent) drafts[key] = p[key].textContent;
           });
           setItem1TextDrafts(drafts);
@@ -912,7 +915,7 @@ export default function FacultyCourseCoordinatorPage() {
                                 📋 Auto-Generated Formatted Output Preview
                               </h6>
                               <div className="p-3 bg-white border rounded">
-                                {(['vision', 'mission', 'peo', 'pso', 'po'] as const).map((sk) => {
+                                {(['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const).map((sk) => {
                                   const text = parsedSubs[sk]?.textContent || item1TextDrafts[sk];
                                   const label = SUB_KEY_CONFIG[sk]?.label || sk.toUpperCase();
                                   if (!text?.trim()) return null;
@@ -922,7 +925,6 @@ export default function FacultyCourseCoordinatorPage() {
                                   const isPeo = sk === 'peo';
                                   const isPso = sk === 'pso';
                                   const isPo = sk === 'po';
-                                  const isMission = sk === 'mission';
 
                                   let col1Header = '';
                                   let col2Header = '';
@@ -940,12 +942,21 @@ export default function FacultyCourseCoordinatorPage() {
                                     col1Header = 'PO No';
                                     col2Header = 'PROGRAMME OUTCOMES';
                                     prefix = 'PO ';
-                                  } else if (isMission) {
+                                  } else if (sk === 'vision') {
+                                    col1Header = '';
+                                    col2Header = 'INSTITUTE VISION';
+                                  } else if (sk === 'mission') {
                                     col1Header = '';
                                     col2Header = 'INSTITUTE MISSION';
+                                  } else if (sk === 'deptVision') {
+                                    col1Header = '';
+                                    col2Header = 'DEPARTMENT VISION';
+                                  } else if (sk === 'deptMission') {
+                                    col1Header = '';
+                                    col2Header = 'DEPARTMENT MISSION';
                                   } else {
                                     col1Header = '';
-                                    col2Header = `INSTITUTE ${label.toUpperCase()}`;
+                                    col2Header = label.toUpperCase();
                                   }
 
                                   if (isPeo || isPso || isPo) {
@@ -982,7 +993,7 @@ export default function FacultyCourseCoordinatorPage() {
                                     );
                                   }
 
-                                  if (isMission || lines.length > 1) {
+                                  if (sk === 'mission' || sk === 'deptMission' || lines.length > 1) {
                                     return (
                                       <div key={sk} className="mb-3">
                                         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>

@@ -296,7 +296,7 @@ export async function createCourseFile(data: {
 }) {
   const faculty = await getUserById(data.facultyId);
   const subItems = (i: number) => i === 1
-    ? JSON.stringify({ vision: null, mission: null, peo: null, pso: null, po: null })
+    ? JSON.stringify({ vision: null, mission: null, deptVision: null, deptMission: null, peo: null, pso: null, po: null })
     : i === 11 || i === 12
       ? JSON.stringify({ timetable: null, questionPaper: null, sampleAnswerSheet: null, additionalDocuments: [{ id: `doc-new-${i}-1`, name: 'Mark Statement & Result Analysis', fileName: null, fileUrl: null, fileType: null, uploadDate: null }] })
       : i === 15 ? JSON.stringify({ questionPaper: null, gradeSheet: null, resultAnalysis: null }) : null;
@@ -314,7 +314,7 @@ export async function createCourseFile(data: {
 }
 
 const checklistSubItems = (i: number) => i === 1
-  ? JSON.stringify({ vision: null, mission: null, peo: null, pso: null, po: null })
+  ? JSON.stringify({ vision: null, mission: null, deptVision: null, deptMission: null, peo: null, pso: null, po: null })
   : i === 11 || i === 12
     ? JSON.stringify({ timetable: null, questionPaper: null, sampleAnswerSheet: null, additionalDocuments: [{ id: `doc-new-${i}-1`, name: 'Mark Statement & Result Analysis', fileName: null, fileUrl: null, fileType: null, uploadDate: null }] })
     : i === 15 ? JSON.stringify({ questionPaper: null, gradeSheet: null, resultAnalysis: null }) : null;

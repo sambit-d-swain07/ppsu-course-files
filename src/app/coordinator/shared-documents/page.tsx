@@ -5,7 +5,7 @@ import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, ProgressBar
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const SHARED_ITEMS = [
-  { index: 1,  name: 'Item 1 — Institute Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'peo', 'pso', 'po'] },
+  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
@@ -17,8 +17,10 @@ const SHARED_ITEMS = [
 ];
 
 const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
-  vision: { label: 'Vision', required: true },
-  mission: { label: 'Mission', required: true },
+  vision: { label: 'Institute Vision', required: true },
+  mission: { label: 'Institute Mission', required: true },
+  deptVision: { label: 'Department Vision', required: true },
+  deptMission: { label: 'Department Mission', required: true },
   peo: { label: 'PEO', required: true },
   pso: { label: 'PSO', required: true },
   po: { label: 'PO', required: true },
@@ -517,7 +519,7 @@ export default function CoordinatorSharedDocumentsPage() {
                                   // Default mode logic: whichever has data, else 'text'
                                   const defaultMode = subDoc?.inputMode || (hasSubFile ? 'upload' : 'text');
                                   const curMode = isItem1 ? (item1TextMode[subKey] || defaultMode) : 'upload';
-                                  const charLimit = ({ vision: 2000, mission: 2000, peo: 6000, pso: 6000, po: 6000 } as any)[subKey] || 2000;
+                                  const charLimit = ({ vision: 2000, mission: 2000, deptVision: 2000, deptMission: 2000, peo: 6000, pso: 6000, po: 6000 } as any)[subKey] || 2000;
 
                                   const draftVal = item1TextDraft[subKey] ?? subDoc?.textContent ?? '';
                                   const charCount = draftVal.length;

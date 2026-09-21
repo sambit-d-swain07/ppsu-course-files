@@ -151,7 +151,7 @@ function getAllUploadedFiles(db: any, sb: any): { fileUrl: string; fileName?: st
       }
     });
 
-    ['vision', 'mission', 'peo', 'pso', 'po'].forEach((k) => {
+    ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((k) => {
       const sub = sb[k];
       if (sub && typeof sub === 'object') {
         add(sub.fileUrl, sub.fileName);
@@ -504,7 +504,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
 
           if (item.index === 1) {
             const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
-            const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+            const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
             const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.length > 0;
             const attachedFiles = subKeys.map((k) => sb?.[k]).filter((s: any) => s && s.fileUrl);
 
@@ -523,6 +523,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                         const sub = sb?.[key];
                         const text = sub?.textContent;
                         const isMission = key === 'mission';
+                        const isDeptVision = key === 'deptVision';
+                        const isDeptMission = key === 'deptMission';
                         const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
                         if (!text?.trim()) return null;
 
@@ -549,8 +551,12 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                           prefix = 'PO ';
                         } else if (isMission) {
                           col2Header = 'INSTITUTE MISSION';
+                        } else if (isDeptVision) {
+                          col2Header = 'DEPARTMENT VISION';
+                        } else if (isDeptMission) {
+                          col2Header = 'DEPARTMENT MISSION';
                         } else {
-                          col2Header = `INSTITUTE ${key.toUpperCase()}`;
+                          col2Header = 'INSTITUTE VISION';
                         }
 
                         if (isPeo || isPso || isPo) {
@@ -579,7 +585,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                           );
                         }
 
-                        if (isMission || lines.length > 1) {
+                        if (isMission || isDeptMission || lines.length > 1) {
                           return (
                             <div key={key} style={{ marginBottom: '24px' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>

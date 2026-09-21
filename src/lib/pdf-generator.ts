@@ -242,7 +242,7 @@ function getUploadedBuffers(item: any, subsObj: any): Array<{ buffer: Buffer; fi
     }
   });
 
-  ['vision', 'mission', 'peo', 'pso', 'po'].forEach((k) => {
+  ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((k) => {
     if (subsObj?.[k]?.fileUrl || subsObj?.[k]?.fileName) {
       entries.push({ url: subsObj[k].fileUrl, fileName: subsObj[k].fileName });
     }
@@ -470,7 +470,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     if (item.index === 1) {
       const item1Sub = subs(1);
       if (item1Sub) {
-        const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+        const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
         const hasText = subKeys.some((sk) => item1Sub[sk]?.textContent?.trim());
         if (hasText) {
           hasStructuredContent = true;
@@ -479,6 +479,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
             if (!text?.trim()) return;
             const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
             const isMission = sk === 'mission';
+            const isDeptVision = sk === 'deptVision';
+            const isDeptMission = sk === 'deptMission';
             const isPeo = sk === 'peo';
             const isPso = sk === 'pso';
             const isPo = sk === 'po';
@@ -501,6 +503,10 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
               prefix = 'PO ';
             } else if (isMission) {
               col2Header = 'INSTITUTE MISSION';
+            } else if (isDeptVision) {
+              col2Header = 'DEPARTMENT VISION';
+            } else if (isDeptMission) {
+              col2Header = 'DEPARTMENT MISSION';
             } else {
               col2Header = 'INSTITUTE VISION';
             }
@@ -531,7 +537,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                 },
                 layout: standardTableLayout
               });
-            } else if (isMission || lines.length > 1) {
+            } else if (isMission || isDeptMission || lines.length > 1) {
               const rows = lines.map((line: string, idx: number) => {
                 const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
                 return [
@@ -1116,37 +1122,43 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
   const item1Sub = subs(1);
   let item1Html = '';
   if (item1Sub) {
-    const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+    const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
     subKeys.forEach((sk) => {
       const text = item1Sub[sk]?.textContent;
       if (!text?.trim()) return;
       const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
       const isMission = sk === 'mission';
-      const isPeo = sk === 'peo';
-      const isPso = sk === 'pso';
-      const isPo = sk === 'po';
+            const isDeptVision = sk === 'deptVision';
+            const isDeptMission = sk === 'deptMission';
+            const isPeo = sk === 'peo';
+            const isPso = sk === 'pso';
+            const isPo = sk === 'po';
 
-      let col1Header = '';
-      let col2Header = '';
-      let prefix = '';
+            let col1Header = '';
+            let col2Header = '';
+            let prefix = '';
 
-      if (isPeo) {
-        col1Header = 'PEO No';
-        col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-        prefix = 'PEO ';
-      } else if (isPso) {
-        col1Header = 'PSO No';
-        col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-        prefix = 'PSO ';
-      } else if (isPo) {
-        col1Header = 'PO No';
-        col2Header = 'PROGRAMME OUTCOMES';
-        prefix = 'PO ';
-      } else if (isMission) {
-        col2Header = 'INSTITUTE MISSION';
-      } else {
-        col2Header = 'INSTITUTE VISION';
-      }
+            if (isPeo) {
+              col1Header = 'PEO No';
+              col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+              prefix = 'PEO ';
+            } else if (isPso) {
+              col1Header = 'PSO No';
+              col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+              prefix = 'PSO ';
+            } else if (isPo) {
+              col1Header = 'PO No';
+              col2Header = 'PROGRAMME OUTCOMES';
+              prefix = 'PO ';
+            } else if (isMission) {
+              col2Header = 'INSTITUTE MISSION';
+            } else if (isDeptVision) {
+              col2Header = 'DEPARTMENT VISION';
+            } else if (isDeptMission) {
+              col2Header = 'DEPARTMENT MISSION';
+            } else {
+              col2Header = 'INSTITUTE VISION';
+            }
 
       if (isPeo || isPso || isPo) {
         const rowsHtml = lines.map((line: string, idx: number) => {

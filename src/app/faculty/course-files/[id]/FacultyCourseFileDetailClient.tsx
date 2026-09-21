@@ -198,10 +198,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [hasSeparatePracticalGrade, setHasSeparatePracticalGrade] = useState(false);
 
   // Item 1 text-input state (Vision, Mission, PEO, PSO, PO)
-  const ITEM1_CHAR_LIMITS: Record<string, number> = { vision: 2000, mission: 2000, peo: 6000, pso: 6000, po: 6000 };
+  const ITEM1_CHAR_LIMITS: Record<string, number> = { vision: 2000, mission: 2000, deptVision: 2000, deptMission: 2000, peo: 6000, pso: 6000, po: 6000 };
   const [item1RowDrafts, setItem1RowDrafts] = useState<Record<string, string[]>>({});
-  const [item1Drafts, setItem1Drafts] = useState<Record<string, string>>({ vision: '', mission: '', peo: '', pso: '', po: '' });
-  const [item1Saving, setItem1Saving] = useState<Record<string, boolean>>({ vision: false, mission: false, peo: false, pso: false, po: false });
+  const [item1Drafts, setItem1Drafts] = useState<Record<string, string>>({ vision: '', mission: '', deptVision: '', deptMission: '', peo: '', pso: '', po: '' });
+  const [item1Saving, setItem1Saving] = useState<Record<string, boolean>>({ vision: false, mission: false, deptVision: false, deptMission: false, peo: false, pso: false, po: false });
 
   // Lifted state for Items 8 & 9 — populated once in fetchData, updated surgically on mark changes
   const [numPracticals, setNumPracticals] = useState<number>(4);
@@ -564,11 +564,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         try {
           const p = JSON.parse(item1.subItemsJson);
           setItem1Drafts({
-            vision:  p.vision?.textContent  || '',
-            mission: p.mission?.textContent || '',
-            peo:     p.peo?.textContent     || '',
-            pso:     p.pso?.textContent     || '',
-            po:      p.po?.textContent      || '',
+            vision:     p.vision?.textContent     || '',
+            mission:    p.mission?.textContent    || '',
+            deptVision: p.deptVision?.textContent || '',
+            deptMission:p.deptMission?.textContent|| '',
+            peo:        p.peo?.textContent        || '',
+            pso:        p.pso?.textContent        || '',
+            po:         p.po?.textContent         || '',
           });
         } catch (e) {}
       }
@@ -1042,7 +1044,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
     if (!dbItem?.subItemsJson) {
       if (itemIndex === 1) {
-        return { vision: null, mission: null, peo: null, pso: null, po: null };
+        return { vision: null, mission: null, deptVision: null, deptMission: null, peo: null, pso: null, po: null };
       }
       if (itemIndex === 8) {
         return {
@@ -1120,8 +1122,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     if (itemIndex === 1) {
       const subs: any = getSubItems(1) || {};
-      const hasText = ['vision', 'mission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
-      const hasFile = subs.vision?.fileName && subs.mission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName;
+      const hasText = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
+      const hasFile = subs.vision?.fileName && subs.mission?.fileName && subs.deptVision?.fileName && subs.deptMission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName;
       return hasText || Boolean(hasFile) || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
     }
 
@@ -1684,13 +1686,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   // Item 1 Sub-upload handler with real Data URL
-  const handleItem1TextSave = async (subKey: 'vision' | 'mission' | 'peo' | 'pso' | 'po') => {
+  const handleItem1TextSave = async (subKey: 'vision' | 'mission' | 'deptVision' | 'deptMission' | 'peo' | 'pso' | 'po') => {
     if (isLocked) return;
     const text = (item1Drafts[subKey] || '').trim();
     if (!text || text.length > ITEM1_CHAR_LIMITS[subKey]) return;
 
     setItem1Saving(prev => ({ ...prev, [subKey]: true }));
-    const subs: any = getSubItems(1) || { vision: null, mission: null, peo: null, pso: null, po: null };
+    const subs: any = getSubItems(1) || { vision: null, mission: null, deptVision: null, deptMission: null, peo: null, pso: null, po: null };
     const now = new Date();
     // Sanitize: strip any HTML/script tags before storing
     const sanitized = text.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -1701,8 +1703,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       savedAt: now.toISOString(),
     };
 
-    const isAll5Done = ['vision', 'mission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
-    const newStatus = isAll5Done ? 'UPLOADED' : 'EMPTY';
+    const isAll7Done = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
+    const newStatus = isAll7Done ? 'UPLOADED' : 'EMPTY';
 
     setChecklist(prev => prev.map(item =>
       item.itemIndex === 1
@@ -2938,11 +2940,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   {isItem1 && !isRestricted && (() => {
                     const subs = getSubItems(1) || {};
                     const subKeys = [
-                      { key: 'vision', label: '1. Institute & Department Vision' },
-                      { key: 'mission', label: '2. Institute & Department Mission' },
-                      { key: 'peo', label: '3. Program Educational Objectives (PEO)' },
-                      { key: 'pso', label: '4. Program Specific Outcomes (PSO)' },
-                      { key: 'po', label: '5. Program Outcomes (PO)' }
+                      { key: 'vision', label: '1. Institute Vision' },
+                      { key: 'mission', label: '2. Institute Mission' },
+                      { key: 'deptVision', label: '3. Department Vision' },
+                      { key: 'deptMission', label: '4. Department Mission' },
+                      { key: 'peo', label: '5. Program Educational Objectives (PEO)' },
+                      { key: 'pso', label: '6. Program Specific Outcomes (PSO)' },
+                      { key: 'po', label: '7. Program Outcomes (PO)' }
                     ];
 
                     const handleCopyText = (text: string, title: string) => {
@@ -4484,7 +4488,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 {/* SECTION 1: Item 1 Read-Only Formatted Display for Faculty Course File */}
                 {isItem1 && !isRestricted && (() => {
                   const subs: any = getSubItems(1) || {};
-                  const subKeys = ['vision', 'mission', 'peo', 'pso', 'po'] as const;
+                  const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
                   const hasAnyContent = subKeys.some((sk) => subs[sk]?.textContent?.trim() || subs[sk]?.fileUrl);
 
                   return (
@@ -4511,6 +4515,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             const lines = text ? text.split('\n').map((l: string) => l.trim()).filter(Boolean) : [];
                             const headerBg = '#d9ead3';
                             const isMission = sk === 'mission';
+                            const isDeptVision = sk === 'deptVision';
+                            const isDeptMission = sk === 'deptMission';
                             const isPeo = sk === 'peo';
                             const isPso = sk === 'pso';
                             const isPo = sk === 'po';
@@ -4534,6 +4540,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             } else if (isMission) {
                               col1Header = '';
                               col2Header = 'INSTITUTE MISSION';
+                            } else if (isDeptVision) {
+                              col1Header = '';
+                              col2Header = 'DEPARTMENT VISION';
+                            } else if (isDeptMission) {
+                              col1Header = '';
+                              col2Header = 'DEPARTMENT MISSION';
                             } else {
                               col1Header = '';
                               col2Header = 'INSTITUTE VISION';
@@ -4571,7 +4583,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           })}
                                         </tbody>
                                       </table>
-                                    ) : (isMission || lines.length > 1) ? (
+                                    ) : (isMission || isDeptMission || lines.length > 1) ? (
                                       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
                                         <thead>
                                           <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
@@ -5779,8 +5791,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           item1Doc?.coordinatorUploaded ||
           item1Doc?.sharedStatus === 'UPLOADED' ||
           item1Doc?.fileName ||
-          (['vision', 'mission', 'peo', 'pso', 'po'].every(k => parsedItem1[k]?.textContent?.trim())) ||
-          (parsedItem1.vision?.fileName && parsedItem1.mission?.fileName && parsedItem1.peo?.fileName && parsedItem1.pso?.fileName && parsedItem1.po?.fileName)
+          (['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].every(k => parsedItem1[k]?.textContent?.trim())) ||
+          (parsedItem1.vision?.fileName && parsedItem1.mission?.fileName && parsedItem1.deptVision?.fileName && parsedItem1.deptMission?.fileName && parsedItem1.peo?.fileName && parsedItem1.pso?.fileName && parsedItem1.po?.fileName)
         );
         const item18Doc = checklist.find((c) => c.itemIndex === 18);
         // Item 18 is complete if coordinator uploaded it (coordinatorUploaded flag, sharedStatus, or fileName)
