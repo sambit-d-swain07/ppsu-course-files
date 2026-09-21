@@ -103,8 +103,12 @@ function getAllUploadedFiles(db: any, sb: any): { fileUrl: string; fileName?: st
   const files: { fileUrl: string; fileName?: string }[] = [];
   const add = (fUrl?: string, fName?: string) => {
     if (fUrl && typeof fUrl === 'string' && fUrl.trim()) {
-      if (!files.some(f => f.fileUrl === fUrl)) {
-        files.push({ fileUrl: fUrl, fileName: fName || 'Document' });
+      let targetUrl = fUrl.trim();
+      if (targetUrl.startsWith('file_')) {
+        targetUrl = `/api/upload/${targetUrl}`;
+      }
+      if (!files.some(f => f.fileUrl === targetUrl)) {
+        files.push({ fileUrl: targetUrl, fileName: fName || 'Document' });
       }
     }
   };
@@ -210,17 +214,21 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
 
         let pdfParam: any = url;
         if (typeof url === 'string') {
-          if (url.startsWith('data:')) {
-            const base64Data = url.split(',')[1] || '';
+          let fetchTarget = url;
+          if (fetchTarget.startsWith('file_')) {
+            fetchTarget = `/api/upload/${fetchTarget}`;
+          }
+          if (fetchTarget.startsWith('data:')) {
+            const base64Data = fetchTarget.split(',')[1] || '';
             const binaryString = atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
               bytes[i] = binaryString.charCodeAt(i);
             }
             pdfParam = { data: bytes };
-          } else if (!url.startsWith('blob:')) {
+          } else if (!fetchTarget.startsWith('blob:')) {
             try {
-              const res = await fetch(url);
+              const res = await fetch(fetchTarget);
               if (!res.ok) {
                 // File not found on server (e.g. after server restart)
                 if (active) { setError('file-not-found'); setLoading(false); }

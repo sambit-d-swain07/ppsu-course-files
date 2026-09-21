@@ -153,6 +153,7 @@ function calcStudentAverages(row: any, numP: number): { avg10: number; avg20: nu
 
 function extractFileId(url?: string | null): string | null {
   if (!url) return null;
+  if (url.startsWith('file_')) return url;
   const match = url.match(/\/api\/upload\/([a-zA-Z0-9_-]+)/);
   return match ? match[1] : null;
 }
