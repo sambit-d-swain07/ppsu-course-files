@@ -433,21 +433,58 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     if (status === 'SUBMITTED') {
-      const items = (courseFile as any).checklistItems || [];
+      const subject = (courseFile as any).subject;
+      const targetSubjectId = subject?.id || (courseFile as any).subjectId;
+      const schoolCode = normalizeSchoolCode(subject?.school || (courseFile as any).school);
+      const subjectSharedDocs = targetSubjectId ? await getSubjectSharedDocuments(targetSubjectId) : [];
+      const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
+      const items = mergeChecklistItemsInMemory(
+        (courseFile as any).checklistItems || [],
+        (courseFile as any).labSubmissions || [],
+        subject,
+        subjectSharedDocs,
+        schoolSharedDocs
+      );
+
       const missingShared: string[] = [];
 
       const item1 = items.find((i: any) => i.itemIndex === 1);
       let parsedItem1: any = {};
       try { if (item1?.subItemsJson) parsedItem1 = JSON.parse(item1.subItemsJson); } catch (e) {}
       const item1Keys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
-      const item1AllText = item1Keys.every(k => parsedItem1[k]?.textContent?.trim());
-      const item1AllFile = item1Keys.every(k => parsedItem1[k]?.fileName);
-      if (!item1AllText && !item1AllFile && !item1?.coordinatorUploaded && !item1?.fileName) {
+      const item1AllText = item1Keys.every((k: string) => parsedItem1[k]?.textContent?.trim());
+      const item1AllFile = item1Keys.every((k: string) => parsedItem1[k]?.fileName);
+      const item1HasAnyContent = item1Keys.some((k: string) => parsedItem1[k]?.textContent?.trim() || parsedItem1[k]?.fileName);
+
+      const isItem1Valid = Boolean(
+        item1 && (
+          item1.status === 'UPLOADED' ||
+          item1.coordinatorUploaded ||
+          item1.fileName ||
+          item1.fileUrl ||
+          item1.sharedFileName ||
+          item1AllText ||
+          item1AllFile ||
+          item1HasAnyContent
+        )
+      );
+
+      if (!isItem1Valid) {
         missingShared.push('Item 1 (Vision/Mission/Dept Vision/Dept Mission/PEO/PSO/PO)');
       }
 
       const item18 = items.find((i: any) => i.itemIndex === 18);
-      if (!item18 || (item18.status !== 'UPLOADED' && !item18.fileName)) {
+      const isItem18Valid = Boolean(
+        item18 && (
+          item18.status === 'UPLOADED' ||
+          item18.coordinatorUploaded ||
+          item18.fileName ||
+          item18.fileUrl ||
+          item18.sharedFileName
+        )
+      );
+
+      if (!isItem18Valid) {
         missingShared.push('Item 18 (CO Attainment Action Plan)');
       }
 
