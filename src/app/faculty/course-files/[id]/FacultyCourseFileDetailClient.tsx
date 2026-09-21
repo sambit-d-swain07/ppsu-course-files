@@ -120,21 +120,18 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
 };
 
 const uploadFileToServer = async (file: File): Promise<string> => {
+  const dataUrl = await readFileAsDataUrl(file);
   try {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch('/api/upload', {
+    fetch('/api/upload', {
       method: 'POST',
       body: formData,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.fileUrl) return data.fileUrl;
-    }
+    }).catch(() => {});
   } catch (e) {
-    console.warn('FormData upload failed, falling back to data URL:', e);
+    console.warn('Background upload backup log:', e);
   }
-  return await readFileAsDataUrl(file);
+  return dataUrl;
 };
 
 const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
