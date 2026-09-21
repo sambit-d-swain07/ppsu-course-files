@@ -225,7 +225,23 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           }
         }
 
-        const pdf = await pdfjs.getDocument(pdfParam).promise;
+        const loadingTask = pdfjs.getDocument(
+          typeof pdfParam === 'object'
+            ? {
+                ...pdfParam,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true,
+                standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/',
+              }
+            : {
+                url: pdfParam,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true,
+                standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/',
+              }
+        );
+
+        const pdf = await loadingTask.promise;
         if (!active) return;
         const rendered: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -236,8 +252,12 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           canvas.height = vp.height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
+            // Fill opaque white background to prevent transparent/blank table rendering
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, vp.width, vp.height);
+
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
-            rendered.push(canvas.toDataURL('image/jpeg', 0.95));
+            rendered.push(canvas.toDataURL('image/png'));
           }
         }
         if (active) { setPages(rendered); setLoading(false); }
