@@ -192,7 +192,7 @@ function loadPdfJs(): Promise<any> {
 function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | false>(false);
 
   useEffect(() => {
     let active = true;
@@ -215,18 +215,23 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           } else if (!url.startsWith('blob:')) {
             try {
               const res = await fetch(url);
-              if (res.ok) {
-                const arrayBuf = await res.arrayBuffer();
-                pdfParam = { data: new Uint8Array(arrayBuf) };
+              if (!res.ok) {
+                // File not found on server (e.g. after server restart)
+                if (active) { setError('file-not-found'); setLoading(false); }
+                return;
               }
+              const arrayBuf = await res.arrayBuffer();
+              pdfParam = { data: new Uint8Array(arrayBuf) };
             } catch (e) {
-              console.warn('Fetch failed for PDF URL, using direct URL:', e);
+              console.warn('Fetch failed for PDF URL:', e);
+              if (active) { setError('fetch-failed'); setLoading(false); }
+              return;
             }
           }
         }
 
         const loadingTask = pdfjs.getDocument(
-          typeof pdfParam === 'object'
+          typeof pdfParam === 'object' && !(pdfParam as any).url
             ? {
                 ...pdfParam,
                 cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
@@ -252,10 +257,9 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           canvas.height = vp.height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            // Fill opaque white background to prevent transparent/blank table rendering
+            // Fill opaque white background to prevent transparent rendering
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, vp.width, vp.height);
-
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
             rendered.push(canvas.toDataURL('image/png'));
           }
@@ -263,7 +267,7 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
         if (active) { setPages(rendered); setLoading(false); }
       } catch (e) {
         console.error('PDF page extraction error:', e);
-        if (active) { setError(true); setLoading(false); }
+        if (active) { setError('render-failed'); setLoading(false); }
       }
     }
     run();
@@ -273,17 +277,28 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
   if (loading) return (
     <div className="preview-page" style={{ ...PAGE, minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
       <Spinner animation="border" size="sm" variant="secondary" className="mb-2" />
-      <span style={{ fontSize: '13px', color: '#64748b' }}>Extracting pages of {name || 'document'}…</span>
+      <span style={{ fontSize: '13px', color: '#64748b' }}>Loading {name || 'document'}…</span>
+    </div>
+  );
+
+  if (error === 'file-not-found') return (
+    <div className="preview-page" style={{ ...PAGE, minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+      <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#b91c1c' }}>File Not Available</div>
+      <div style={{ fontSize: '13px', color: '#64748b', maxWidth: '380px', lineHeight: 1.6 }}>
+        <strong>{name || 'This file'}</strong> was uploaded but could not be retrieved from the server.<br />
+        This usually happens after a server restart. Please re-upload the file from the Course File checklist.
+      </div>
     </div>
   );
 
   if (error || pages.length === 0) return (
-    <div className="preview-page raw-page" style={{ ...RAW_PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <iframe
-        src={url}
-        title={name || 'PDF Document'}
-        style={{ width: '100%', height: '1050px', border: 'none', minHeight: '1050px' }}
-      />
+    <div className="preview-page" style={{ ...PAGE, minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📄</div>
+      <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '8px', color: '#374151' }}>Unable to Render Preview</div>
+      <div style={{ fontSize: '13px', color: '#64748b', maxWidth: '380px', lineHeight: 1.6 }}>
+        <strong>{name || 'Document'}</strong> could not be rendered inline. Please download the PDF Report to view all documents.
+      </div>
     </div>
   );
 
