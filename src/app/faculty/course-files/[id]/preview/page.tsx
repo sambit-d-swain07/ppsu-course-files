@@ -108,6 +108,21 @@ function getAllUploadedFiles(db: any, sb: any): { fileUrl: string; fileName?: st
       }
     }
   };
+  const scanFiles = (value: any, fallbackName?: string) => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => scanFiles(entry, fallbackName));
+      return;
+    }
+
+    add(value.fileUrl, value.fileName || value.name || value.title || fallbackName);
+
+    Object.entries(value).forEach(([key, nested]) => {
+      if (nested && typeof nested === 'object') {
+        scanFiles(nested, key);
+      }
+    });
+  };
 
   add(db?.fileUrl, db?.fileName);
   add(db?.sharedFileUrl, db?.sharedFileName);
@@ -157,6 +172,8 @@ function getAllUploadedFiles(db: any, sb: any): { fileUrl: string; fileName?: st
         add(sub.fileUrl, sub.fileName);
       }
     });
+
+    scanFiles(sb);
   }
 
   return files;
@@ -166,21 +183,10 @@ let pdfjsPromise: Promise<any> | null = null;
 
 function loadPdfJs(): Promise<any> {
   if (typeof window === 'undefined') return Promise.reject(new Error('SSR'));
-  if ((window as any).pdfjsLib) return Promise.resolve((window as any).pdfjsLib);
   if (pdfjsPromise) return pdfjsPromise;
-  pdfjsPromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    s.async = true;
-    s.onload = () => {
-      const lib = (window as any).pdfjsLib;
-      if (lib) {
-        lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        resolve(lib);
-      } else reject(new Error('pdfjsLib not found'));
-    };
-    s.onerror = reject;
-    document.head.appendChild(s);
+  pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs').then((lib: any) => {
+    lib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    return lib;
   });
   return pdfjsPromise;
 }
@@ -355,6 +361,16 @@ function FileEmbed({ url, name }: { url: string; name?: string }) {
   }
 
   return <PdfPagesViewer url={url} name={name} />;
+}
+
+function UploadedFileEmbeds({ files }: { files: { fileUrl: string; fileName?: string }[] }) {
+  return (
+    <>
+      {files.map((file, i) => (
+        <FileEmbed key={`${file.fileUrl}-${i}`} url={file.fileUrl} name={file.fileName} />
+      ))}
+    </>
+  );
 }
 
 function Pending({ name }: { name: string }) {
@@ -541,8 +557,6 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
             const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
             const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.length > 0;
-            const attachedFiles = subKeys.map((k) => sb?.[k]).filter((s: any) => s && s.fileUrl);
-
             if (hasAnyText) {
               return (
                 <div key={item.index}>
@@ -681,19 +695,16 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       ))}
                     </div>
                   </div>
-                  {/* Any sub-section attached PDF pages rendered as direct standalone pages */}
-                  {attachedFiles.map((sf: any, i: number) => (
-                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -728,16 +739,16 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TD}>{st.name || st.studentName || '—'}</td><td style={TDC}>{st.enrolmentNumber || st.rollNo || '—'}</td><td style={TDC}>{st.batch || 'A'}</td></tr>))}</tbody>
                     </table>
                   </div>
-                  {url && <FileEmbed url={url} name={fn} />}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -765,13 +776,11 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
               sb?.outcomeLab
             ].filter((f: any) => f && f.fileUrl);
 
-            if (subFiles.length > 0) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {subFiles.map((sf: any, i: number) => (
-                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1075,40 +1084,34 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       </div>
                     </div>
                   </div>
-                  {secFiles.map((sf: any, idx: number) => (
-                    <FileEmbed key={idx} url={sf.fileUrl} name={sf.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (batches.length > 0) {
+            if (batches.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {batches.map((batch: any) => batch.fileUrl ? (
-                    <FileEmbed key={batch.id || batch.batch} url={batch.fileUrl} name={batch.fileName} />
-                  ) : null)}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (secFiles.length > 0) {
+            if (secFiles.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {secFiles.map((sf: any, idx: number) => (
-                    <FileEmbed key={idx} url={sf.fileUrl} name={sf.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1170,27 +1173,25 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       </table>
                     </div>
                   </div>
-                  {url && <FileEmbed url={url} name={fn} />}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (sheets.length > 0) {
+            if (sheets.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {sheets.map((sheet: any, si: number) => sheet.fileUrl ? (
-                    <FileEmbed key={si} url={sheet.fileUrl} name={sheet.fileName} />
-                  ) : null)}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1234,29 +1235,25 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                       <tbody>{students.map((st: any, i: number) => (<tr key={i}><td style={TDC}>{i + 1}</td><td style={TDC}>{st.enrolmentNumber || st.studentId || '—'}</td><td style={TD}>{st.name || st.studentName || '—'}</td>{qKeys.map((q) => <td key={q} style={TDC}>{st[q] ?? '—'}</td>)}<td style={{ ...TDC, fontWeight: 'bold' }}>{st.total ?? '—'}</td></tr>))}</tbody>
                     </table>
                   </div>
-                  {subDocs.map((sd: any, idx: number) => (
-                    <FileEmbed key={idx} url={sd.fileUrl} name={sd.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (subDocs.length > 0) {
+            if (subDocs.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {subDocs.map((sd: any, idx: number) => (
-                    <FileEmbed key={idx} url={sd.fileUrl} name={sd.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1281,22 +1278,20 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
               sb?.marksFile && { label: 'Evaluation Marks Sheet', ...sb.marksFile }
             ].filter((f: any) => f && f.fileUrl);
 
-            if (subFiles.length > 0) {
+            if (subFiles.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {subFiles.map((sf: any, i: number) => (
-                    <FileEmbed key={i} url={sf.fileUrl} name={sf.fileName} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
 
-            if (url) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={url} name={fn} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1316,13 +1311,11 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           }
 
           if (item.index === 18) {
-            const sharedUrl = sb?.fileUrl || url;
-            const sharedName = sb?.fileName || fn;
-            if (sharedUrl) {
+            if (uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  <FileEmbed url={sharedUrl} name={sharedName} />
+                  <UploadedFileEmbeds files={uploadedFiles} />
                 </div>
               );
             }
@@ -1349,13 +1342,11 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             if (docs.length === 0 && url) docs = [{ id: 'leg', name: 'Lecture Notes', fileName: fn, fileUrl: url }];
             const validDocs = docs.filter((d) => d && d.fileUrl);
 
-            if (validDocs.length > 0) {
+            if (validDocs.length > 0 || uploadedFiles.length > 0) {
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {validDocs.map((doc: any) => (
-                    <FileEmbed key={doc.id || doc.fileUrl} url={doc.fileUrl} name={doc.fileName || doc.name} />
-                  ))}
+                  <UploadedFileEmbeds files={uploadedFiles.length > 0 ? uploadedFiles : validDocs.map((doc: any) => ({ fileUrl: doc.fileUrl, fileName: doc.fileName || doc.name }))} />
                 </div>
               );
             }
@@ -1402,9 +1393,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             return (
               <div key={item.index}>
                 {dividerPage}
-                {uploadedFiles.map((uf, i) => (
-                  <FileEmbed key={uf.fileUrl || i} url={uf.fileUrl} name={uf.fileName} />
-                ))}
+                <UploadedFileEmbeds files={uploadedFiles} />
               </div>
             );
           }
