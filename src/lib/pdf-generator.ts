@@ -158,24 +158,20 @@ function extractFileId(url?: string | null): string | null {
 }
 
 function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Buffer | null {
-  if (!url) {
-    if (fileName && (fileName.toLowerCase().endsWith('.pdf') || fileName.toLowerCase().endsWith('.csv'))) {
-      const base64Data = SAMPLE_PDF_DATA_URL.replace(/^data:application\/pdf;base64,/, '');
-      return Buffer.from(base64Data, 'base64');
-    }
-    return null;
-  }
+  if (!url) return null;
 
   // Case 1: Data URL
   if (url.startsWith('data:')) {
     const parts = url.split(',');
     if (parts.length > 1) {
       try {
-        return Buffer.from(parts[1], 'base64');
+        const base64Content = parts[1].trim();
+        return Buffer.from(base64Content, 'base64');
       } catch (e) {
         console.error('Base64 decode error:', e);
       }
     }
+    return null;
   }
 
   // Case 2: /api/upload/[fileId]
@@ -200,84 +196,72 @@ function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Bu
     }
   } catch (e) {}
 
-  // Fallback for valid PDF URLs or filenames so the document is always populated
-  const base64Data = SAMPLE_PDF_DATA_URL.replace(/^data:application\/pdf;base64,/, '');
-  return Buffer.from(base64Data, 'base64');
+  return null;
 }
 
 function getUploadedBuffers(item: any, subsObj: any): Array<{ buffer: Buffer; fileName?: string }> {
   const results: Array<{ buffer: Buffer; fileName?: string }> = [];
   const entries: Array<{ url?: string; fileName?: string }> = [];
 
-  if (item?.fileUrl || item?.fileName) {
-    entries.push({ url: item.fileUrl, fileName: item.fileName });
-  }
-  if (item?.sharedFileUrl || item?.sharedFileName) {
-    entries.push({ url: item.sharedFileUrl, fileName: item.sharedFileName });
-  }
-  if (subsObj?.fileUrl || subsObj?.fileName) {
-    entries.push({ url: subsObj.fileUrl, fileName: subsObj.fileName });
-  }
-  if (subsObj?.sharedFileUrl || subsObj?.sharedFileName) {
-    entries.push({ url: subsObj.sharedFileUrl, fileName: subsObj.sharedFileName });
-  }
-
-  const subFileObjects = [
-    subsObj?.lessonPlanLecture,
-    subsObj?.lessonPlanLab,
-    subsObj?.lessonPlanTutorial,
-    subsObj?.outcomeLecture,
-    subsObj?.outcomeLab,
-    subsObj?.sampleAssignment,
-    subsObj?.marksFile,
-    subsObj?.timetable,
-    subsObj?.questionPaper,
-    subsObj?.sampleAnswerSheet,
-    subsObj?.file
-  ];
-
-  subFileObjects.forEach((sf) => {
-    if (sf?.fileUrl || sf?.fileName) {
-      entries.push({ url: sf.fileUrl, fileName: sf.fileName });
+  const addEntry = (url?: string, fileName?: string) => {
+    if (url || fileName) {
+      entries.push({ url, fileName });
     }
-  });
+  };
 
-  ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((k) => {
-    if (subsObj?.[k]?.fileUrl || subsObj?.[k]?.fileName) {
-      entries.push({ url: subsObj[k].fileUrl, fileName: subsObj[k].fileName });
+  if (item?.fileUrl || item?.fileName) addEntry(item.fileUrl, item.fileName);
+  if (item?.sharedFileUrl || item?.sharedFileName) addEntry(item.sharedFileUrl, item.sharedFileName);
+
+  if (subsObj) {
+    if (subsObj.fileUrl || subsObj.fileName) addEntry(subsObj.fileUrl, subsObj.fileName);
+    if (subsObj.sharedFileUrl || subsObj.sharedFileName) addEntry(subsObj.sharedFileUrl, subsObj.sharedFileName);
+
+    const subFileObjects = [
+      subsObj.lessonPlanLecture,
+      subsObj.lessonPlanLab,
+      subsObj.lessonPlanTutorial,
+      subsObj.outcomeLecture,
+      subsObj.outcomeLab,
+      subsObj.sampleAssignment,
+      subsObj.marksFile,
+      subsObj.timetable,
+      subsObj.questionPaper,
+      subsObj.sampleAnswerSheet,
+      subsObj.file
+    ];
+
+    subFileObjects.forEach((sf) => {
+      if (sf) addEntry(sf.fileUrl || sf.url, sf.fileName || sf.name);
+    });
+
+    ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((k) => {
+      const obj = subsObj[k];
+      if (obj) addEntry(obj.fileUrl || obj.url, obj.fileName || obj.name);
+    });
+
+    if (subsObj.sectionFiles && typeof subsObj.sectionFiles === 'object') {
+      Object.values(subsObj.sectionFiles).forEach((sf: any) => {
+        if (sf) addEntry(sf.fileUrl || sf.url, sf.fileName || sf.name);
+      });
     }
-  });
 
-  if (subsObj?.sectionFiles && typeof subsObj.sectionFiles === 'object') {
-    Object.values(subsObj.sectionFiles).forEach((sf: any) => {
-      if (sf?.fileUrl || sf?.fileName) {
-        entries.push({ url: sf.fileUrl, fileName: sf.fileName });
-      }
-    });
-  }
+    if (Array.isArray(subsObj.batches)) {
+      subsObj.batches.forEach((b: any) => {
+        if (b) addEntry(b.fileUrl || b.url, b.fileName || b.name);
+      });
+    }
 
-  if (Array.isArray(subsObj?.batches)) {
-    subsObj.batches.forEach((b: any) => {
-      if (b?.fileUrl || b?.fileName) {
-        entries.push({ url: b.fileUrl, fileName: b.fileName });
-      }
-    });
-  }
+    if (Array.isArray(subsObj.sheets)) {
+      subsObj.sheets.forEach((s: any) => {
+        if (s) addEntry(s.fileUrl || s.url, s.fileName || s.name);
+      });
+    }
 
-  if (Array.isArray(subsObj?.sheets)) {
-    subsObj.sheets.forEach((s: any) => {
-      if (s?.fileUrl || s?.fileName) {
-        entries.push({ url: s.fileUrl, fileName: s.fileName });
-      }
-    });
-  }
-
-  if (Array.isArray(subsObj?.documents)) {
-    subsObj.documents.forEach((d: any) => {
-      if (d?.fileUrl || d?.fileName) {
-        entries.push({ url: d.fileUrl, fileName: d.fileName });
-      }
-    });
+    if (Array.isArray(subsObj.documents)) {
+      subsObj.documents.forEach((d: any) => {
+        if (d) addEntry(d.fileUrl || d.url, d.fileName || d.name);
+      });
+    }
   }
 
   const seenUrls = new Set<string>();
@@ -295,27 +279,35 @@ function getUploadedBuffers(item: any, subsObj: any): Array<{ buffer: Buffer; fi
   return results;
 }
 
-async function appendBufferToDoc(mergedDoc: PDFDocument, buf: Buffer, fileName?: string) {
-  // 1. PDF File
-  if (buf.subarray(0, 4).toString() === '%PDF' || fileName?.toLowerCase().endsWith('.pdf')) {
+async function appendBufferToDoc(mergedDoc: PDFDocument, buf: Buffer, fileName?: string): Promise<boolean> {
+  if (!buf || buf.length === 0) return false;
+
+  // 1. PDF File Check (look for %PDF within first 1024 bytes)
+  const pdfOffset = buf.indexOf('%PDF');
+  const isPdf = (pdfOffset !== -1 && pdfOffset < 1024) || Boolean(fileName?.toLowerCase().endsWith('.pdf'));
+
+  if (isPdf) {
     try {
-      const uploadedDoc = await PDFDocument.load(buf, { ignoreEncryption: true });
+      const cleanBuf = pdfOffset > 0 ? buf.subarray(pdfOffset) : buf;
+      const uploadedDoc = await PDFDocument.load(cleanBuf, { ignoreEncryption: true });
       const count = uploadedDoc.getPageCount();
-      const copied = await mergedDoc.copyPages(uploadedDoc, Array.from({ length: count }, (_, i) => i));
-      copied.forEach((p) => mergedDoc.addPage(p));
-      return;
+      if (count > 0) {
+        const copied = await mergedDoc.copyPages(uploadedDoc, Array.from({ length: count }, (_, i) => i));
+        copied.forEach((p) => mergedDoc.addPage(p));
+        return true;
+      }
     } catch (e) {
-      console.error('PDF load error:', e);
+      console.error(`PDF load error for file "${fileName}":`, e);
     }
   }
 
-  // 2. Image File (PNG or JPEG)
+  // 2. Image File Check (PNG or JPEG)
   try {
-    const isPng = buf.subarray(0, 8).toString('hex') === '89504e470d0a1a0a' || fileName?.match(/\.png$/i);
-    const isJpg = buf.subarray(0, 3).toString('hex') === 'ffd8ff' || fileName?.match(/\.(jpg|jpeg)$/i);
+    const isPng = buf.subarray(0, 8).toString('hex') === '89504e470d0a1a0a' || Boolean(fileName?.match(/\.png$/i));
+    const isJpg = buf.subarray(0, 3).toString('hex') === 'ffd8ff' || Boolean(fileName?.match(/\.(jpg|jpeg)$/i));
     if (isPng || isJpg) {
       const image = isPng ? await mergedDoc.embedPng(buf) : await mergedDoc.embedJpg(buf);
-      const page = mergedDoc.addPage([595.28, 841.89]); // A4 in points
+      const page = mergedDoc.addPage([595.28, 841.89]); // A4 portrait
       const { width, height } = image.scaleToFit(595.28 - 40, 841.89 - 40);
       page.drawImage(image, {
         x: (595.28 - width) / 2,
@@ -323,11 +315,13 @@ async function appendBufferToDoc(mergedDoc: PDFDocument, buf: Buffer, fileName?:
         width,
         height
       });
-      return;
+      return true;
     }
   } catch (e) {
-    console.error('Image embedding error:', e);
+    console.error(`Image embedding error for file "${fileName}":`, e);
   }
+
+  return false;
 }
 
 const standardTableLayout = {
@@ -393,10 +387,44 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     copiedPages.forEach((p) => mergedDoc.addPage(p));
   }
 
-  async function appendRawBuffers(buffers: Array<{ buffer: Buffer; fileName?: string }>) {
+  async function appendRawBuffers(buffers: Array<{ buffer: Buffer; fileName?: string }>): Promise<boolean> {
+    let successAny = false;
     for (const b of buffers) {
-      await appendBufferToDoc(mergedDoc, b.buffer, b.fileName);
+      const ok = await appendBufferToDoc(mergedDoc, b.buffer, b.fileName);
+      if (ok) successAny = true;
     }
+    return successAny;
+  }
+
+  function buildMissingNotice(itemName: string, fileName?: string) {
+    return [
+      {
+        margin: [0, 20, 0, 0],
+        table: {
+          widths: ['*'],
+          body: [
+            [
+              {
+                fillColor: '#fff5f5',
+                margin: [15, 20, 15, 20],
+                stack: [
+                  { text: '⚠️ File Not Available', bold: true, fontSize: 12, color: '#c53030', alignment: 'center', margin: [0, 0, 0, 6] },
+                  { text: fileName ? `File: ${fileName}` : itemName, bold: true, fontSize: 10, color: '#2d3748', alignment: 'center', margin: [0, 0, 0, 6] },
+                  { text: 'The uploaded file could not be retrieved from the server (possibly lost during a server restart).', fontSize: 9, color: '#718096', alignment: 'center', margin: [0, 0, 0, 4] },
+                  { text: 'Please re-upload this file from the Course File checklist.', fontSize: 9, bold: true, color: '#2b6cb0', alignment: 'center' }
+                ]
+              }
+            ]
+          ]
+        },
+        layout: {
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          hLineColor: () => '#feb2b2',
+          vLineColor: () => '#feb2b2'
+        }
+      }
+    ];
   }
 
   // 1. COVER PAGE & TABLE OF CONTENTS
@@ -1022,14 +1050,24 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     } else if (isUploaded) {
       // Document is uploaded: Divider page + direct pages
       await appendPdfMakeDoc(itemDividerContent);
+      let appendedAny = false;
       if (uploadedBuffers.length > 0) {
-        await appendRawBuffers(uploadedBuffers);
-      } else {
-        // Fallback buffer if none parsed directly
-        const fallbackBuf = resolveBufferFromUrl(null, 'document.pdf');
-        if (fallbackBuf) {
-          await appendBufferToDoc(mergedDoc, fallbackBuf, 'document.pdf');
-        }
+        appendedAny = await appendRawBuffers(uploadedBuffers);
+      }
+      if (!appendedAny) {
+        const noticeChunk = [
+          { text: '', pageBreak: 'before' },
+          buildPageHeader(schoolName, hasLogo),
+          {
+            text: `${item.index}. ${item.name.toUpperCase()}`,
+            fontSize: 12,
+            bold: true,
+            decoration: 'underline',
+            margin: [0, 0, 0, 14]
+          },
+          ...buildMissingNotice(item.name, db?.fileName || sb?.fileName)
+        ];
+        await appendPdfMakeDoc(noticeChunk);
       }
     } else {
       // Truly pending item
