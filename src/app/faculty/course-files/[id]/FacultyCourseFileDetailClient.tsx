@@ -1337,45 +1337,59 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const getStudentList = useCallback(() => {
-    let rawList: any[] = item8Rows.length > 0 ? item8Rows : [];
-    if (rawList.length === 0) {
-      const raw = getSubItems(4);
-      const seenIds = new Set();
-      const addStudent = (student: any, index: number) => {
-        const id = student.id || student.studentId || student.enrolmentNumber || student.rollNo || `student-${index}`;
-        if (id && !seenIds.has(id)) {
-          seenIds.add(id);
-          rawList.push({
-            id,
-            name: student.name || student.studentName || '',
-            enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '',
-            batch: student.batch || 'A'
-          });
-        }
-      };
+    const raw = getSubItems(4);
+    const seenKeys = new Set<string>();
+    const resultList: any[] = [];
 
-      const mainStudents = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
-      mainStudents.forEach(addStudent);
+    const addStudent = (student: any, index: number) => {
+      if (!student) return;
+      const enrolment = String(student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '').trim();
+      const name = String(student.name || student.studentName || '').trim();
+      const id = student.id || student.studentId || enrolment || `student-${index}`;
 
-      const item4Db = checklist.find((c: any) => c.itemIndex === 4);
-      if (Array.isArray(item4Db?.batchSubmissions)) {
-        item4Db.batchSubmissions.forEach((bSub: any) => {
-          let bStudents: any[] = [];
-          if (Array.isArray(bSub.students)) {
-            bStudents = bSub.students;
-          } else if (bSub.subItemsJson) {
-            try {
-              const parsed = JSON.parse(bSub.subItemsJson);
-              if (Array.isArray(parsed.students)) bStudents = parsed.students;
-            } catch (e) {}
-          }
-          bStudents.filter(Boolean).forEach(addStudent);
+      const dedupKey = enrolment ? enrolment.toLowerCase() : (name ? name.toLowerCase() : String(id).toLowerCase());
+      if (dedupKey && !seenKeys.has(dedupKey)) {
+        seenKeys.add(dedupKey);
+        resultList.push({
+          id,
+          studentId: id,
+          name: name || 'Student',
+          enrolmentNumber: enrolment,
+          batch: student.batch || 'A',
+          theoryGrade: student.theoryGrade,
+          practicalGrade: student.practicalGrade
         });
       }
+    };
+
+    // 1. Load from Item 4 master list first
+    const mainStudents = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
+    mainStudents.forEach(addStudent);
+
+    const item4Db = checklist.find((c: any) => c.itemIndex === 4);
+    if (Array.isArray(item4Db?.batchSubmissions)) {
+      item4Db.batchSubmissions.forEach((bSub: any) => {
+        let bStudents: any[] = [];
+        if (Array.isArray(bSub.students)) {
+          bStudents = bSub.students;
+        } else if (bSub.subItemsJson) {
+          try {
+            const parsed = JSON.parse(bSub.subItemsJson);
+            if (Array.isArray(parsed.students)) bStudents = parsed.students;
+          } catch (e) {}
+        }
+        bStudents.filter(Boolean).forEach(addStudent);
+      });
     }
 
-    return rawList.filter((student) => isRowEditableByCurrentFaculty(student.batch));
-  }, [item8Rows, checklist, isRowEditableByCurrentFaculty]);
+    // 2. If Item 4 is empty, fallback to item8Rows or item9Rows
+    if (resultList.length === 0) {
+      const fallbackSource = item8Rows.length > 0 ? item8Rows : (item9Rows.length > 0 ? item9Rows : []);
+      fallbackSource.forEach(addStudent);
+    }
+
+    return resultList.filter((student) => isRowEditableByCurrentFaculty(student.batch));
+  }, [checklist, item8Rows, item9Rows, isRowEditableByCurrentFaculty]);
 
   const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
     let itemIndex = 8;
@@ -2328,6 +2342,36 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     } catch (err: any) { setActionError(err.message); }
   };
 
+  const handleDownloadUnivGradeSheetTemplate = () => {
+    const students = getStudentList();
+    const headers = hasSeparatePracticalGrade
+      ? ['Enrollment No', 'Name', 'Batch', 'Theory Grade', 'Practical Grade']
+      : ['Enrollment No', 'Name', 'Batch', 'Theory Grade'];
+
+    const dataRows = students.map((s: any) => {
+      const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
+      const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
+      const batch = `"${(s.batch || '').replace(/"/g, '""')}"`;
+      const theory = `"${(s.theoryGrade || '').replace(/"/g, '""')}"`;
+      if (hasSeparatePracticalGrade) {
+        const practical = `"${(s.practicalGrade || '').replace(/"/g, '""')}"`;
+        return [enrol, name, batch, theory, practical].join(',');
+      }
+      return [enrol, name, batch, theory].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const typeSuffix = hasSeparatePracticalGrade ? '_Theory_and_Practical' : '_Theory';
+    link.setAttribute('download', `University_Exam_Grade_Sheet_Template${typeSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // ─── Grade Sheet: Upload & Convert to Excel (Item 15b) ─────────────────────
   const handleGradeSheetConvertToExcel = async (file: File) => {
     if (isLocked) return;
@@ -2352,11 +2396,73 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           reader.readAsText(file);
         });
         workbook = XLSX.read(text, { type: 'string' });
+
+        // Auto-parse grades into students list
+        const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (rawLines.length > 1) {
+          const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
+          const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
+          const nameIdx = header.findIndex(h => h.includes('name'));
+          const theoryIdx = header.findIndex(h => h.includes('theory') || (h.includes('grade') && !h.includes('prac')));
+          const practicalIdx = header.findIndex(h => h.includes('practical') || h.includes('prac'));
+
+          const currentList = getStudentList();
+          const storedStudents = Array.isArray(subs.students) ? [...subs.students] : [];
+
+          let updatedCount = 0;
+          let foundPracticalGrades = false;
+
+          const updatedStudents = currentList.map(student => {
+            const matchLine = rawLines.slice(1).find(l => {
+              const cols = parseCsvLine(l);
+              if (enrolIdx !== -1 && cols[enrolIdx]) {
+                const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                const rowEnrol = String(student.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
+              }
+              if (nameIdx !== -1 && cols[nameIdx]) {
+                const csvName = cols[nameIdx].toLowerCase().trim();
+                const rowName = String(student.name || '').toLowerCase().trim();
+                if (csvName && rowName && csvName === rowName) return true;
+              }
+              return false;
+            });
+
+            const existingEntry = storedStudents.find((e: any) => e && (e.studentId === student.id || e.id === student.id || (e.enrolmentNumber && e.enrolmentNumber === student.enrolmentNumber)));
+            const updatedEntry = { ...student, ...(existingEntry || {}) };
+
+            if (matchLine) {
+              const cols = parseCsvLine(matchLine);
+
+              if (theoryIdx !== -1 && cols[theoryIdx] !== undefined && cols[theoryIdx].trim() !== '') {
+                updatedEntry.theoryGrade = cols[theoryIdx].trim().toUpperCase();
+                updatedCount++;
+              }
+
+              if (practicalIdx !== -1 && cols[practicalIdx] !== undefined && cols[practicalIdx].trim() !== '') {
+                updatedEntry.practicalGrade = cols[practicalIdx].trim().toUpperCase();
+                foundPracticalGrades = true;
+                updatedCount++;
+              }
+            }
+
+            return updatedEntry;
+          });
+
+          if (updatedCount > 0) {
+            subs.students = updatedStudents;
+            if (foundPracticalGrades && !hasSeparatePracticalGrade) {
+              setHasSeparatePracticalGrade(true);
+              subs.hasSeparatePracticalGrade = true;
+            }
+          }
+        }
       } else {
         // PDF or other: generate a structured template with expected grade sheet columns
-        const templateHeaders = ['Sr No', 'Enrolment Number', 'Student Name', 'Theory Marks', 'Practical Marks', 'Total', 'Grade'];
+        const templateHeaders = hasSeparatePracticalGrade
+          ? ['Sr No', 'Enrolment Number', 'Student Name', 'Batch', 'Theory Grade', 'Practical Grade']
+          : ['Sr No', 'Enrolment Number', 'Student Name', 'Batch', 'Theory Grade'];
         const ws = XLSX.utils.aoa_to_sheet([templateHeaders]);
-        // Style header row (column widths)
         ws['!cols'] = templateHeaders.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
         workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, ws, 'Grade Sheet');
@@ -5582,6 +5688,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               <div className="fw-bold mb-1">(b) Grade Sheet</div>
                               <Form.Check type="switch" className="small mb-2" label="This course has a separate practical grade" checked={hasSeparatePracticalGrade} disabled={isLocked} onChange={(e) => handleTogglePracticalGrade(e.target.checked)} />
 
+                              {!isLocked && (
+                                <div className="mb-2">
+                                  <Button size="sm" variant="outline-success" className="w-100" style={{ fontSize: 11 }} onClick={handleDownloadUnivGradeSheetTemplate}>
+                                    ⬇ Download Grade Sheet Template.csv
+                                  </Button>
+                                </div>
+                              )}
+
                               {/* Original Upload section */}
                               <div className="mb-2">
                                 <div className="small text-muted fw-semibold mb-1" style={{ fontSize: 10 }}>📎 Original Upload</div>
@@ -5661,7 +5775,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   const subs = getSubItems(15) || { gradeSheet: null, students: [], hasSeparatePracticalGrade: false };
                   const storedStudents = Array.isArray(subs.students) ? subs.students.filter(Boolean) : [];
                   const rows = getStudentList().map((student: any) => {
-                    const found = storedStudents.find((entry: any) => entry && (entry.studentId === student.id || entry.id === student.id));
+                    const found = storedStudents.find((entry: any) => entry && (entry.studentId === student.id || entry.id === student.id || (entry.enrolmentNumber && entry.enrolmentNumber === student.enrolmentNumber)));
                     return { ...student, ...(found || {}) };
                   });
                   const grades = ['F', 'P', 'C', 'B', 'B+', 'A', 'A+', 'O'];
@@ -5715,8 +5829,19 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                   return (
                     <div className="mt-3 ps-4 border-start border-2 border-warning ms-2 w-100">
-                      <div className="d-flex align-items-center justify-content-between mb-2">
+                      <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                         <span className="small fw-bold text-secondary">(c) Grade Sheet & Result Analysis</span>
+                        {!isLocked && (
+                          <div className="d-flex align-items-center gap-2">
+                            <Button size="sm" variant="outline-success" style={{ fontSize: 11 }} onClick={handleDownloadUnivGradeSheetTemplate}>
+                              ⬇ Download Grade Sheet Template.csv
+                            </Button>
+                            <label className="btn btn-outline-primary btn-sm m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
+                              📤 Upload Grade Sheet CSV
+                              <input type="file" accept=".csv,.txt" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleGradeSheetConvertToExcel(f); e.currentTarget.value = ''; }} />
+                            </label>
+                          </div>
+                        )}
                       </div>
                       {!rows.length ? (
                         <div className="alert alert-info small">Student rows will appear automatically from Item 4.</div>
