@@ -802,6 +802,25 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
 
 
+  const parseCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if ((char === ',' || char === '\t' || char === ';') && !inQuotes) {
+        result.push(current.trim().replace(/^["']|["']$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    return result;
+  };
+
   const handleItem8SectionFileUpload = async (sectionKey: 'sec21' | 'sec22' | 'sec23' | 'sec31' | 'sec32' | 'main', file?: File) => {
     if (isLocked) return;
     const subs = getSubItems(8) || {};
@@ -812,7 +831,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       if (sectionKey === 'main') {
         subs.file = null;
       }
-      await saveStructuredItem(8, { ...subs, sectionFiles }, 'UPLOADED');
+      await saveStructuredItem(8, { ...subs, sectionFiles, numPracticals, students: item8RowsRef.current }, 'UPLOADED');
       return;
     }
 
@@ -830,37 +849,53 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
       try {
         const text = await file.text();
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length > 1) {
-          const header = lines[0].split(',').map(c => c.replace(/^["']|["']$/g, '').trim().toLowerCase());
+        const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (rawLines.length > 1) {
+          const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
           const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
-          
-          if (enrolIdx !== -1) {
+          const nameIdx = header.findIndex(h => h.includes('name'));
+
+          if (enrolIdx !== -1 || nameIdx !== -1) {
             let updated = false;
             const newRows = item8Rows.map(row => {
-              const enrol = String(row.enrolmentNumber || '').trim().toLowerCase();
-              const matchLine = lines.slice(1).find(l => {
-                const cols = l.split(',').map(c => c.replace(/^["']|["']$/g, '').trim());
-                return cols[enrolIdx] && cols[enrolIdx].toLowerCase() === enrol;
+              if (!isRowEditableByCurrentFaculty(row.batch)) return row;
+
+              const matchLine = rawLines.slice(1).find(l => {
+                const cols = parseCsvLine(l);
+                if (enrolIdx !== -1 && cols[enrolIdx]) {
+                  const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                  const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                  if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
+                }
+                if (nameIdx !== -1 && cols[nameIdx]) {
+                  const csvName = cols[nameIdx].toLowerCase().trim();
+                  const rowName = String(row.name || '').toLowerCase().trim();
+                  if (csvName && rowName && csvName === rowName) return true;
+                }
+                return false;
               });
+
               if (!matchLine) return row;
-              const cols = matchLine.split(',').map(c => c.replace(/^["']|["']$/g, '').trim());
+              const cols = parseCsvLine(matchLine);
               const updatedRow = { ...row };
 
               header.forEach((h, idx) => {
-                const val = Number(cols[idx]);
+                const rawVal = cols[idx];
+                if (rawVal === undefined || rawVal === '') return;
+                const val = Number(rawVal);
                 if (isNaN(val)) return;
+
                 if (/^p\d+$/i.test(h)) {
                   const pNum = h.toUpperCase();
                   updatedRow.practicals = { ...(updatedRow.practicals || {}), [pNum]: Math.min(10, Math.max(0, val)) };
                   updated = true;
-                } else if (h.includes('viva') && (h.includes('int') || sectionKey === 'sec23')) {
+                } else if ((h.includes('viva') && (h.includes('int') || sectionKey === 'sec23')) || sectionKey === 'sec23') {
                   updatedRow.internalViva = Math.min(20, Math.max(0, val));
                   updated = true;
-                } else if ((h.includes('perf') || h.includes('quiz')) && (h.includes('ese') || sectionKey === 'sec31')) {
+                } else if (((h.includes('perf') || h.includes('quiz')) && (h.includes('ese') || sectionKey === 'sec31')) || sectionKey === 'sec31') {
                   updatedRow.esePerformance = Math.min(30, Math.max(0, val));
                   updated = true;
-                } else if (h.includes('ext') && (h.includes('viva') || sectionKey === 'sec32')) {
+                } else if ((h.includes('ext') && (h.includes('viva') || sectionKey === 'sec32')) || sectionKey === 'sec32') {
                   updatedRow.eseExternalViva = Math.min(30, Math.max(0, val));
                   updated = true;
                 }
@@ -871,8 +906,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
             if (updated) {
               setItem8Rows(newRows);
+              item8RowsRef.current = newRows;
               subs.students = newRows;
-              setActionSuccess(`CSV parsed successfully! Marks populated for Item 8.`);
+              setActionSuccess(`CSV parsed successfully! Rubric marks populated into table.`);
             }
           }
         }
@@ -881,10 +917,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }
     }
 
-    await saveStructuredItem(8, { ...subs, sectionFiles }, 'UPLOADED');
+    await saveStructuredItem(8, { ...subs, sectionFiles, numPracticals, students: item8RowsRef.current }, 'UPLOADED');
   };
 
-  
   const handleDownloadCsvTemplate = () => {
     const csvContent = 'Enrollment No,Name,Batch\n';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -898,11 +933,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleDownloadLabCsvTemplate = () => {
-    // Get students — getStudentList() already filters by access.batch when mode is LAB_BATCH
     const students = getStudentList();
     const practicalHeaders = Array.from({ length: numPracticals }, (_, i) => `P${i + 1}`);
     const headers = ['Enrollment No', 'Name', ...practicalHeaders];
-    // Build one row per student: enrolment + name filled in, practicals empty
     const dataRows = students.map((s: any) => {
       const enrol = `"${(s.enrolmentNumber || '').replace(/"/g, '""')}"`;
       const name  = `"${(s.name || '').replace(/"/g, '""')}"`;
@@ -914,7 +947,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    // Include batch label in filename when lab teacher
     const batchSuffix = access.mode === 'LAB_BATCH' ? `_Batch${access.batch}` : '';
     link.setAttribute('download', `Lab_PracticalMarks_Template${batchSuffix}_P1-P${numPracticals}.csv`);
     document.body.appendChild(link);
@@ -923,7 +955,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleDownloadVivaTemplate = () => {
-    // Get students — filtered by batch if lab teacher
     const students = getStudentList();
     const headers = ['Enrollment No', 'Name', 'Internal Viva (20)'];
     const dataRows = students.map((s: any) => {
@@ -1179,56 +1210,46 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     return dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || Boolean(dbItem.fileName);
   };
 
-  const getStudentList = () => {
-    const raw = getSubItems(4);
-    let allStudents: any[] = [];
-    const seenIds = new Set();
+  const getStudentList = useCallback(() => {
+    let rawList: any[] = item8Rows.length > 0 ? item8Rows : [];
+    if (rawList.length === 0) {
+      const raw = getSubItems(4);
+      const seenIds = new Set();
+      const addStudent = (student: any, index: number) => {
+        const id = student.id || student.studentId || student.enrolmentNumber || student.rollNo || `student-${index}`;
+        if (id && !seenIds.has(id)) {
+          seenIds.add(id);
+          rawList.push({
+            id,
+            name: student.name || student.studentName || '',
+            enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '',
+            batch: student.batch || 'A'
+          });
+        }
+      };
 
-    const addStudent = (student: any, index: number) => {
-      const id = student.id || student.studentId || student.enrolmentNumber || student.rollNo || `student-${index}`;
-      if (id && !seenIds.has(id)) {
-        seenIds.add(id);
-        allStudents.push({
-          id,
-          name: student.name || student.studentName || '',
-          enrolmentNumber: student.enrolmentNumber || student.enrollmentNumber || student.rollNo || '',
-          batch: student.batch
+      const mainStudents = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
+      mainStudents.forEach(addStudent);
+
+      const item4Db = checklist.find((c: any) => c.itemIndex === 4);
+      if (Array.isArray(item4Db?.batchSubmissions)) {
+        item4Db.batchSubmissions.forEach((bSub: any) => {
+          let bStudents: any[] = [];
+          if (Array.isArray(bSub.students)) {
+            bStudents = bSub.students;
+          } else if (bSub.subItemsJson) {
+            try {
+              const parsed = JSON.parse(bSub.subItemsJson);
+              if (Array.isArray(parsed.students)) bStudents = parsed.students;
+            } catch (e) {}
+          }
+          bStudents.filter(Boolean).forEach(addStudent);
         });
       }
-    };
-
-    // Add main/Course Teacher Item 4 students first
-    const mainStudents = (Array.isArray(raw?.students) ? raw.students : []).filter(Boolean);
-    mainStudents.forEach(addStudent);
-
-    // Add lab batch submission students if present (from Item 4 batchSubmissions)
-    const item4Db = checklist.find((c: any) => c.itemIndex === 4);
-    if (Array.isArray(item4Db?.batchSubmissions)) {
-      item4Db.batchSubmissions.forEach((bSub: any) => {
-        let bStudents: any[] = [];
-        if (Array.isArray(bSub.students)) {
-          bStudents = bSub.students;
-        } else if (bSub.subItemsJson) {
-          try {
-            const parsed = JSON.parse(bSub.subItemsJson);
-            if (Array.isArray(parsed.students)) bStudents = parsed.students;
-          } catch (e) {}
-        }
-        bStudents.filter(Boolean).forEach(addStudent);
-      });
     }
 
-    if (access.mode === 'LAB_BATCH' && access.batch) {
-      const targetBatch = String(access.batch).toUpperCase().trim(); // e.g. "A", "B", "C"
-      return allStudents.filter((student) => {
-        // Normalize: "Batch A" → "A", "batch-a" → "A", "A" → "A"
-        const raw = String(student.batch || '').toUpperCase().trim();
-        const normalized = raw.replace(/^BATCH[-\s]*/i, '').trim(); // strip "BATCH " or "BATCH-"
-        return normalized === targetBatch;
-      });
-    }
-    return allStudents;
-  };
+    return rawList.filter((student) => isRowEditableByCurrentFaculty(student.batch));
+  }, [item8Rows, checklist, isRowEditableByCurrentFaculty]);
 
   const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
     let itemIndex = 8;
