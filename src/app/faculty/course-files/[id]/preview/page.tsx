@@ -99,6 +99,69 @@ function PageHeader({ cf }: { cf: any }) {
   );
 }
 
+function getAllUploadedFiles(db: any, sb: any): { fileUrl: string; fileName?: string }[] {
+  const files: { fileUrl: string; fileName?: string }[] = [];
+  const add = (fUrl?: string, fName?: string) => {
+    if (fUrl && typeof fUrl === 'string' && fUrl.trim()) {
+      if (!files.some(f => f.fileUrl === fUrl)) {
+        files.push({ fileUrl: fUrl, fileName: fName || 'Document' });
+      }
+    }
+  };
+
+  add(db?.fileUrl, db?.fileName);
+  add(db?.sharedFileUrl, db?.sharedFileName);
+
+  if (sb && typeof sb === 'object') {
+    add(sb.fileUrl, sb.fileName);
+    add(sb.file?.fileUrl, sb.file?.fileName);
+    add(sb.sharedFileUrl, sb.sharedFileName);
+
+    const subObjKeys = [
+      'questionPaper', 'gradeSheet', 'sampleAnswerSheet', 'timetable',
+      'manual', 'tutorial', 'lessonPlanLecture', 'lessonPlanLab',
+      'lessonPlanTutorial', 'outcomeLecture', 'outcomeLab', 'marksFile',
+      'sampleAssignment', 'register', 'file'
+    ];
+    subObjKeys.forEach((k) => {
+      const obj = sb[k];
+      if (obj && typeof obj === 'object') {
+        add(obj.fileUrl, obj.fileName);
+      }
+    });
+
+    const arrayKeys = ['additionalDocuments', 'documents', 'batches', 'batchSubmissions', 'sheets', 'customSections', 'sectionFiles'];
+    arrayKeys.forEach((ak) => {
+      const arr = sb[ak];
+      if (Array.isArray(arr)) {
+        arr.forEach((item: any) => {
+          if (item && typeof item === 'object') {
+            add(item.fileUrl, item.fileName || item.name);
+            if (item.file && typeof item.file === 'object') {
+              add(item.file.fileUrl, item.file.fileName || item.file.name);
+            }
+          }
+        });
+      } else if (arr && typeof arr === 'object') {
+        Object.values(arr).forEach((item: any) => {
+          if (item && typeof item === 'object') {
+            add(item.fileUrl, item.fileName || item.name);
+          }
+        });
+      }
+    });
+
+    ['vision', 'mission', 'peo', 'pso', 'po'].forEach((k) => {
+      const sub = sb[k];
+      if (sub && typeof sub === 'object') {
+        add(sub.fileUrl, sub.fileName);
+      }
+    });
+  }
+
+  return files;
+}
+
 let pdfjsPromise: Promise<any> | null = null;
 
 function loadPdfJs(): Promise<any> {
@@ -138,7 +201,31 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
         setLoading(true);
         setError(false);
         const pdfjs = await loadPdfJs();
-        const pdf = await pdfjs.getDocument(url).promise;
+
+        let pdfParam: any = url;
+        if (typeof url === 'string') {
+          if (url.startsWith('data:')) {
+            const base64Data = url.split(',')[1] || '';
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            pdfParam = { data: bytes };
+          } else if (!url.startsWith('blob:')) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                const arrayBuf = await res.arrayBuffer();
+                pdfParam = { data: new Uint8Array(arrayBuf) };
+              }
+            } catch (e) {
+              console.warn('Fetch failed for PDF URL, using direct URL:', e);
+            }
+          }
+        }
+
+        const pdf = await pdfjs.getDocument(pdfParam).promise;
         if (!active) return;
         const rendered: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -171,9 +258,12 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
   );
 
   if (error || pages.length === 0) return (
-    <div className="preview-page" style={{ ...PAGE, minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '12px' }}>Could not extract PDF pages inline</div>
-      <a href={url} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-warning">Open {name || 'PDF'} ↗</a>
+    <div className="preview-page raw-page" style={{ ...RAW_PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <iframe
+        src={url}
+        title={name || 'PDF Document'}
+        style={{ width: '100%', height: '1050px', border: 'none', minHeight: '1050px' }}
+      />
     </div>
   );
 
@@ -194,13 +284,22 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
 
 function FileEmbed({ url, name }: { url: string; name?: string }) {
   if (!url) return null;
-  const isImg = name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
-  const isDoc = name?.match(/\.(docx|doc|xlsx|xls|csv|txt)$/i);
+  const fileNameOrUrl = (name || url).toLowerCase();
+  const isImg = Boolean(
+    fileNameOrUrl.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/i) ||
+    url.startsWith('data:image/')
+  );
+  const isDoc = Boolean(
+    fileNameOrUrl.match(/\.(docx|doc|xlsx|xls|csv|txt)(\?.*)?$/i) ||
+    url.startsWith('data:text/') ||
+    url.startsWith('data:application/vnd') ||
+    url.startsWith('data:application/msword')
+  );
 
   if (isImg) {
     return (
       <div className="preview-page raw-page" style={{ ...RAW_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '1050px' }}>
-        <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: '1000px', objectFit: 'contain', display: 'block' }} />
+        <img src={url} alt={name || 'Uploaded Image'} style={{ maxWidth: '100%', maxHeight: '1000px', objectFit: 'contain', display: 'block' }} />
       </div>
     );
   }
@@ -213,14 +312,13 @@ function FileEmbed({ url, name }: { url: string; name?: string }) {
           <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'Document File'}</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>Office / Text Document</div>
           <a href={url} download={name || 'document'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
-            Download / Open {name}
+            Download / Open {name || 'Document'}
           </a>
         </div>
       </div>
     );
   }
 
-  // PDF → extract all pages and render as clean full-bleed standalone pages
   return <PdfPagesViewer url={url} name={name} />;
 }
 
@@ -392,8 +490,9 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         {CHECKLIST_ITEMS.map((item) => {
           const db = dbi(item.index);
           const sb = subs(item.index);
-          const url = db?.fileUrl || db?.sharedFileUrl;
-          const fn  = db?.fileName || db?.sharedFileName;
+          const uploadedFiles = getAllUploadedFiles(db, sb);
+          const url = uploadedFiles[0]?.fileUrl || db?.fileUrl || db?.sharedFileUrl;
+          const fn  = uploadedFiles[0]?.fileName || db?.fileName || db?.sharedFileName;
 
           const dividerPage = (
             <div key={`div-${item.index}`} className="preview-page" style={{ ...PAGE, minHeight: '1050px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxSizing: 'border-box' }}>
@@ -1257,12 +1356,14 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             );
           }
 
-          // General items (2, 3, 5, 7, 10, 14, 15, 16, 17)
-          if (url) {
+          // General items fallback
+          if (uploadedFiles.length > 0) {
             return (
               <div key={item.index}>
                 {dividerPage}
-                <FileEmbed url={url} name={fn} />
+                {uploadedFiles.map((uf, i) => (
+                  <FileEmbed key={uf.fileUrl || i} url={uf.fileUrl} name={uf.fileName} />
+                ))}
               </div>
             );
           }
