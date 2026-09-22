@@ -433,14 +433,21 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     if (status === 'SUBMITTED') {
-      const subject = (courseFile as any).subject;
-      const targetSubjectId = subject?.id || (courseFile as any).subjectId;
-      const schoolCode = normalizeSchoolCode(subject?.school || (courseFile as any).school);
-      const subjectSharedDocs = targetSubjectId ? await getSubjectSharedDocuments(targetSubjectId) : [];
-      const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
+      // IMPORTANT: getCourseFileById (used above) has no `include`, so courseFile.checklistItems
+      // and courseFile.subject are always undefined. We use:
+      //   - `subject` from line 364 (already correctly fetched via getSubjectById)
+      //   - checklistItems fetched directly here
+      const targetSubjectId = subject?.id || courseFile.subjectId;
+      const schoolCode = normalizeSchoolCode(subject?.school || courseFile.school);
+      const [subjectSharedDocs, schoolSharedDocs, checklistItems] = await Promise.all([
+        targetSubjectId ? getSubjectSharedDocuments(targetSubjectId) : Promise.resolve([]),
+        schoolCode ? getSchoolSharedDocuments(schoolCode) : Promise.resolve([]),
+        getChecklistItemsByCourseFileId(courseFile.id)
+      ]);
+      // labSubmissions are not needed to validate Items 1 and 18 (those are lab-batch items)
       const items = mergeChecklistItemsInMemory(
-        (courseFile as any).checklistItems || [],
-        (courseFile as any).labSubmissions || [],
+        checklistItems,
+        [],
         subject,
         subjectSharedDocs,
         schoolSharedDocs
@@ -489,8 +496,17 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       }
 
       if (missingShared.length > 0) {
+        // Name the coordinator so Faculty knows who to contact
+        const coordinatorName = subject
+          ? (subject as any).courseCoordinator?.name || (subject as any).evaluator?.name || null
+          : faculty?.assignedCoordinatorId
+            ? (await getUserById(faculty.assignedCoordinatorId))?.name || null
+            : null;
+        const contactHint = coordinatorName
+          ? ` Please contact Course Coordinator ${coordinatorName} to complete these before submitting.`
+          : ' Please ask your Course Coordinator to upload these shared documents before submitting.';
         return noStoreJson({
-          error: `Cannot submit course file: The Course Coordinator has not completed all required shared uploads. Missing: ${missingShared.join(', ')}.`
+          error: `Cannot submit course file: The Course Coordinator has not completed all required shared uploads. Missing: ${missingShared.join(', ')}.${contactHint}`
         }, { status: 400 });
       }
     }
