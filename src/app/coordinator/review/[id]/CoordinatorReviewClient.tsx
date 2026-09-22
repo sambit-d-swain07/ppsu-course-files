@@ -188,21 +188,23 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
 
     setSaveLoading(true); setActionError(''); setActionSuccess('');
     try {
-      for (const item of CHECKLIST_ITEMS) {
-        const checklistResponse = await fetchWithTimeout(`/api/checklist/${courseFileId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            itemIndex: item.index,
-            score: scores[item.index] ?? (item.index === 20 ? 10 : 0),
-            remarks: itemRemarks[item.index] ?? ''
-          })
-        });
-        if (!checklistResponse.ok) {
-          const errorBody = await checklistResponse.json().catch(() => ({}));
-          throw new Error(errorBody.error || `Failed to save score for item ${item.index}`);
-        }
+      const itemsPayload = CHECKLIST_ITEMS.map((item) => ({
+        itemIndex: item.index,
+        score: scores[item.index] ?? (item.index === 20 ? 10 : 0),
+        remarks: itemRemarks[item.index] ?? ''
+      }));
+
+      const checklistResponse = await fetchWithTimeout(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsPayload })
+      });
+
+      if (!checklistResponse.ok) {
+        const errorBody = await checklistResponse.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to save evaluation scores');
       }
+
 
       const sigUrl = reviewerSignatureFile
         ? `/uploads/reviewer_${courseFileId}_sig.${reviewerSignatureFile.name.split('.').pop() || 'png'}`

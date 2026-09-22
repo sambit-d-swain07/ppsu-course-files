@@ -397,6 +397,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
   const [checklist, setChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadingDocx, setDownloadingDocx] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     fetch(`/api/course-files/${courseFileId}`)
@@ -405,6 +407,40 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [courseFileId]);
+
+  const handleDownloadDocx = async (codeName: string) => {
+    setDownloadingDocx(true);
+    try {
+      const res = await fetch(`/api/course-files/${courseFileId}/merged-report`);
+      if (!res.ok) throw new Error('Failed to generate DOCX report');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `merged-course-file-${codeName}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Error downloading DOCX');
+    } finally {
+      setDownloadingDocx(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch(`/api/course-files/${courseFileId}/merged-pdf`);
+      if (!res.ok) throw new Error('Failed to generate PDF report');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err: any) {
+      alert(err.message || 'Error generating PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   if (loading) return (
     <div className="d-flex justify-content-center align-items-center flex-column py-5" style={{ minHeight: '60vh' }}>
@@ -491,8 +527,12 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
         <div className="d-flex align-items-center gap-2">
           <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
-          <a href={`/api/course-files/${courseFileId}/merged-report`} download={`merged-course-file-${code}.docx`} className="btn btn-outline-success btn-sm">Download DOCX</a>
-          <a href={`/api/course-files/${courseFileId}/merged-pdf`} target="_blank" rel="noreferrer" className="btn btn-warning btn-sm fw-bold px-3">📄 Download PDF Report</a>
+          <Button variant="outline-success" size="sm" onClick={() => handleDownloadDocx(code)} disabled={downloadingDocx}>
+            {downloadingDocx ? <><Spinner animation="border" size="sm" className="me-1" /> Preparing DOCX...</> : 'Download DOCX'}
+          </Button>
+          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+            {downloadingPdf ? <><Spinner animation="border" size="sm" className="me-1" /> Generating PDF...</> : '📄 Download PDF Report'}
+          </Button>
           <Button variant="light" size="sm" className="fw-bold" onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
         </div>
       </div>

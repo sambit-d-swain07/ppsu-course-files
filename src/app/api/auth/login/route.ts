@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return noStoreJson({ error: 'Invalid email or password' }, { status: 401 });
     }
 
-    const isValid = bcrypt.compareSync(password, user.passwordHash);
+    const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
       return noStoreJson({ error: 'Invalid email or password' }, { status: 401 });
     }

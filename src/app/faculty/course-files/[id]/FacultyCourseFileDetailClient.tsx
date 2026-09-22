@@ -211,6 +211,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [item9CustomMax, setItem9CustomMax] = useState<number>(10);
   const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
   const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
+  const [removingItem, setRemovingItem] = useState<number | string | null>(null);
   const [gradeSheetConvertLoading, setGradeSheetConvertLoading] = useState(false);
   const [gradeSheetExcelModal, setGradeSheetExcelModal] = useState<{ fileName: string; rows: string[][] } | null>(null);
 
@@ -1793,6 +1794,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (isLocked) return;
     if (access.mode === 'LAB_BATCH' && !LAB_TEACHER_EDITABLE_ITEM_INDICES.includes(itemIndex)) return;
     setActionError(''); setActionSuccess('');
+    setRemovingItem(itemIndex);
     try {
       const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
@@ -1801,8 +1803,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       });
       if (!res.ok) throw new Error('Removal failed');
       setActionSuccess(`Item #${itemIndex} cleared.`);
-      fetchData();
-    } catch (err: any) { setActionError(err.message); }
+      await fetchData();
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setRemovingItem(null);
+    }
   };
   const handleStudentBatchChange = async (studentId: string, newBatch: string) => {
     if (isLocked || access.mode === 'LAB_BATCH') return;
@@ -4735,8 +4741,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                                   </label>
                                 )}
-                                <button className="btn btn-outline-danger btn-sm" style={{ fontSize: 12 }} onClick={() => handleRemove(item.index)}>
-                                  Remove
+                                <button
+                                  className="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"
+                                  style={{ fontSize: 12 }}
+                                  onClick={() => handleRemove(item.index)}
+                                  disabled={removingItem === item.index}
+                                >
+                                  {removingItem === item.index ? (
+                                    <>
+                                      <Spinner animation="border" size="sm" />
+                                      <span>Removing...</span>
+                                    </>
+                                  ) : (
+                                    <span>Remove</span>
+                                  )}
                                 </button>
                               </>
                             )}

@@ -817,6 +817,23 @@ export async function updateChecklistItem(courseFileId: string, itemIndex: numbe
   });
 }
 
+export async function updateChecklistItemsBatch(courseFileId: string, updatesList: Array<{ itemIndex: number; updates: Partial<Omit<ChecklistItem, 'id' | 'courseFileId' | 'itemIndex'>> }>) {
+  return prisma.$transaction(async tx => {
+    for (const { itemIndex, updates } of updatesList) {
+      await tx.checklistItem.upsert({
+        where: { courseFileId_itemIndex: { courseFileId, itemIndex } },
+        create: { courseFileId, itemIndex, status: updates.status ?? 'EMPTY', ...updates },
+        update: updates
+      });
+    }
+    const items = await tx.checklistItem.findMany({ where: { courseFileId } });
+    const progress = Math.min(20, items.filter(i => i.status === 'UPLOADED').length);
+    await tx.courseFile.update({ where: { id: courseFileId }, data: { progress } });
+    return items;
+  });
+}
+
+
 export async function updateCourseFile(courseFileId: string, updates: Partial<Omit<CourseFile, 'id'>>) {
   const current = await prisma.courseFile.findUnique({ where: { id: courseFileId } });
   if (!current) return undefined;

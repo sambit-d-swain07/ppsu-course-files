@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateChecklistItem, getCourseFileById, getSubjectForCourseFile, getLabBatchForUser, getLabSubmission, upsertLabSubmission } from '@/lib/mock-data';
+import { updateChecklistItem, updateChecklistItemsBatch, getCourseFileById, getSubjectForCourseFile, getLabBatchForUser, getLabSubmission, upsertLabSubmission } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 
@@ -26,7 +26,26 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     }
 
     const body = await req.json();
+
+    // Batch items processing for Coordinator Evaluation scoring
+    if (Array.isArray(body.items)) {
+      const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
+      if (!isCoordinator) {
+        return noStoreJson({ error: 'Forbidden' }, { status: 403 });
+      }
+      const batchList = body.items.map((it: any) => ({
+        itemIndex: Number(it.itemIndex),
+        updates: {
+          score: it.score,
+          remarks: it.remarks
+        }
+      }));
+      const items = await updateChecklistItemsBatch(courseFileId, batchList);
+      return noStoreJson({ success: true, checklistItems: items });
+    }
+
     const { itemIndex, status, fileName, fileUrl, subItemsJson, score, remarks } = body;
+
 
     if (itemIndex === undefined || itemIndex < 1 || itemIndex > 20) {
       return noStoreJson({ error: 'Invalid item index' }, { status: 400 });
