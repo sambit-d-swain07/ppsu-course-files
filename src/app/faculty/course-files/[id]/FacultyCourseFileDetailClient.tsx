@@ -6314,7 +6314,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <span className="text-muted small ms-2">· Verified Document Inspection</span>
             </div>
             <a
-              href={viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL}
+              href={(viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('pdf;base64,')) ? 'data:application/' + viewingDoc.fileUrl : (viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL)}
               download={viewingDoc?.fileName || 'document.pdf'}
               className="btn btn-outline-primary btn-sm"
             >
@@ -6323,9 +6323,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           </div>
 
           {(() => {
-            const url = viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL;
-            const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || (viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('data:image/'));
-            const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (viewingDoc?.fileUrl && (viewingDoc.fileUrl.includes('data:text/csv') || viewingDoc.fileUrl.includes('data:text/plain') || viewingDoc.fileUrl.includes('data:application/vnd.ms-excel')));
+            let rawUrl = (viewingDoc?.fileUrl && viewingDoc.fileUrl.trim()) ? viewingDoc.fileUrl.trim() : SAMPLE_PDF_DATA_URL;
+            if (rawUrl.startsWith('pdf;base64,')) rawUrl = 'data:application/' + rawUrl;
+            else if (rawUrl.startsWith('base64,')) rawUrl = 'data:application/pdf;' + rawUrl;
+            const url = rawUrl;
+            const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || url.startsWith('data:image/');
+            const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (url.includes('data:text/csv') || url.includes('data:text/plain') || url.includes('data:application/vnd.ms-excel'));
 
             if (isImage) {
               return (

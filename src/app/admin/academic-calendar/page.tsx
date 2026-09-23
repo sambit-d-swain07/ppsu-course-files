@@ -168,6 +168,7 @@ export default function AdminAcademicCalendarPage() {
         } else if (commonFile) {
           semesterFilesMap[sem] = {
             fileName: commonFile.fileName,
+            fileUrl: commonFile.fileUrl,
             isOverride: false
           };
         }

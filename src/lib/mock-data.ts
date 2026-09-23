@@ -490,20 +490,36 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
         adminCal = { fileName: item5Doc.fileName, fileUrl: item5Doc.fileUrl };
       }
 
-      if (adminCal && (adminCal.fileName || adminCal.fileUrl)) {
+      const resolvedFileUrl = adminCal?.fileUrl || item5Doc?.fileUrl || (() => {
+        if (!item5Doc?.subItemsJson) return null;
+        try {
+          const parsed = JSON.parse(item5Doc.subItemsJson);
+          if (parsed.terms) {
+            for (const t of Object.values(parsed.terms) as any[]) {
+              if (t?.commonFile?.fileUrl) return t.commonFile.fileUrl;
+            }
+          }
+          if (parsed.commonFile?.fileUrl) return parsed.commonFile.fileUrl;
+        } catch (e) {}
+        return null;
+      })();
+
+      const resolvedFileName = adminCal?.fileName || item5Doc?.fileName || 'Academic_Calendar.pdf';
+
+      if (adminCal || item5Doc) {
         currentItem = {
           ...currentItem,
           status: 'UPLOADED',
-          fileName: adminCal.fileName || 'Academic_Calendar.pdf',
-          fileUrl: adminCal.fileUrl,
+          fileName: resolvedFileName,
+          fileUrl: resolvedFileUrl,
           isAdminPublished: true,
           isLocked: true,
           subItemsJson: JSON.stringify({
             isAdminPublished: true,
-            termType: adminCal.termType,
-            fileName: adminCal.fileName || 'Academic_Calendar.pdf',
-            fileUrl: adminCal.fileUrl,
-            updatedAt: adminCal.updatedAt
+            termType: adminCal?.termType,
+            fileName: resolvedFileName,
+            fileUrl: resolvedFileUrl,
+            updatedAt: adminCal?.updatedAt || item5Doc?.updatedAt
           })
         };
       } else {
