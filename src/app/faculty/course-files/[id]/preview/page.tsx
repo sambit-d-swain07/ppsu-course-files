@@ -1413,28 +1413,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             );
           }
 
-          if (item.index === 20) {
-            const sigUrl = url || cf.facultySignatureUrl;
-            return (
-              <div key={item.index}>
-                {dividerPage}
-                <div className="preview-page" style={{ ...PAGE }}>
-                  <PageHeader cf={cf} />
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
-                    {item.index}. {item.name}
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '20px', fontSize: '15px' }}>Course Faculty Signature</div>
-                    {sigUrl
-                      ? <img src={sigUrl} alt="Signature" style={{ maxHeight: '160px', maxWidth: '320px', objectFit: 'contain', border: '1px solid #ccc', padding: '8px' }} />
-                      : <div style={{ height: '90px', width: '280px', margin: '0 auto', border: '1px solid #ccc', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '8px', fontSize: '12px', color: '#888' }}>{faculty}</div>
-                    }
-                    <div style={{ marginTop: '14px', fontSize: '13px', color: '#333', fontWeight: '500' }}>Signed by: {cf.facultySignatureName || faculty}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
+
 
           // General items fallback
           if (uploadedFiles.length > 0) {

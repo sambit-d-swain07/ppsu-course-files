@@ -470,25 +470,38 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
       if (item5Doc?.subItemsJson) {
         try {
           const parsed = JSON.parse(item5Doc.subItemsJson);
-          const normSem = normalizeSemesterKey(subject?.semester);
+          const semKey = subject?.semester || item.semester || items.find((i: any) => i.semester)?.semester;
+          const normSem = normalizeSemesterKey(semKey);
           if (parsed.semesters && parsed.semesters[normSem]) {
             adminCal = parsed.semesters[normSem];
+          } else if (parsed.terms) {
+            for (const t of Object.values(parsed.terms) as any[]) {
+              if (t.semesters && t.semesters[normSem]) {
+                adminCal = t.semesters[normSem];
+                break;
+              } else if (t.commonFile) {
+                adminCal = t.commonFile;
+              }
+            }
           }
         } catch (e) {}
       }
+      if (!adminCal && item5Doc && (item5Doc.fileName || item5Doc.fileUrl)) {
+        adminCal = { fileName: item5Doc.fileName, fileUrl: item5Doc.fileUrl };
+      }
 
-      if (adminCal && adminCal.fileName) {
+      if (adminCal && (adminCal.fileName || adminCal.fileUrl)) {
         currentItem = {
           ...currentItem,
           status: 'UPLOADED',
-          fileName: adminCal.fileName,
+          fileName: adminCal.fileName || 'Academic_Calendar.pdf',
           fileUrl: adminCal.fileUrl,
           isAdminPublished: true,
           isLocked: true,
           subItemsJson: JSON.stringify({
             isAdminPublished: true,
             termType: adminCal.termType,
-            fileName: adminCal.fileName,
+            fileName: adminCal.fileName || 'Academic_Calendar.pdf',
             fileUrl: adminCal.fileUrl,
             updatedAt: adminCal.updatedAt
           })
@@ -741,8 +754,10 @@ export async function getCourseFileDetailWithChecklist(id: string) {
 export async function getMergedChecklistItems(courseFileId: string) {
   const [items, submissions] = await Promise.all([getChecklistItemsByCourseFileId(courseFileId), getLabSubmissions(courseFileId)]);
   const subject = await getSubjectForCourseFile(courseFileId);
+  const cf = await getCourseFileById(courseFileId);
   const sharedDocs = subject?.id ? await getSubjectSharedDocuments(subject.id) : [];
-  const schoolSharedDocs = subject?.school ? await getSchoolSharedDocuments(subject.school) : [];
+  const schoolCode = normalizeSchoolCode(subject?.school || cf?.school);
+  const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
   return mergeChecklistItemsInMemory(items, submissions, subject, sharedDocs, schoolSharedDocs);
 }
 

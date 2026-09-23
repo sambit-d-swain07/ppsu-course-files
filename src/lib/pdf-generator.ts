@@ -1001,33 +1001,6 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           layout: standardTableLayout
         });
       }
-    } else if (item.index === 20) {
-      hasStructuredContent = true;
-      structuredContent.push({
-        margin: [0, 40, 0, 0],
-        table: {
-          widths: ['*'],
-          body: [
-            [
-              {
-                fillColor: '#fafafa',
-                margin: [20, 24, 20, 24],
-                stack: [
-                  { text: 'Course Faculty Signature', bold: true, fontSize: 13, alignment: 'center', margin: [0, 0, 0, 20] },
-                  { text: facultyName, bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6] },
-                  { text: `Signed by: ${cf.facultySignatureName || facultyName}`, fontSize: 10, color: '#555555', alignment: 'center' }
-                ]
-              }
-            ]
-          ]
-        },
-        layout: {
-          hLineWidth: () => 1,
-          vLineWidth: () => 1,
-          hLineColor: () => '#cccccc',
-          vLineColor: () => '#cccccc'
-        }
-      });
     }
 
     if (hasStructuredContent) {

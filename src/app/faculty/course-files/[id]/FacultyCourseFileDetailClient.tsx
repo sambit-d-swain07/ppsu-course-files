@@ -1744,6 +1744,31 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         const defaultBatch = access.mode === 'LAB_BATCH' ? access.batch : undefined;
         const parsedResult = parseItem4StudentList(text, defaultBatch);
         studentListJson = JSON.stringify(parsedResult);
+      } else if (itemIndex === 19) {
+        const subs = getSubItems(19) || {};
+        let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
+        const dbItem19 = checklist.find(c => c.itemIndex === 19);
+        if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+          docs.push({
+            id: 'doc-legacy',
+            name: dbItem19.fileName,
+            fileName: dbItem19.fileName,
+            fileUrl: dbItem19.fileUrl,
+            fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+            uploadDate: new Date().toISOString().split('T')[0]
+          });
+        }
+        const newDoc = {
+          id: `doc-${Date.now()}`,
+          name: selectedFile.name.replace(/\.[^/.]+$/, ''),
+          fileName: selectedFile.name,
+          fileUrl: dataUrl,
+          fileType: selectedFile.name.split('.').pop()?.toUpperCase() || 'PDF',
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+        docs.push(newDoc);
+        subs.documents = docs;
+        studentListJson = JSON.stringify(subs);
       }
 
       setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? {
@@ -2178,37 +2203,39 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (isLocked) return;
     if (!item19DocName.trim()) { setActionError('Document name is required'); return; }
     if (!item19DocFile) { setActionError('Please select a file to upload'); return; }
-
-    const subs = getSubItems(19) || {};
-    let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
-    
-    const dbItem19 = checklist.find(c => c.itemIndex === 19);
-    if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
-      docs.push({
-        id: 'doc-legacy',
-        name: 'Combined Lecture Notes',
-        fileName: dbItem19.fileName,
-        fileUrl: dbItem19.fileUrl,
-        fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
-        uploadDate: new Date().toISOString().split('T')[0]
-      });
-    }
-
-    const dataUrl = await uploadFileToServer(item19DocFile);
-    const newDoc = {
-      id: `doc-${Date.now()}`,
-      name: item19DocName.trim(),
-      fileName: item19DocFile.name,
-      fileUrl: dataUrl,
-      fileType: item19DocFile.name.split('.').pop()?.toUpperCase() || 'PDF',
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-
-    docs.push(newDoc);
-    subs.documents = docs;
+    setActionError(''); setActionSuccess('');
+    setUploadingItem(19);
 
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const subs = getSubItems(19) || {};
+      let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
+      
+      const dbItem19 = checklist.find(c => c.itemIndex === 19);
+      if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+        docs.push({
+          id: 'doc-legacy',
+          name: 'Combined Lecture Notes',
+          fileName: dbItem19.fileName,
+          fileUrl: dbItem19.fileUrl,
+          fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+          uploadDate: new Date().toISOString().split('T')[0]
+        });
+      }
+
+      const dataUrl = await uploadFileToServer(item19DocFile);
+      const newDoc = {
+        id: `doc-${Date.now()}`,
+        name: item19DocName.trim(),
+        fileName: item19DocFile.name,
+        fileUrl: dataUrl,
+        fileType: item19DocFile.name.split('.').pop()?.toUpperCase() || 'PDF',
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+
+      docs.push(newDoc);
+      subs.documents = docs;
+
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2219,49 +2246,68 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save document');
+      }
       setActionSuccess(`Document "${newDoc.name}" added to Lecture Notes.`);
       setItem19ModalOpen(false);
       setItem19DocName('');
       setItem19DocFile(null);
-      fetchData();
-    } catch (err: any) { setActionError(err.message); }
+      await fetchData();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to add document');
+    } finally {
+      setUploadingItem(null);
+    }
   };
 
   const handleRemoveItem19Doc = async (docId: string) => {
     if (isLocked) return;
-    const subs = getSubItems(19) || {};
-    let docs = Array.isArray(subs.documents) ? subs.documents : [];
-    
-    const dbItem19 = checklist.find(c => c.itemIndex === 19);
-    if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
-      docs = [{
-        id: 'doc-legacy',
-        name: 'Combined Lecture Notes',
-        fileName: dbItem19.fileName,
-        fileUrl: dbItem19.fileUrl,
-        fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
-        uploadDate: new Date().toISOString().split('T')[0]
-      }];
-    }
-
-    const updatedDocs = docs.filter((d: any) => d.id !== docId);
-    subs.documents = updatedDocs;
+    setActionError(''); setActionSuccess('');
+    setRemovingItem(19);
 
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const subs = getSubItems(19) || {};
+      let docs = Array.isArray(subs.documents) ? subs.documents : [];
+      
+      const dbItem19 = checklist.find(c => c.itemIndex === 19);
+      if (docs.length === 0 && dbItem19?.fileName && dbItem19?.fileUrl) {
+        docs = [{
+          id: 'doc-legacy',
+          name: 'Combined Lecture Notes',
+          fileName: dbItem19.fileName,
+          fileUrl: dbItem19.fileUrl,
+          fileType: dbItem19.fileName.split('.').pop()?.toUpperCase() || 'PDF',
+          uploadDate: new Date().toISOString().split('T')[0]
+        }];
+      }
+
+      const updatedDocs = docs.filter((d: any) => d.id !== docId);
+      subs.documents = updatedDocs;
+
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: 19,
           status: updatedDocs.length > 0 ? 'UPLOADED' : 'EMPTY',
-          fileName: updatedDocs.length > 0 ? updatedDocs[0].fileName : '',
-          fileUrl: updatedDocs.length > 0 ? updatedDocs[0].fileUrl : '',
+          fileName: updatedDocs.length > 0 ? updatedDocs[0].fileName : null,
+          fileUrl: updatedDocs.length > 0 ? updatedDocs[0].fileUrl : null,
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to remove document');
+      }
       setActionSuccess('Document removed from Lecture Notes.');
-      fetchData();
-    } catch (err: any) { setActionError(err.message); }
+      await fetchData();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to remove document');
+    } finally {
+      setRemovingItem(null);
+    }
   };
 
   const handleReplaceItem19Doc = async (docId: string, file: File) => {
