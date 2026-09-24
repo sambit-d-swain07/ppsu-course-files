@@ -262,17 +262,9 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
           Back
         </button>
         <div className="d-flex align-items-center gap-2">
-          <Link href={`/report/${courseFileId}`} className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
-            🖨️ View / Print Form
+          <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
+            👁️ Preview Merged Course File
           </Link>
-          <a href={`/api/course-files/${courseFileId}/merged-report`} className="btn btn-outline-success btn-sm d-flex align-items-center gap-1">
-            Download Merged Report
-          </a>
-          {courseFile.generatedReportPath && (
-            <a href={courseFile.generatedReportPath} download className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
-              Download Report
-            </a>
-          )}
           <span className={`badge-custom ${statusBadgeClass(courseFile.status)}`}>
             {statusLabel(courseFile.status)}
           </span>
