@@ -2872,39 +2872,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         </button>
 
         <div className="d-flex align-items-center gap-2">
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              style={{ fontSize: 11 }}
-                              onClick={handleDownloadCsvTemplate}
-                              title="Download sample CSV template format"
-                            >
-                              📄 Download CSV Template
-                            </Button>
-          <Button
-            size="sm"
-            variant="outline-success"
-            className="fw-bold d-flex align-items-center gap-1 shadow-sm"
-            onClick={() => {
-              setActionSuccess('✓ Progress Saved! You can safely exit and return anytime to continue where you left off.');
-              setTimeout(() => {
-                router.push('/faculty/my-courses');
-              }, 1200);
-            }}
-          >
-            💾 Save &amp; Continue Later
-          </Button>
           <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
             👁️ Preview Merged Course File
           </Link>
-          <Link href={`/report/${courseFileId}`} className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
-            🖨️ View / Print Form
-          </Link>
-          {courseFile.generatedReportPath && (
-            <a href={courseFile.generatedReportPath} download className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
-              Download DOCX Report
-            </a>
-          )}
           <span className={`badge-custom ${statusBadgeClass(courseFile.status)}`}>
             {statusLabel(courseFile.status)}
           </span>

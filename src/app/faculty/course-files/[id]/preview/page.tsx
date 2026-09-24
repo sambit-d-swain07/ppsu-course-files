@@ -526,13 +526,9 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
         <div className="d-flex align-items-center gap-2">
           <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
-          <Button variant="outline-success" size="sm" onClick={() => handleDownloadDocx(code)} disabled={downloadingDocx}>
-            {downloadingDocx ? <><Spinner animation="border" size="sm" className="me-1" /> Preparing DOCX...</> : 'Download DOCX'}
-          </Button>
           <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf} disabled={downloadingPdf}>
             {downloadingPdf ? <><Spinner animation="border" size="sm" className="me-1" /> Generating PDF...</> : '📄 Download PDF Report'}
           </Button>
-          <Button variant="light" size="sm" className="fw-bold" onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
         </div>
       </div>
 
