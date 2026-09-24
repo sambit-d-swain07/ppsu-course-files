@@ -27,8 +27,7 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 17, name: 'PO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 18, name: 'Action to be taken for next year based on CO attainment',              maxScore: 10, required: true  },
-  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  },
-  { index: 20, name: 'Course Faculty Signature',                                             maxScore: 10, required: true  }
+  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  }
 ];
 
 /** Indices of checklist items that are required — derived from CHECKLIST_ITEMS to keep in sync. */
@@ -1737,7 +1736,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setUploadingItem(itemIndex);
     try {
       const dataUrl = await uploadFileToServer(selectedFile);
-      const isSig = itemIndex === 20 && access.mode !== 'LAB_BATCH';
       let studentListJson: string | undefined;
       if (itemIndex === 4 && (/\.(csv|txt)$/i.test(selectedFile.name) || selectedFile.type === 'text/csv' || selectedFile.type === 'text/plain')) {
         const text = await selectedFile.text();
@@ -1792,16 +1790,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       });
       if (!res.ok) {
         throw new Error('Upload failed');
-      }
-
-      if (isSig) {
-        await fetch(`/api/course-files/${courseFileId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            facultySignatureUrl: dataUrl
-          })
-        });
       }
 
       setActionSuccess(`Item #${itemIndex} (${selectedFile.name}) uploaded successfully.`);
@@ -3142,7 +3130,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             const isItem8 = item.index === 8;
             const isIA = item.index === 11 || item.index === 12;
             const isUniv = item.index === 15;
-            const isSigItem = item.index === 20;
             const isRestricted = access.mode === 'LAB_BATCH' && !LAB_TEACHER_ITEM_INDICES.includes(item.index);
             const isLockedByStudentList = false;
             const isResumed = item.index === resumedItemIndex;
@@ -4778,15 +4765,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </Button>
                             {!isLocked && (
                               <>
-                                {!isSigItem && (
-                                  <label
-                                    className="btn btn-outline-secondary btn-sm m-0"
-                                    style={{ fontSize: 12, cursor: 'pointer' }}
-                                  >
-                                    Replace
-                                    <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
-                                  </label>
-                                )}
+                                <label
+                                  className="btn btn-outline-secondary btn-sm m-0"
+                                  style={{ fontSize: 12, cursor: 'pointer' }}
+                                >
+                                  Replace
+                                  <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                                </label>
                                 <button
                                   className="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"
                                   style={{ fontSize: 12 }}
@@ -4818,8 +4803,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               fontSize: 12, border: 'none', cursor: isLocked ? 'not-allowed' : 'pointer'
                             }}
                           >
-                            {isSigItem ? 'Upload Signature File' : 'Upload File'}
-                            <input type="file" className="d-none" accept={isSigItem ? ".pdf,.png,.jpg,.jpeg" : ".pdf"} disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
+                            Upload File
+                            <input type="file" className="d-none" accept=".pdf" disabled={isLocked} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(item.index, item.name, f); e.currentTarget.value = ''; }} />
                           </label>
                         )
                       }
@@ -5615,45 +5600,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   );
                 })()}
-
-                {/* Item 20: Lab Teacher Signatures Display for Course Teacher */}
-                {isSigItem && !isLabTeacher && dbItem.batchSubmissions && dbItem.batchSubmissions.length > 0 && (
-                  <div className="mt-3 ps-4 border-start border-2 border-primary ms-2 w-100">
-                    <div className="small fw-bold text-navy-900 mb-2">Lab Teacher Signatures by Batch</div>
-                    <Row className="g-2 small">
-                      {dbItem.batchSubmissions.map((bSub: any) => (
-                        <Col xs={12} md={4} key={bSub.batch}>
-                          <div className="p-2 bg-light rounded border h-100 d-flex flex-column justify-content-between">
-                            <div>
-                              <div className="fw-bold mb-1 d-flex align-items-center justify-content-between">
-                                <span>Batch {bSub.batch} ({bSub.facultyName || 'Lab Teacher'})</span>
-                                {bSub.status === 'SUBMITTED' ? (
-                                  <span className="badge bg-success" style={{ fontSize: 9 }}>Submitted</span>
-                                ) : bSub.fileName ? (
-                                  <span className="badge bg-info" style={{ fontSize: 9 }}>Uploaded</span>
-                                ) : (
-                                  <span className="badge bg-secondary" style={{ fontSize: 9 }}>Pending</span>
-                                )}
-                              </div>
-                              {bSub.fileName ? (
-                                <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {bSub.fileName}</div>
-                              ) : (
-                                <div className="text-muted mb-1" style={{ fontSize: 11 }}>✗ Signature not uploaded</div>
-                              )}
-                            </div>
-                            {bSub.fileName && (
-                              <div className="mt-2">
-                                <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Signature — Batch ${bSub.batch}`, fileName: bSub.fileName, fileUrl: bSub.fileUrl })}>
-                                  👁️ View Signature
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </Col>
-                      ))}
-                    </Row>
-                  </div>
-                )}
 
                 {/* Item 15: University Exam Sub-uploads & Grade Sheet Result Analysis */}
                 {isUniv && !isRestricted && (

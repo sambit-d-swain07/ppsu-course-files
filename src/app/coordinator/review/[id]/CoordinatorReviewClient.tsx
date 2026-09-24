@@ -25,8 +25,7 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet', maxScore: 10 },
   { index: 17, name: 'PO Attainment output sheet', maxScore: 10 },
   { index: 18, name: 'Action to be taken for next year based on CO attainment', maxScore: 10 },
-  { index: 19, name: 'Lecture notes', maxScore: 20 },
-  { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
+  { index: 19, name: 'Lecture notes', maxScore: 20 }
 ];
 
 const MAX_TOTAL = 200;
@@ -118,11 +117,11 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
       const initScores: Record<number, number> = {};
       const initRemarks: Record<number, string> = {};
       (Array.isArray(data.checklistItems) ? data.checklistItems : []).filter(Boolean).forEach((cli: any) => {
-        initScores[cli.itemIndex] = cli.score ?? (cli.itemIndex === 20 ? 10 : 0);
+        initScores[cli.itemIndex] = cli.score ?? 0;
         initRemarks[cli.itemIndex] = cli.remarks ?? '';
       });
       CHECKLIST_ITEMS.forEach((item) => {
-        if (initScores[item.index] === undefined) initScores[item.index] = item.index === 20 ? 10 : 0;
+        if (initScores[item.index] === undefined) initScores[item.index] = 0;
         if (initRemarks[item.index] === undefined) initRemarks[item.index] = '';
       });
       setScores(initScores);
@@ -146,7 +145,6 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
   if (!courseFile) return <Alert variant="danger">Course file not found.</Alert>;
 
   const totalScore = Object.entries(scores)
-    .filter(([k]) => Number(k) !== 20)
     .reduce((sum, [, s]) => sum + (Number(s) || 0), 0);
   const rating = getRating(totalScore);
   const scorePercent = Math.round((totalScore / MAX_TOTAL) * 100);
@@ -162,7 +160,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
   };
 
   const handleScore = (idx: number, val: number) => {
-    if (idx === 20 || reviewLocked) return;
+    if (reviewLocked) return;
     const max = idx === 19 ? 20 : 10;
     setScores((prev) => ({ ...prev, [idx]: Math.max(0, Math.min(max, isNaN(val) ? 0 : val)) }));
   };
@@ -190,7 +188,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
     try {
       const itemsPayload = CHECKLIST_ITEMS.map((item) => ({
         itemIndex: item.index,
-        score: scores[item.index] ?? (item.index === 20 ? 10 : 0),
+        score: scores[item.index] ?? 0,
         remarks: itemRemarks[item.index] ?? ''
       }));
 
@@ -823,47 +821,37 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                     </div>
                   </Col>
 
-                  {/* Score & Remarks Columns (Hidden for Item 20 Signature) */}
-                  {item.index === 20 ? (
-                    <Col xs={12} md={6} className="d-flex align-items-center">
-                      <div className="text-secondary small font-mono-ppsu bg-light p-2 rounded border w-100">
-                        Faculty Signature Attachment (Non-scored)
-                      </div>
-                    </Col>
-                  ) : (
-                    <>
-                      {/* Score Column */}
-                      <Col xs={12} md={2}>
-                        <Form.Label className="small text-secondary mb-1 d-block fw-semibold">Score (max {item.maxScore})</Form.Label>
-                        <Form.Control
-                          id={`score-item-${item.index}`}
-                          type="number"
-                          min={0}
-                          max={item.maxScore}
-                          value={score}
-                          disabled={reviewLocked}
-                          onChange={(e) => handleScore(item.index, parseInt(e.target.value))}
-                          className="ppsu-input text-center font-mono-ppsu py-1"
-                          style={{ maxWidth: 80 }}
-                        />
-                      </Col>
+                  {/* Score & Remarks Columns */}
+                  {/* Score Column */}
+                  <Col xs={12} md={2}>
+                    <Form.Label className="small text-secondary mb-1 d-block fw-semibold">Score (max {item.maxScore})</Form.Label>
+                    <Form.Control
+                      id={`score-item-${item.index}`}
+                      type="number"
+                      min={0}
+                      max={item.maxScore}
+                      value={score}
+                      disabled={reviewLocked}
+                      onChange={(e) => handleScore(item.index, parseInt(e.target.value))}
+                      className="ppsu-input text-center font-mono-ppsu py-1"
+                      style={{ maxWidth: 80 }}
+                    />
+                  </Col>
 
-                      {/* Remarks Column */}
-                      <Col xs={12} md={4}>
-                        <Form.Label className="small text-secondary mb-1 d-block fw-semibold">Remarks / Suggestions</Form.Label>
-                        <Form.Control
-                          id={`remark-item-${item.index}`}
-                          type="text"
-                          placeholder="Optional feedback…"
-                          value={itemRemarks[item.index] ?? ''}
-                          disabled={reviewLocked}
-                          onChange={(e) => setItemRemarks((prev) => ({ ...prev, [item.index]: e.target.value }))}
-                          className="ppsu-input py-1"
-                          style={{ fontSize: 13 }}
-                        />
-                      </Col>
-                    </>
-                  )}
+                  {/* Remarks Column */}
+                  <Col xs={12} md={4}>
+                    <Form.Label className="small text-secondary mb-1 d-block fw-semibold">Remarks / Suggestions</Form.Label>
+                    <Form.Control
+                      id={`remark-item-${item.index}`}
+                      type="text"
+                      placeholder="Optional feedback…"
+                      value={itemRemarks[item.index] ?? ''}
+                      disabled={reviewLocked}
+                      onChange={(e) => setItemRemarks((prev) => ({ ...prev, [item.index]: e.target.value }))}
+                      className="ppsu-input py-1"
+                      style={{ fontSize: 13 }}
+                    />
+                  </Col>
                 </Row>
               </div>
             );
@@ -893,19 +881,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
 
           {/* Verification Details Table / Signatures */}
           <Row className="g-3 mb-4 p-3 bg-light rounded border">
-            <Col xs={12} md={6}>
-              <Form.Label className="small fw-semibold text-secondary mb-1">Course Faculty Signature (Item 20 Upload)</Form.Label>
-              <div className="p-2 bg-white rounded border d-flex align-items-center justify-content-between">
-                <span className="fw-bold text-success small">
-                  ✓ Uploaded (Signature Scan)
-                </span>
-                <Button size="sm" variant="outline-info" style={{ fontSize: 11 }} onClick={() => setViewingDoc({ title: 'Course Faculty Signature', fileName: item20Sig?.fileName || 'faculty_signature_scan.png', fileUrl: courseFile.facultySignatureUrl })}>
-                  👁️ View Signature
-                </Button>
-              </div>
-            </Col>
-
-            <Col xs={12} md={6}>
+            <Col xs={12} md={12}>
               <Form.Label className="small fw-semibold text-secondary mb-1">Reviewer Signature (File Upload)</Form.Label>
               <div className="d-flex align-items-center gap-2">
                 <Form.Control

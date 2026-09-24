@@ -22,8 +22,7 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet', maxScore: 10 },
   { index: 17, name: 'PO Attainment output sheet', maxScore: 10 },
   { index: 18, name: 'Action to be taken for next year based on CO attainment', maxScore: 10 },
-  { index: 19, name: 'Lecture notes (Out of 20 Marks)', maxScore: 20 },
-  { index: 20, name: 'Course Faculty Signature', maxScore: 10 }
+  { index: 19, name: 'Lecture notes (Out of 20 Marks)', maxScore: 20 }
 ];
 
 export default function ReportPage({ params }: { params: Promise<{ id: string }> }) {
@@ -58,8 +57,6 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
   const totalScore = courseFile.totalScore ?? checklist.reduce((sum, item) => sum + (item.score || 0), 0);
   const ratingLabel = courseFile.rating || (totalScore > 175 ? 'Excellent' : totalScore >= 151 ? 'Good' : totalScore >= 126 ? 'Moderate & Update' : totalScore >= 101 ? 'Fair & Revise' : 'Poor & Revise');
-
-  const item20Sig = checklist.find((c) => c.itemIndex === 20);
 
   return (
     <div style={{ background: '#fff', minHeight: '100vh', color: '#000', fontFamily: 'Arial, sans-serif' }}>
@@ -158,7 +155,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
                     <div className="fw-semibold">{item.name}</div>
                   </td>
                   <td className="text-center fw-bold font-mono-ppsu">
-                    {dbItem.score !== undefined ? dbItem.score : (item.index === 20 ? 10 : '-')}
+                    {dbItem.score !== undefined ? dbItem.score : '-'}
                   </td>
                   <td>{dbItem.remarks || '—'}</td>
                 </tr>
@@ -179,10 +176,10 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             <tr>
               <td className="bg-light fw-bold" style={{ width: '30%' }}>Course Faculty Signature:</td>
               <td style={{ width: '70%' }}>
-                {item20Sig?.fileName || courseFile.facultySignatureUrl || courseFile.facultySignatureName ? (
+                {courseFile.facultySignatureUrl || courseFile.facultySignatureName ? (
                   <div className="d-flex justify-content-between align-items-center">
                     <span className="fw-bold text-primary font-mono-ppsu">
-                      ✍️ {item20Sig?.fileName || courseFile.facultySignatureName || 'faculty_signature_scan.png'}
+                      ✍️ {courseFile.facultySignatureName || 'faculty_signature_scan.png'}
                     </span>
                     <span className="small text-muted">
                       {courseFile.facultySignedAt ? new Date(courseFile.facultySignedAt).toLocaleString('en-IN') : 'Verified'}

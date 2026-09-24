@@ -22,8 +22,7 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet' },
   { index: 17, name: 'PO Attainment output sheet' },
   { index: 18, name: 'Action to be taken for next year based on CO attainment' },
-  { index: 19, name: 'Lecture notes (Out of 20 Marks)' },
-  { index: 20, name: 'Course Faculty Signature' }
+  { index: 19, name: 'Lecture notes (Out of 20 Marks)' }
 ];
 
 const TH: React.CSSProperties = { border: '1px solid #000', padding: '6px 10px', background: '#f5f5f5', fontWeight: 'bold', textAlign: 'center', fontSize: '12px' };
