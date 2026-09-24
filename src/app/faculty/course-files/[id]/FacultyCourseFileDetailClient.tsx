@@ -5398,12 +5398,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     <div className="mt-3 ps-4 border-start border-2 border-info ms-2 w-100">
                       {selectedCeCriteria.length === 0 ? (
                         <div className="alert alert-info small py-3 mb-0 d-flex align-items-center gap-2">
-                          <span>ℹ️ <strong>No Continuous Evaluation criteria selected in Item 9 yet.</strong> Select evaluation criteria in <strong>Item 9 (Theory Continuous Evaluation Rubrics)</strong> — such as Project, Assignment, Case Study, Field Visit, etc. — to automatically generate guidelines document upload slots, marks statements, and result analysis sections here.</span>
+                          <span>ℹ️ <strong>No Continuous Evaluation criteria selected in Item 9 yet.</strong> Select evaluation criteria in <strong>Item 9 (Theory Continuous Evaluation Rubrics)</strong> — such as Project, Assignment, Case Study, Field Visit, etc. — to automatically generate marks statements and result analysis sections here.</span>
                         </div>
                       ) : (
                         <div className="d-flex flex-column gap-4">
                           {selectedCeCriteria.map((crit: any, idx: number) => {
-                            const fileData = ceGuidelines[crit.id];
                             const critLabel = toTitleCase(crit.label || 'Criterion');
                             const maxMarks = crit.max || 10;
 
@@ -5441,39 +5440,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                   <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle" style={{ fontSize: 10 }}>Auto-driven from Item 9</span>
                                 </Card.Header>
                                 <Card.Body className="p-3">
-                                  {/* 1. Guidelines / Documents Upload Slot */}
-                                  <div className="p-2.5 bg-light rounded border mb-3">
-                                    <div className="fw-bold text-dark small mb-1">📋 Guidelines / Documents related to {critLabel}</div>
-                                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                      {fileData?.fileName ? (
-                                        <div className="text-success fw-semibold font-mono-ppsu small">✓ {fileData.fileName}</div>
-                                      ) : (
-                                        <div className="text-muted small">✗ Guidelines document not uploaded yet</div>
-                                      )}
-                                      <div className="d-flex align-items-center gap-1">
-                                        {fileData?.fileName && (
-                                          <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Guidelines — ${critLabel}`, fileName: fileData.fileName, fileUrl: fileData.fileUrl })}>
-                                            👁️ View
-                                          </Button>
-                                        )}
-                                        {!isLocked && (
-                                          <>
-                                            <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px' }}>
-                                              {fileData?.fileName ? 'Replace' : 'Upload Guidelines File (PDF)'}
-                                              <input type="file" className="d-none" accept=".pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCeGuidelineUpload(crit.id, file); }} />
-                                            </label>
-                                            {fileData?.fileName && (
-                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleCeGuidelineUpload(crit.id, undefined)}>
-                                                Remove
-                                              </Button>
-                                            )}
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* 2. Marks Statement (Read-only pull from Item 9) */}
+                                  {/* 1. Marks Statement (Read-only pull from Item 9) */}
                                   <div className="mb-3">
                                     <div className="fw-bold text-dark small mb-2 d-flex align-items-center justify-content-between">
                                       <span>📝 Marks Statement ({critLabel})</span>
