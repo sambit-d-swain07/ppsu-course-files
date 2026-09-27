@@ -524,8 +524,22 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           <h6 className="fw-bold mb-0 text-white">Merged Course File Preview</h6>
           <small className="text-white-50">{code} — {title} · {faculty}</small>
         </div>
-        <div className="d-flex align-items-center gap-2">
-          <Button variant="outline-light" size="sm" onClick={() => window.history.back()}>Back</Button>
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          <Button variant="outline-light" size="sm" onClick={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              window.close();
+            }
+          }}>
+            ← Back / Close
+          </Button>
+          <a href={`/report/${courseFileId}`} target="_blank" className="btn btn-outline-info btn-sm fw-semibold">
+            📋 Official Evaluation Report
+          </a>
+          <Button variant="light" size="sm" className="fw-bold" onClick={() => window.print()}>
+            🖨️ Print Preview
+          </Button>
           <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf} disabled={downloadingPdf}>
             {downloadingPdf ? <><Spinner animation="border" size="sm" className="me-1" /> Generating PDF...</> : '📄 Download PDF Report'}
           </Button>

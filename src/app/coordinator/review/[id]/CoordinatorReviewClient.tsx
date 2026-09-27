@@ -179,10 +179,6 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
       setActionError('Please tick the compulsory review declaration checkbox.');
       return;
     }
-    if (!reviewerSignatureUrl && !reviewerSignatureFile) {
-      setActionError('Evaluator Signature file upload is required.');
-      return;
-    }
 
     setSaveLoading(true); setActionError(''); setActionSuccess('');
     try {
@@ -367,20 +363,27 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               </span>
                             </div>
                             {[
-                              { k: 'vision', l: '(a) Vision' },
-                              { k: 'mission', l: '(b) Mission' },
-                              { k: 'peo', l: '(c) PEO' },
-                              { k: 'pso', l: '(d) PSO' },
-                              { k: 'po', l: '(e) PO' }
+                              { k: 'vision', l: '(a) Institute Vision' },
+                              { k: 'mission', l: '(b) Institute Mission' },
+                              { k: 'deptVision', l: '(c) Department Vision' },
+                              { k: 'deptMission', l: '(d) Department Mission' },
+                              { k: 'peo', l: '(e) PEO' },
+                              { k: 'pso', l: '(f) PSO' },
+                              { k: 'po', l: '(g) PO' }
                             ].map((sub) => {
                               const sFile = subItems?.[sub.k];
+                              const textVal = typeof sFile?.textContent === 'string' ? sFile.textContent : typeof sFile === 'string' ? sFile : '';
+                              const hasContent = Boolean(sFile?.fileName || sFile?.fileUrl || textVal.trim());
+                              const viewUrl = sFile?.fileUrl || (textVal.trim() ? 'data:text/plain;charset=utf-8,' + encodeURIComponent(textVal) : undefined);
+                              const viewName = sFile?.fileName || `${sub.k}.txt`;
+
                               return (
                                 <div key={sub.k} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
                                   <span className="fw-semibold text-truncate">{sub.l}</span>
-                                  {sFile?.fileName ? (
+                                  {hasContent ? (
                                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.l}`, fileName: sFile.fileName, fileUrl: sFile.fileUrl })}>
+                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Available</span>
+                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.l}`, fileName: viewName, fileUrl: viewUrl })}>
                                         👁️ View
                                       </Button>
                                     </div>
@@ -871,39 +874,9 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
             />
           </Form.Group>
 
-          {/* Verification Details Table / Signatures */}
+          {/* Verification Details Confirmation */}
           <Row className="g-3 mb-4 p-3 bg-light rounded border">
-            <Col xs={12} md={12}>
-              <Form.Label className="small fw-semibold text-secondary mb-1">Reviewer Signature (File Upload)</Form.Label>
-              <div className="d-flex align-items-center gap-2">
-                <Form.Control
-                  key={reviewerSignatureUrl || 'empty-sig'}
-                  type="file"
-                  size="sm"
-                  disabled={reviewLocked}
-                  onChange={async (e: any) => {
-                    const f = e.target.files?.[0];
-                    if (f) {
-                      setReviewerSignatureFile(f);
-                      const url = await readFileAsDataUrl(f);
-                      setReviewerSignatureUrl(url);
-                    }
-                  }}
-                />
-                {(reviewerSignatureFile || reviewerSignatureUrl) && (
-                  <>
-                    <Button size="sm" variant="outline-info" style={{ fontSize: 11 }} onClick={() => setViewingDoc({ title: 'Reviewer Signature', fileName: reviewerSignatureFile?.name || 'reviewer_sig.png', fileUrl: reviewerSignatureUrl })}>
-                      👁️ View
-                    </Button>
-                    <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} disabled={reviewLocked} onClick={() => { setReviewerSignatureFile(null); setReviewerSignatureUrl(''); }}>
-                      🗑️ Remove
-                    </Button>
-                  </>
-                )}
-              </div>
-            </Col>
-
-            <Col xs={12} className="mt-3">
+            <Col xs={12}>
               <div className="p-3 rounded" style={{ background: '#fff8e6', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 6px rgba(245,158,11,0.1)' }}>
                 <Form.Check
                   type="checkbox"
@@ -966,11 +939,11 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
               <button
                 id="btn-submit-evaluation"
                 className="btn px-4 py-2 fw-semibold"
-                disabled={reviewLocked || saveLoading || !reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)}
+                disabled={reviewLocked || saveLoading || !reviewerConfirmed}
                 style={{
-                  background: (!reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)) ? '#cbd5e1' : 'var(--ppsu-accent)',
+                  background: !reviewerConfirmed ? '#cbd5e1' : 'var(--ppsu-accent)',
                   color: '#fff', border: 'none',
-                  cursor: (!reviewerConfirmed || (!reviewerSignatureFile && !reviewerSignatureUrl)) ? 'not-allowed' : 'pointer'
+                  cursor: !reviewerConfirmed ? 'not-allowed' : 'pointer'
                 }}
                 onClick={() => submitEvaluation()}
               >
