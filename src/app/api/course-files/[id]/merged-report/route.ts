@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCourseFileById, getMergedChecklistItems, getSubjectById } from '@/lib/mock-data';
+import { getCourseFileById, getMergedChecklistItems, getSubjectById, getUserById } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 
@@ -14,7 +14,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     const courseFile = await getCourseFileById(id);
     if (!courseFile) return noStoreJson({ error: 'Course file not found' }, { status: 404 });
     const subject = courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null;
-    if (payload.role === 'COORDINATOR' && subject?.evaluatorId !== payload.userId) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
+    const faculty = courseFile.facultyId ? await getUserById(courseFile.facultyId) : null;
+    const isAssignedEvaluator =
+      (subject?.evaluatorId && subject.evaluatorId === payload.userId) ||
+      (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId === payload.userId) ||
+      (!subject?.evaluatorId && !faculty?.assignedCoordinatorId);
+    if (payload.role === 'COORDINATOR' && !isAssignedEvaluator) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
 
     const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
     const checklist = await getMergedChecklistItems(id);

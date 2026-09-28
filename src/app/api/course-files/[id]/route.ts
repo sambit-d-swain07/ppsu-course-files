@@ -192,7 +192,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     // Coordinator assignment guard & DRAFT submission gate
     if (payload.role === 'COORDINATOR') {
-      if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
+      const isAssignedEvaluator =
+        (subject?.evaluatorId && subject.evaluatorId === payload.userId) ||
+        (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId === payload.userId) ||
+        (!subject?.evaluatorId && !faculty?.assignedCoordinatorId);
+      if (!isAssignedEvaluator) {
         return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
       if (['DRAFT', 'NOT_SUBMITTED'].includes(courseFile.status) && !isOwner && !isCourseTeacher) {
@@ -385,7 +389,11 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
     // Coordinator assignment guard
     if (payload.role === 'COORDINATOR') {
-      if (subject ? subject.evaluatorId !== payload.userId : faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId !== payload.userId) {
+      const isAssignedEvaluator =
+        (subject?.evaluatorId && subject.evaluatorId === payload.userId) ||
+        (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId === payload.userId) ||
+        (!subject?.evaluatorId && !faculty?.assignedCoordinatorId);
+      if (!isAssignedEvaluator) {
         return noStoreJson({ error: 'Forbidden: Faculty member is not assigned to you' }, { status: 403 });
       }
     } else if (payload.role === 'FACULTY' && !isOwner && !isCourseTeacher && !isCourseCoordinator && !isLabTeacher) {

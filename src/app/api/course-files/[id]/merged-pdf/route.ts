@@ -29,7 +29,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     }
 
     const subject = courseFile.subject || (courseFile.subjectId ? await getSubjectById(courseFile.subjectId) : null);
-    if (payload.role === 'COORDINATOR' && subject?.evaluatorId !== payload.userId) {
+    const faculty = courseFile.faculty;
+    const isAssignedEvaluator =
+      (subject?.evaluatorId && subject.evaluatorId === payload.userId) ||
+      (faculty?.assignedCoordinatorId && faculty.assignedCoordinatorId === payload.userId) ||
+      (!subject?.evaluatorId && !faculty?.assignedCoordinatorId);
+    if (payload.role === 'COORDINATOR' && !isAssignedEvaluator) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
