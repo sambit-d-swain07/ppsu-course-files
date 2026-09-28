@@ -91,8 +91,8 @@ function PageHeader({ cf }: { cf: any }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <img src="/PPSUNAACA+Logo.png" alt="PPSU" style={{ height: '46px', maxWidth: '300px', objectFit: 'contain' }} />
       </div>
-      <div style={{ background: '#4d8e28', color: '#fff', padding: '6px 14px', borderRadius: '4px 12px 4px 4px', fontWeight: 'bold', fontSize: '13px', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
-        {schoolName}
+      <div>
+        <img src="/school-engineering-logo.png" alt={schoolName} style={{ height: '38px', width: 'auto', objectFit: 'contain' }} />
       </div>
     </div>
   );

@@ -64,7 +64,20 @@ function getLogoBase64(): string {
   return '';
 }
 
-function buildPageHeader(schoolName: string, hasLogo: boolean) {
+function getSchoolLogoBase64(): string {
+  try {
+    const schoolLogoPath = path.join(process.cwd(), 'public', 'school-engineering-logo.png');
+    if (fs.existsSync(schoolLogoPath)) {
+      const fileBuffer = fs.readFileSync(schoolLogoPath);
+      return `data:image/png;base64,${fileBuffer.toString('base64')}`;
+    }
+  } catch (e) {
+    console.error('Error reading school logo file:', e);
+  }
+  return '';
+}
+
+function buildPageHeader(schoolName: string, hasLogo: boolean, hasSchoolLogo?: boolean) {
   return {
     table: {
       widths: ['*', 'auto'],
@@ -73,15 +86,17 @@ function buildPageHeader(schoolName: string, hasLogo: boolean) {
           hasLogo
             ? { image: 'logo', fit: [180, 34], margin: [0, 0, 0, 4] }
             : { text: 'P P SAVANI UNIVERSITY', bold: true, fontSize: 13 },
-          {
-            text: `  ${schoolName}  `,
-            bold: true,
-            fontSize: 10,
-            color: '#ffffff',
-            fillColor: '#4d8e28',
-            alignment: 'center',
-            margin: [2, 4, 2, 4]
-          }
+          hasSchoolLogo
+            ? { image: 'schoolLogo', fit: [110, 30], alignment: 'right', margin: [0, 0, 0, 4] }
+            : {
+                text: `  ${schoolName}  `,
+                bold: true,
+                fontSize: 10,
+                color: '#ffffff',
+                fillColor: '#4d8e28',
+                alignment: 'center',
+                margin: [2, 4, 2, 4]
+              }
         ]
       ]
     },
@@ -338,6 +353,8 @@ const standardTableLayout = {
 export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any): Promise<Buffer> {
   const logoDataUri = getLogoBase64();
   const hasLogo = Boolean(logoDataUri);
+  const schoolLogoDataUri = getSchoolLogoBase64();
+  const hasSchoolLogo = Boolean(schoolLogoDataUri);
 
   const dbi = (idx: number) => checklist.find((c) => c.itemIndex === idx);
   const subs = (idx: number): any => {
@@ -377,7 +394,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
         fontSize: 10,
         lineHeight: 1.15
       },
-      images: hasLogo ? { logo: logoDataUri } : {},
+      images: { ...(hasLogo ? { logo: logoDataUri } : {}), ...(hasSchoolLogo ? { schoolLogo: schoolLogoDataUri } : {}) },
       content: docContent
     };
     const chunkPdf = pdfmake.createPdf(docDef);
@@ -443,7 +460,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     { text: '(Course File)', fontSize: 14, bold: true, alignment: 'center', margin: [0, 0, 0, 0] },
 
     { text: '', pageBreak: 'before' },
-    buildPageHeader(schoolName, hasLogo),
+    buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
     { text: 'Table of Content', fontSize: 18, bold: true, alignment: 'center', margin: [0, 8, 0, 16] },
     {
       table: {
@@ -1006,7 +1023,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
       const chunk = [
         ...itemDividerContent,
         { text: '', pageBreak: 'before' },
-        buildPageHeader(schoolName, hasLogo),
+        buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
         {
           text: `${item.index}. ${item.name.toUpperCase()}`,
           fontSize: 12,
@@ -1030,7 +1047,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
       if (!appendedAny) {
         const noticeChunk = [
           { text: '', pageBreak: 'before' },
-          buildPageHeader(schoolName, hasLogo),
+          buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
           {
             text: `${item.index}. ${item.name.toUpperCase()}`,
             fontSize: 12,
@@ -1047,7 +1064,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
       const chunk = [
         ...itemDividerContent,
         { text: '', pageBreak: 'before' },
-        buildPageHeader(schoolName, hasLogo),
+        buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
         {
           text: `${item.index}. ${item.name.toUpperCase()}`,
           fontSize: 12,
