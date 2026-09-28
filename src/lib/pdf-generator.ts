@@ -84,10 +84,10 @@ function buildPageHeader(schoolName: string, hasLogo: boolean, hasSchoolLogo?: b
       body: [
         [
           hasLogo
-            ? { image: 'logo', fit: [180, 34], margin: [0, 0, 0, 4] }
+            ? { image: 'logo', fit: [170, 32], margin: [0, 0, 0, 2] }
             : { text: 'P P SAVANI UNIVERSITY', bold: true, fontSize: 13 },
           hasSchoolLogo
-            ? { image: 'schoolLogo', fit: [110, 30], alignment: 'right', margin: [0, 0, 0, 4] }
+            ? { image: 'schoolLogo', fit: [115, 26], alignment: 'right', margin: [0, 0, 0, 2] }
             : {
                 text: `  ${schoolName}  `,
                 bold: true,

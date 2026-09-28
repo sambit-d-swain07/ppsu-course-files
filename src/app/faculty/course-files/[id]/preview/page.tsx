@@ -87,12 +87,12 @@ function calcStudentAverages(row: any, numP: number) {
 function PageHeader({ cf }: { cf: any }) {
   const schoolName = cf.school || cf.faculty?.school || 'School of Engineering';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '24px', fontFamily: "'Times New Roman', Times, serif" }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '24px', fontFamily: "'Times New Roman', Times, serif" }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <img src="/PPSUNAACA+Logo.png" alt="PPSU" style={{ height: '46px', maxWidth: '300px', objectFit: 'contain' }} />
+        <img src="/PPSUNAACA+Logo.png" alt="PPSU" style={{ height: '42px', maxWidth: '280px', objectFit: 'contain' }} />
       </div>
-      <div>
-        <img src="/school-engineering-logo.png" alt={schoolName} style={{ height: '38px', width: 'auto', objectFit: 'contain' }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <img src="/school-engineering-logo.png" alt={schoolName} style={{ height: '32px', width: 'auto', objectFit: 'contain' }} />
       </div>
     </div>
   );
