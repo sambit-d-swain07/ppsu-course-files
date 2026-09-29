@@ -613,7 +613,44 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           if (item.index === 1) {
             const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
             const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
-            const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.length > 0;
+            const item1Mode: string = sb?.item1Mode || 'TEXT';
+
+            if (item1Mode === 'UPLOAD') {
+              // UPLOAD MODE: collect all per-section uploaded files
+
+              const uploadFiles: { fileName: string; fileUrl: string }[] = [];
+              subKeys.forEach((k) => {
+                if (sb?.[k]?.fileUrl) uploadFiles.push({ fileName: sb[k].fileName || `${k}.pdf`, fileUrl: sb[k].fileUrl });
+              });
+              customSecs.forEach((sec: any) => {
+                if (sec?.fileUrl) uploadFiles.push({ fileName: sec.fileName || `${sec.title || 'section'}.pdf`, fileUrl: sec.fileUrl });
+              });
+              // Also include top-level shared files
+              const allFiles = uploadFiles.length > 0 ? uploadFiles : uploadedFiles;
+              if (allFiles.length > 0) {
+                return (
+                  <div key={item.index}>
+                    {dividerPage}
+                    <UploadedFileEmbeds files={allFiles} />
+                  </div>
+                );
+              }
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <div className="preview-page" style={{ ...PAGE }}>
+                    <PageHeader cf={cf} />
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
+                      {item.index}. {item.name}
+                    </div>
+                    <Pending name={item.name} />
+                  </div>
+                </div>
+              );
+            }
+
+            // TEXT MODE
+            const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.some((s: any) => s?.textContent?.trim());
             if (hasAnyText) {
               return (
                 <div key={item.index}>
@@ -702,7 +739,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
                                 </thead>
                                 <tbody>
                                   {lines.map((line: string, idx: number) => {
-                                    const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                    const cleanText = line.replace(/^\d+[\.]\s*/, '').trim() || line;
                                     return (
                                       <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
                                         <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>

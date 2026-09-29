@@ -357,9 +357,12 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                         {/* SECTION 23: Sub-items display with Clean Status + View */}
                         {item.index === 1 ? (
                           <div className="mt-2 small text-secondary">
-                            <div className="mb-2">
+                            <div className="mb-2 d-flex align-items-center gap-2 flex-wrap">
                               <span className="badge bg-primary text-white" style={{ fontSize: 10 }}>
                                 School: {subItems?.school || 'SOE'}
+                              </span>
+                              <span className={`badge ${subItems?.item1Mode === 'UPLOAD' ? 'bg-info' : 'bg-success'} text-white`} style={{ fontSize: 10 }}>
+                                Mode: {subItems?.item1Mode === 'UPLOAD' ? 'Upload PDF' : 'Enter Text'}
                               </span>
                             </div>
                             {[
@@ -372,9 +375,14 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                               { k: 'po', l: '(g) PO' }
                             ].map((sub) => {
                               const sFile = subItems?.[sub.k];
+                              const mode: string = subItems?.item1Mode || 'TEXT';
                               const textVal = typeof sFile?.textContent === 'string' ? sFile.textContent : typeof sFile === 'string' ? sFile : '';
-                              const hasContent = Boolean(sFile?.fileName || sFile?.fileUrl || textVal.trim());
-                              const viewUrl = sFile?.fileUrl || (textVal.trim() ? 'data:text/plain;charset=utf-8,' + encodeURIComponent(textVal) : undefined);
+                              const hasContent = mode === 'UPLOAD'
+                                ? Boolean(sFile?.fileUrl || sFile?.fileName)
+                                : Boolean(textVal.trim());
+                              const viewUrl = mode === 'UPLOAD'
+                                ? sFile?.fileUrl
+                                : (textVal.trim() ? 'data:text/plain;charset=utf-8,' + encodeURIComponent(textVal) : undefined);
                               const viewName = sFile?.fileName || `${sub.k}.txt`;
 
                               return (
@@ -383,12 +391,14 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                                   {hasContent ? (
                                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                       <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Available</span>
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.l}`, fileName: viewName, fileUrl: viewUrl })}>
-                                        👁️ View
-                                      </Button>
+                                      {viewUrl && (
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Item 1 — ${sub.l}`, fileName: viewName, fileUrl: viewUrl })}>
+                                          👁️ View
+                                        </Button>
+                                      )}
                                     </div>
                                   ) : (
-                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not provided yet</span>
                                   )}
                                 </div>
                               );

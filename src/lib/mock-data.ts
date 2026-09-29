@@ -548,8 +548,22 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
       }
 
       // Check if uploaded either via shared.status === 'UPLOADED', shared.fileName, or sub-item uploads/texts
-      const hasSubContent = sharedParsed && typeof sharedParsed === 'object' && Object.values(sharedParsed).some((val: any) => val && (val.fileName || val.fileUrl || val.textContent));
-      const isSharedUploaded = Boolean(shared && (shared.status === 'UPLOADED' || shared.fileName || shared.fileUrl || hasSubContent));
+      let isSharedUploaded: boolean;
+      if (item.itemIndex === 1) {
+        // For Item 1, respect the active mode (TEXT vs UPLOAD)
+        const mode: string = sharedParsed?.item1Mode || 'TEXT';
+        const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
+        if (mode === 'UPLOAD') {
+          const hasFile = subKeys.some((k: string) => sharedParsed?.[k]?.fileUrl || sharedParsed?.[k]?.fileName);
+          isSharedUploaded = Boolean(hasFile || shared?.fileName || shared?.fileUrl);
+        } else {
+          const hasText = subKeys.some((k: string) => sharedParsed?.[k]?.textContent?.trim());
+          isSharedUploaded = Boolean(hasText || shared?.fileName || shared?.fileUrl);
+        }
+      } else {
+        const hasSubContent = sharedParsed && typeof sharedParsed === 'object' && Object.values(sharedParsed).some((val: any) => val && (val.fileName || val.fileUrl || val.textContent));
+        isSharedUploaded = Boolean(shared && (shared.status === 'UPLOADED' || shared.fileName || shared.fileUrl || hasSubContent));
+      }
 
       let teacherParsed: any = {};
       if (item.subItemsJson) {

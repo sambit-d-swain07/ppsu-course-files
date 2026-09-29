@@ -119,6 +119,8 @@ export default function FacultyCourseCoordinatorPage() {
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [newCustomTitle, setNewCustomTitle] = useState('');
   const [newCustomText, setNewCustomText] = useState('');
+  const [newCustomFile, setNewCustomFile] = useState<File | null>(null);
+  const [switchConfirmModal, setSwitchConfirmModal] = useState<{ show: boolean; targetMode: 'TEXT' | 'UPLOAD' | null }>({ show: false, targetMode: null });
 
   const fetchData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -403,8 +405,74 @@ export default function FacultyCourseCoordinatorPage() {
     }
   };
 
+  const hasItem1ModeContent = (mode: 'TEXT' | 'UPLOAD', parsedSubs: any) => {
+    const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
+    if (mode === 'TEXT') {
+      return subKeys.some((k) => parsedSubs[k]?.textContent?.trim()) ||
+        (Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.some((s: any) => s.textContent?.trim()));
+    } else {
+      return subKeys.some((k) => parsedSubs[k]?.fileUrl) ||
+        (Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.some((s: any) => s.fileUrl));
+    }
+  };
+
+  const handleRequestModeSwitch = (targetMode: 'TEXT' | 'UPLOAD', parsedSubs: any) => {
+    const currentMode = parsedSubs.item1Mode || 'TEXT';
+    if (currentMode === targetMode) return;
+    if (hasItem1ModeContent(currentMode, parsedSubs)) {
+      setSwitchConfirmModal({ show: true, targetMode });
+    } else {
+      executeModeSwitch(targetMode);
+    }
+  };
+
+  const executeModeSwitch = async (targetMode: 'TEXT' | 'UPLOAD') => {
+    if (!selectedSubjectId) return;
+    setUploadingItem(1); setActionError(''); setActionSuccess('');
+    try {
+      const schoolCode = activeSubject?.school || 'SOE';
+      const existingDoc = schoolSharedMap.get(1);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      existingSubJson.item1Mode = targetMode;
+
+      const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
+      let isComplete = false;
+      if (targetMode === 'TEXT') {
+        isComplete = subKeys.every((k) => existingSubJson[k]?.textContent?.trim());
+      } else {
+        isComplete = subKeys.every((k) => existingSubJson[k]?.fileUrl);
+      }
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          school: schoolCode,
+          itemIndex: 1,
+          status: isComplete ? 'UPLOADED' : 'EMPTY',
+          fileName: isComplete ? (targetMode === 'TEXT' ? 'Text Statements Entry' : 'PDF Package Upload') : null,
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Mode switch failed');
+      }
+      setActionSuccess(`Switched Item 1 input mode to ${targetMode === 'TEXT' ? 'Enter Text' : 'Upload PDF'}.`);
+      fetchData(false);
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+      setSwitchConfirmModal({ show: false, targetMode: null });
+    }
+  };
+
   const handleAddCustomSection = async () => {
-    if (!selectedSubjectId || !newCustomTitle.trim() || !newCustomText.trim()) return;
+    if (!selectedSubjectId || !newCustomTitle.trim()) return;
     setUploadingItem(1); setActionError(''); setActionSuccess('');
     try {
       const schoolCode = activeSubject?.school || 'SOE';
@@ -413,10 +481,17 @@ export default function FacultyCourseCoordinatorPage() {
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
       const customSections = Array.isArray(existingSubJson.customSections) ? existingSubJson.customSections : [];
+      let fileData: any = {};
+      if (newCustomFile) {
+        const dataUrl = await readFileAsDataUrl(newCustomFile);
+        fileData = { fileName: newCustomFile.name, fileUrl: dataUrl };
+      }
+
       customSections.push({
         id: 'sec_' + Date.now(),
         title: newCustomTitle.trim(),
         textContent: newCustomText.trim(),
+        ...fileData,
         updatedAt: new Date().toISOString()
       });
       existingSubJson.customSections = customSections;
@@ -428,7 +503,7 @@ export default function FacultyCourseCoordinatorPage() {
           school: schoolCode,
           itemIndex: 1,
           status: 'UPLOADED',
-          fileName: existingDoc?.fileName || 'Text Statements Entry',
+          fileName: existingDoc?.fileName || (existingSubJson.item1Mode === 'UPLOAD' ? 'PDF Package Upload' : 'Text Statements Entry'),
           fileUrl: existingDoc?.fileUrl || null,
           subItemsJson: JSON.stringify(existingSubJson)
         })
@@ -441,6 +516,48 @@ export default function FacultyCourseCoordinatorPage() {
       setShowAddCustomModal(false);
       setNewCustomTitle('');
       setNewCustomText('');
+      setNewCustomFile(null);
+      fetchData(false);
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
+  const handleUploadCustomSectionFile = async (secId: string, file: File) => {
+    if (!selectedSubjectId || !file) return;
+    setUploadingItem(1); setActionError(''); setActionSuccess('');
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const schoolCode = activeSubject?.school || 'SOE';
+      const existingDoc = schoolSharedMap.get(1);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      if (Array.isArray(existingSubJson.customSections)) {
+        const target = existingSubJson.customSections.find((s: any) => s.id === secId);
+        if (target) {
+          target.fileName = file.name;
+          target.fileUrl = dataUrl;
+          target.updatedAt = new Date().toISOString();
+        }
+      }
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          school: schoolCode,
+          itemIndex: 1,
+          status: 'UPLOADED',
+          fileName: existingDoc?.fileName || file.name,
+          fileUrl: existingDoc?.fileUrl || dataUrl,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      setActionSuccess('Custom section file uploaded.');
       fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
@@ -647,6 +764,7 @@ export default function FacultyCourseCoordinatorPage() {
                         {/* Render Sub-keys list if multi-part item */}
                         {item.index === 1 ? (
                           <div className="mt-3 p-3 bg-white border rounded shadow-sm">
+                            {/* School Select Bar & Add Custom Section Button */}
                             <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                               <div className="d-flex align-items-center gap-2">
                                 <span className="fw-bold small text-navy-900">School / Institute:</span>
@@ -672,403 +790,484 @@ export default function FacultyCourseCoordinatorPage() {
                               </Button>
                             </div>
 
-                            {/* Default 5 Sub-fields with Text Entry + File Upload */}
-                            <div className="d-flex flex-column gap-3 mb-4">
-                              {item.subKeys?.map((sk) => {
-                                const skData = parsedSubs[sk] || {};
-                                const config = SUB_KEY_CONFIG[sk] || { label: sk };
-                                const isVision = sk === 'vision';
-
-                                const savedText = skData.textContent || '';
-                                const currentTextDraft = item1TextDrafts[sk] ?? savedText;
-
-                                // For Vision: plain single textarea, NO row builder, NO + Add Row button
-                                if (isVision) {
-                                  return (
-                                    <div key={sk} className="p-3 border rounded bg-light">
-                                      <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                                        <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
-                                          {config.label} {config.required && <span className="text-danger">*</span>}
-                                        </span>
-                                        <div className="d-flex align-items-center gap-2">
-                                          {skData.fileName && (
-                                            <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu" style={{ fontSize: 11 }}>
-                                              ✓ File: {skData.fileName}
-                                            </span>
-                                          )}
-                                          {skData.textContent && (
-                                            <span className="badge bg-primary-subtle text-primary border border-primary-subtle" style={{ fontSize: 11 }}>
-                                              ✓ Text Saved
-                                            </span>
-                                          )}
-                                          <label className="btn btn-outline-primary btn-sm py-0.5 px-2 m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                            {skData.fileName ? 'Replace File' : 'Upload File'}
-                                            <input
-                                              type="file"
-                                              className="d-none"
-                                              onChange={(e) => {
-                                                const f = e.target.files?.[0];
-                                                if (f) handleUploadSubItem(1, sk, f);
-                                                e.currentTarget.value = '';
-                                              }}
-                                            />
-                                          </label>
-                                          {skData.fileUrl && (
-                                            <Button
-                                              size="sm"
-                                              variant="outline-info"
-                                              style={{ fontSize: 11, padding: '2px 8px' }}
-                                              onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
-                                            >
-                                              View File
-                                            </Button>
-                                          )}
+                            {/* ITEM-LEVEL MODE SWITCH TOGGLE */}
+                            {(() => {
+                              const item1Mode = parsedSubs.item1Mode || 'TEXT';
+                              return (
+                                <>
+                                  <div className="p-3 bg-light rounded border mb-4">
+                                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                      <div className="d-flex align-items-center gap-3">
+                                        <span className="fw-bold small text-navy-900">Item 1 Input Mode:</span>
+                                        <div className="btn-group btn-group-sm" role="group">
+                                          <button
+                                            type="button"
+                                            className={`btn fw-bold px-3 ${item1Mode === 'TEXT' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                            onClick={() => handleRequestModeSwitch('TEXT', parsedSubs)}
+                                            disabled={uploadingItem === 1}
+                                          >
+                                            📝 Enter Text
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={`btn fw-bold px-3 ${item1Mode === 'UPLOAD' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                            onClick={() => handleRequestModeSwitch('UPLOAD', parsedSubs)}
+                                            disabled={uploadingItem === 1}
+                                          >
+                                            📄 Upload PDF
+                                          </button>
                                         </div>
                                       </div>
-
-                                      <Form.Control
-                                        as="textarea"
-                                        rows={3}
-                                        size="sm"
-                                        placeholder="Type Vision statement directly here..."
-                                        value={currentTextDraft}
-                                        onChange={(e) => setItem1TextDrafts({ ...item1TextDrafts, vision: e.target.value })}
-                                        style={{ fontSize: 12, resize: 'vertical' }}
-                                      />
-
-                                      <div className="d-flex justify-content-end align-items-center mt-2">
-                                        <Button
-                                          size="sm"
-                                          variant="primary"
-                                          style={{ fontSize: 11, fontWeight: 600 }}
-                                          onClick={() => handleSaveTextSubItem(1, 'vision', item1TextDrafts['vision'] ?? savedText)}
-                                          disabled={uploadingItem === 1}
-                                        >
-                                          Save Text
-                                        </Button>
-                                      </div>
+                                      <Badge bg={item1Mode === 'TEXT' ? 'info' : 'primary'} className="px-3 py-1.5 font-mono-ppsu" style={{ fontSize: 11 }}>
+                                        Active Mode: {item1Mode === 'TEXT' ? 'Enter Text Mode' : 'Upload PDF Mode'}
+                                      </Badge>
                                     </div>
-                                  );
-                                }
-
-                                // For Mission, PEO, PSO, PO: Row-by-Row array management
-                                // Get explicit rows array or derive from current text draft
-                                const textVal = currentTextDraft;
-                                const initialRows = textVal ? textVal.split('\n').map((l: string) => l.trim()).filter(Boolean) : [''];
-                                const rows = item1RowDrafts[sk] || (initialRows.length > 0 ? initialRows : ['']);
-
-                                const handleAddRow = () => {
-                                  const updatedRows = [...rows, ''];
-                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
-                                };
-
-                                const handleUpdateRow = (idx: number, text: string) => {
-                                  const updatedRows = [...rows];
-                                  updatedRows[idx] = text;
-                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
-                                };
-
-                                const handleRemoveRow = (idx: number) => {
-                                  const updatedRows = rows.filter((_, i) => i !== idx);
-                                  const finalRows = updatedRows.length > 0 ? updatedRows : [''];
-                                  setItem1RowDrafts((prev) => ({ ...prev, [sk]: finalRows }));
-                                  setItem1TextDrafts((prev) => ({ ...prev, [sk]: finalRows.join('\n') }));
-                                };
-
-                                const handleSaveRows = () => {
-                                  const cleanText = rows.map((r) => r.trim()).filter(Boolean).join('\n');
-                                  handleSaveTextSubItem(1, sk, cleanText);
-                                };
-
-                                return (
-                                  <div key={sk} className="p-3 border rounded bg-light">
-                                    <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                                      <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
-                                        {config.label} {config.required && <span className="text-danger">*</span>}
-                                        <span className="badge bg-secondary ms-2 fw-normal" style={{ fontSize: 10 }}>
-                                          {rows.filter((r) => r.trim()).length} {rows.filter((r) => r.trim()).length === 1 ? 'row' : 'rows'}
-                                        </span>
-                                      </span>
-                                      <div className="d-flex align-items-center gap-2">
-                                        {skData.fileName && (
-                                          <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu" style={{ fontSize: 11 }}>
-                                            ✓ File: {skData.fileName}
-                                          </span>
-                                        )}
-                                        {skData.textContent && (
-                                          <span className="badge bg-primary-subtle text-primary border border-primary-subtle" style={{ fontSize: 11 }}>
-                                            ✓ Text Saved
-                                          </span>
-                                        )}
-                                        <label className="btn btn-outline-primary btn-sm py-0.5 px-2 m-0" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                          {skData.fileName ? 'Replace File' : 'Upload File'}
-                                          <input
-                                            type="file"
-                                            className="d-none"
-                                            onChange={(e) => {
-                                              const f = e.target.files?.[0];
-                                              if (f) handleUploadSubItem(1, sk, f);
-                                              e.currentTarget.value = '';
-                                            }}
-                                          />
-                                        </label>
-                                        {skData.fileUrl && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline-info"
-                                            style={{ fontSize: 11, padding: '2px 8px' }}
-                                            onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
-                                          >
-                                            View File
-                                          </Button>
-                                        )}
-                                      </div>
+                                    <div className="small text-muted mt-1" style={{ fontSize: 11 }}>
+                                      {item1Mode === 'TEXT'
+                                        ? 'Text mode active: Type or paste statements into structured sections below. No upload controls are shown.'
+                                        : 'Upload PDF mode active: Upload separate PDF files for each section below. No text boxes are shown.'}
                                     </div>
+                                  </div>
 
-                                    {/* Individual Row Inputs */}
-                                    <div className="mb-2 p-2 bg-white rounded border">
-                                      <div className="d-flex flex-column gap-2">
-                                        {rows.map((rowText: string, idx: number) => {
-                                          const prefix = sk === 'peo' ? `PEO ${idx + 1}` : sk === 'pso' ? `PSO ${idx + 1}` : sk === 'po' ? `PO ${idx + 1}` : `${idx + 1}.`;
-                                          const cleanText = rowText.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || rowText;
+                                  {/* ─── MODE 1: ENTER TEXT MODE ─── */}
+                                  {item1Mode === 'TEXT' && (
+                                    <>
+                                      <div className="d-flex flex-column gap-3 mb-4">
+                                        {item.subKeys?.map((sk) => {
+                                          const skData = parsedSubs[sk] || {};
+                                          const config = SUB_KEY_CONFIG[sk] || { label: sk };
+                                          const isVision = sk === 'vision';
+                                          const savedText = skData.textContent || '';
+                                          const currentTextDraft = item1TextDrafts[sk] ?? savedText;
+
+                                          if (isVision) {
+                                            return (
+                                              <div key={sk} className="p-3 border rounded bg-light">
+                                                <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                                  <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
+                                                    {config.label} {config.required && <span className="text-danger">*</span>}
+                                                  </span>
+                                                </div>
+                                                <Form.Control
+                                                  as="textarea"
+                                                  rows={3}
+                                                  size="sm"
+                                                  placeholder="Type Vision statement directly here..."
+                                                  value={currentTextDraft}
+                                                  onChange={(e) => setItem1TextDrafts({ ...item1TextDrafts, vision: e.target.value })}
+                                                  style={{ fontSize: 12, resize: 'vertical' }}
+                                                />
+                                                <div className="d-flex justify-content-end align-items-center mt-2">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="primary"
+                                                    style={{ fontSize: 11, fontWeight: 600 }}
+                                                    onClick={() => handleSaveTextSubItem(1, 'vision', item1TextDrafts['vision'] ?? savedText)}
+                                                    disabled={uploadingItem === 1}
+                                                  >
+                                                    Save Text
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+
+                                          const textVal = currentTextDraft;
+                                          const initialRows = textVal ? textVal.split('\n').map((l: string) => l.trim()).filter(Boolean) : [''];
+                                          const rows = item1RowDrafts[sk] || (initialRows.length > 0 ? initialRows : ['']);
+
+                                          const handleAddRow = () => {
+                                            const updatedRows = [...rows, ''];
+                                            setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
+                                            setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
+                                          };
+
+                                          const handleUpdateRow = (idx: number, text: string) => {
+                                            const updatedRows = [...rows];
+                                            updatedRows[idx] = text;
+                                            setItem1RowDrafts((prev) => ({ ...prev, [sk]: updatedRows }));
+                                            setItem1TextDrafts((prev) => ({ ...prev, [sk]: updatedRows.join('\n') }));
+                                          };
+
+                                          const handleRemoveRow = (idx: number) => {
+                                            const updatedRows = rows.filter((_, i) => i !== idx);
+                                            const finalRows = updatedRows.length > 0 ? updatedRows : [''];
+                                            setItem1RowDrafts((prev) => ({ ...prev, [sk]: finalRows }));
+                                            setItem1TextDrafts((prev) => ({ ...prev, [sk]: finalRows.join('\n') }));
+                                          };
+
+                                          const handleSaveRows = () => {
+                                            const cleanText = rows.map((r) => r.trim()).filter(Boolean).join('\n');
+                                            handleSaveTextSubItem(1, sk, cleanText);
+                                          };
 
                                           return (
-                                            <div key={idx} className="d-flex align-items-center gap-2">
-                                              <span className="badge bg-dark-subtle text-dark border font-mono-ppsu" style={{ width: '70px', flexShrink: 0, fontSize: 11, textAlign: 'center' }}>
-                                                {prefix}
-                                              </span>
-                                              <Form.Control
-                                                type="text"
-                                                size="sm"
-                                                value={cleanText}
-                                                placeholder={`Statement for ${prefix} (paste or type text here)`}
-                                                onChange={(e) => handleUpdateRow(idx, `${prefix}: ${e.target.value}`)}
-                                                style={{ fontSize: 12 }}
-                                              />
-                                              {rows.length > 1 && (
+                                            <div key={sk} className="p-3 border rounded bg-light">
+                                              <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                                <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
+                                                  {config.label} {config.required && <span className="text-danger">*</span>}
+                                                  <span className="badge bg-secondary ms-2 fw-normal" style={{ fontSize: 10 }}>
+                                                    {rows.filter((r) => r.trim()).length} {rows.filter((r) => r.trim()).length === 1 ? 'row' : 'rows'}
+                                                  </span>
+                                                </span>
+                                              </div>
+
+                                              <div className="mb-2 p-2 bg-white rounded border">
+                                                <div className="d-flex flex-column gap-2">
+                                                  {rows.map((rowText: string, idx: number) => {
+                                                    const prefix = sk === 'peo' ? `PEO ${idx + 1}` : sk === 'pso' ? `PSO ${idx + 1}` : sk === 'po' ? `PO ${idx + 1}` : `${idx + 1}.`;
+                                                    const cleanText = rowText.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || rowText;
+
+                                                    return (
+                                                      <div key={idx} className="d-flex align-items-center gap-2">
+                                                        <span className="badge bg-dark-subtle text-dark border font-mono-ppsu" style={{ width: '70px', flexShrink: 0, fontSize: 11, textAlign: 'center' }}>
+                                                          {prefix}
+                                                        </span>
+                                                        <Form.Control
+                                                          type="text"
+                                                          size="sm"
+                                                          value={cleanText}
+                                                          placeholder={`Statement for ${prefix} (paste or type text here)`}
+                                                          onChange={(e) => handleUpdateRow(idx, `${prefix}: ${e.target.value}`)}
+                                                          style={{ fontSize: 12 }}
+                                                        />
+                                                        {rows.length > 1 && (
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline-danger"
+                                                            className="py-0 px-2 border-0"
+                                                            style={{ fontSize: 13 }}
+                                                            onClick={() => handleRemoveRow(idx)}
+                                                            title="Remove Row"
+                                                          >
+                                                            🗑️
+                                                          </Button>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+
+                                              <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
                                                 <Button
                                                   size="sm"
-                                                  variant="outline-danger"
-                                                  className="py-0 px-2 border-0"
-                                                  style={{ fontSize: 13 }}
-                                                  onClick={() => handleRemoveRow(idx)}
-                                                  title="Remove Row"
+                                                  variant="outline-success"
+                                                  style={{ fontSize: 11, fontWeight: 600 }}
+                                                  onClick={handleAddRow}
                                                 >
-                                                  🗑️
+                                                  + Add Row
                                                 </Button>
-                                              )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="primary"
+                                                  style={{ fontSize: 11, fontWeight: 600 }}
+                                                  onClick={handleSaveRows}
+                                                  disabled={uploadingItem === 1}
+                                                >
+                                                  Save Text
+                                                </Button>
+                                              </div>
                                             </div>
                                           );
                                         })}
                                       </div>
-                                    </div>
 
-                                    <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline-success"
-                                        style={{ fontSize: 11, fontWeight: 600 }}
-                                        onClick={handleAddRow}
-                                      >
-                                        + Add Row
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="primary"
-                                        style={{ fontSize: 11, fontWeight: 600 }}
-                                        onClick={handleSaveRows}
-                                        disabled={uploadingItem === 1}
-                                      >
-                                        Save Text
-                                      </Button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                      {/* Custom Sections (Text Mode) */}
+                                      {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
+                                        <div className="mb-4">
+                                          <h6 className="fw-bold text-navy-900 mb-2 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections</h6>
+                                          <div className="d-flex flex-column gap-2">
+                                            {parsedSubs.customSections.map((sec: any) => (
+                                              <div key={sec.id} className="p-3 border rounded bg-white d-flex justify-content-between align-items-start gap-3">
+                                                <div>
+                                                  <div className="fw-bold text-navy-900 small mb-1">{sec.title}</div>
+                                                  <div className="text-secondary small" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{sec.textContent}</div>
+                                                </div>
+                                                <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
+                                                  Delete
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
 
-                            {/* Custom Sections (if any) */}
-                            {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
-                              <div className="mb-4">
-                                <h6 className="fw-bold text-navy-900 mb-2 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections</h6>
-                                <div className="d-flex flex-column gap-2">
-                                  {parsedSubs.customSections.map((sec: any) => (
-                                    <div key={sec.id} className="p-3 border rounded bg-white d-flex justify-content-between align-items-start gap-3">
-                                      <div>
-                                        <div className="fw-bold text-navy-900 small mb-1">{sec.title}</div>
-                                        <div className="text-secondary small" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{sec.textContent}</div>
-                                      </div>
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
-                                        Delete
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                                      {/* Live Auto-Generated Formatted Output Preview */}
+                                      <div className="mt-4 p-3 border rounded bg-light">
+                                        <h6 className="fw-bold text-navy-900 mb-3 small text-uppercase" style={{ letterSpacing: 0.5 }}>
+                                          📋 Auto-Generated Formatted Output Preview
+                                        </h6>
+                                        <div className="p-3 bg-white border rounded">
+                                          {(['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const).map((sk) => {
+                                            const text = parsedSubs[sk]?.textContent || item1TextDrafts[sk];
+                                            const label = SUB_KEY_CONFIG[sk]?.label || sk.toUpperCase();
+                                            if (!text?.trim()) return null;
+                                            const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
 
-                            {/* Live Auto-Generated Formatted Output Preview (Green Header Table Style matching NAAC/NBA format) */}
-                            <div className="mt-4 p-3 border rounded bg-light">
-                              <h6 className="fw-bold text-navy-900 mb-3 small text-uppercase" style={{ letterSpacing: 0.5 }}>
-                                📋 Auto-Generated Formatted Output Preview
-                              </h6>
-                              <div className="p-3 bg-white border rounded">
-                                {(['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const).map((sk) => {
-                                  const text = parsedSubs[sk]?.textContent || item1TextDrafts[sk];
-                                  const label = SUB_KEY_CONFIG[sk]?.label || sk.toUpperCase();
-                                  if (!text?.trim()) return null;
-                                  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+                                            const headerBg = '#d9ead3';
+                                            const isPeo = sk === 'peo';
+                                            const isPso = sk === 'pso';
+                                            const isPo = sk === 'po';
 
-                                  const headerBg = '#d9ead3';
-                                  const isPeo = sk === 'peo';
-                                  const isPso = sk === 'pso';
-                                  const isPo = sk === 'po';
+                                            let col1Header = '';
+                                            let col2Header = '';
+                                            let prefix = '';
 
-                                  let col1Header = '';
-                                  let col2Header = '';
-                                  let prefix = '';
+                                            if (isPeo) {
+                                              col1Header = 'PEO No';
+                                              col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
+                                              prefix = 'PEO ';
+                                            } else if (isPso) {
+                                              col1Header = 'PSO No';
+                                              col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
+                                              prefix = 'PSO ';
+                                            } else if (isPo) {
+                                              col1Header = 'PO No';
+                                              col2Header = 'PROGRAMME OUTCOMES';
+                                              prefix = 'PO ';
+                                            } else if (sk === 'vision') {
+                                              col1Header = '';
+                                              col2Header = 'INSTITUTE VISION';
+                                            } else if (sk === 'mission') {
+                                              col1Header = '';
+                                              col2Header = 'INSTITUTE MISSION';
+                                            } else if (sk === 'deptVision') {
+                                              col1Header = '';
+                                              col2Header = 'DEPARTMENT VISION';
+                                            } else if (sk === 'deptMission') {
+                                              col1Header = '';
+                                              col2Header = 'DEPARTMENT MISSION';
+                                            } else {
+                                              col1Header = '';
+                                              col2Header = label.toUpperCase();
+                                            }
 
-                                  if (isPeo) {
-                                    col1Header = 'PEO No';
-                                    col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-                                    prefix = 'PEO ';
-                                  } else if (isPso) {
-                                    col1Header = 'PSO No';
-                                    col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-                                    prefix = 'PSO ';
-                                  } else if (isPo) {
-                                    col1Header = 'PO No';
-                                    col2Header = 'PROGRAMME OUTCOMES';
-                                    prefix = 'PO ';
-                                  } else if (sk === 'vision') {
-                                    col1Header = '';
-                                    col2Header = 'INSTITUTE VISION';
-                                  } else if (sk === 'mission') {
-                                    col1Header = '';
-                                    col2Header = 'INSTITUTE MISSION';
-                                  } else if (sk === 'deptVision') {
-                                    col1Header = '';
-                                    col2Header = 'DEPARTMENT VISION';
-                                  } else if (sk === 'deptMission') {
-                                    col1Header = '';
-                                    col2Header = 'DEPARTMENT MISSION';
-                                  } else {
-                                    col1Header = '';
-                                    col2Header = label.toUpperCase();
-                                  }
-
-                                  if (isPeo || isPso || isPo) {
-                                    return (
-                                      <div key={sk} className="mb-3">
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
-                                          <thead>
-                                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                              <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
-                                                {col1Header}
-                                              </th>
-                                              <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
-                                                {col2Header}
-                                              </th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {lines.map((line: string, idx: number) => {
-                                              const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                            if (isPeo || isPso || isPo) {
                                               return (
-                                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                  <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                                    {prefix}{idx + 1}
-                                                  </td>
-                                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                                    {cleanText}
-                                                  </td>
-                                                </tr>
+                                                <div key={sk} className="mb-3">
+                                                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                                                    <thead>
+                                                      <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                                        <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
+                                                          {col1Header}
+                                                        </th>
+                                                        <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
+                                                          {col2Header}
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {lines.map((line: string, idx: number) => {
+                                                        const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                                        return (
+                                                          <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                                            <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                                              {prefix}{idx + 1}
+                                                            </td>
+                                                            <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                                              {cleanText}
+                                                            </td>
+                                                          </tr>
+                                                        );
+                                                      })}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
                                               );
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    );
-                                  }
+                                            }
 
-                                  if (sk === 'mission' || sk === 'deptMission' || lines.length > 1) {
-                                    return (
-                                      <div key={sk} className="mb-3">
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
-                                          <thead>
-                                            <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                              <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                                {col2Header}
-                                              </th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {lines.map((line: string, idx: number) => {
-                                              const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                            if (sk === 'mission' || sk === 'deptMission' || lines.length > 1) {
                                               return (
-                                                <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                  <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                                    {idx + 1}.
-                                                  </td>
-                                                  <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
-                                                    {cleanText}
-                                                  </td>
-                                                </tr>
+                                                <div key={sk} className="mb-3">
+                                                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                                                    <thead>
+                                                      <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                                        <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                                          {col2Header}
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {lines.map((line: string, idx: number) => {
+                                                        const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                                        return (
+                                                          <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
+                                                            <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                                              {idx + 1}.
+                                                            </td>
+                                                            <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>
+                                                              {cleanText}
+                                                            </td>
+                                                          </tr>
+                                                        );
+                                                      })}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
                                               );
-                                            })}
-                                          </tbody>
-                                        </table>
+                                            }
+
+                                            return (
+                                              <div key={sk} className="mb-3">
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                                                  <thead>
+                                                    <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
+                                                      <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                                        {col2Header}
+                                                      </th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    <tr>
+                                                      <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
+                                                        {text}
+                                                      </td>
+                                                    </tr>
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            );
+                                          })}
+
+                                          {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.map((sec: any) => (
+                                            <div key={sec.id} className="mb-3">
+                                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
+                                                <thead>
+                                                  <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
+                                                    <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
+                                                      {sec.title.toUpperCase()}
+                                                    </th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  <tr>
+                                                    <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
+                                                      {sec.textContent}
+                                                    </td>
+                                                  </tr>
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                    );
-                                  }
+                                    </>
+                                  )}
 
-                                  return (
-                                    <div key={sk} className="mb-3">
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
-                                        <thead>
-                                          <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                            <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                              {col2Header}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          <tr>
-                                            <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
-                                              {text}
-                                            </td>
-                                          </tr>
-                                        </tbody>
-                                      </table>
+                                  {/* ─── MODE 2: UPLOAD PDF MODE ─── */}
+                                  {item1Mode === 'UPLOAD' && (
+                                    <div className="d-flex flex-column gap-3 mb-4">
+                                      {item.subKeys?.map((sk) => {
+                                        const skData = parsedSubs[sk] || {};
+                                        const config = SUB_KEY_CONFIG[sk] || { label: sk };
+
+                                        return (
+                                          <div key={sk} className="p-3 border rounded bg-light">
+                                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                              <div>
+                                                <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
+                                                  {config.label} {config.required && <span className="text-danger">*</span>}
+                                                </span>
+                                                {skData.fileName && (
+                                                  <div className="small text-success font-mono-ppsu mt-1">
+                                                    ✓ {skData.fileName}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              <div className="d-flex align-items-center gap-2">
+                                                <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                                  {skData.fileName ? 'Replace File' : 'Upload File (PDF)'}
+                                                  <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    className="d-none"
+                                                    onChange={(e) => {
+                                                      const f = e.target.files?.[0];
+                                                      if (f) handleUploadSubItem(1, sk, f);
+                                                      e.currentTarget.value = '';
+                                                    }}
+                                                  />
+                                                </label>
+                                                {skData.fileUrl && (
+                                                  <>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline-info"
+                                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
+                                                    >
+                                                      View File
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline-danger"
+                                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => handleRemoveSubItem(1, sk)}
+                                                    >
+                                                      Remove
+                                                    </Button>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* Custom Sections (Upload Mode) */}
+                                      {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
+                                        <div className="mt-3">
+                                          <h6 className="fw-bold text-navy-900 mb-2 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections (Upload Slots)</h6>
+                                          <div className="d-flex flex-column gap-2">
+                                            {parsedSubs.customSections.map((sec: any) => (
+                                              <div key={sec.id} className="p-3 border rounded bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <div>
+                                                  <div className="fw-bold text-navy-900 small">{sec.title}</div>
+                                                  {sec.fileName && (
+                                                    <div className="small text-success font-mono-ppsu mt-0.5">✓ {sec.fileName}</div>
+                                                  )}
+                                                </div>
+
+                                                <div className="d-flex align-items-center gap-2">
+                                                  <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                                    {sec.fileName ? 'Replace File' : 'Upload File (PDF)'}
+                                                    <input
+                                                      type="file"
+                                                      accept=".pdf"
+                                                      className="d-none"
+                                                      onChange={(e) => {
+                                                        const f = e.target.files?.[0];
+                                                        if (f) handleUploadCustomSectionFile(sec.id, f);
+                                                        e.currentTarget.value = '';
+                                                      }}
+                                                    />
+                                                  </label>
+                                                  {sec.fileUrl && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline-info"
+                                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${sec.title}`, fileName: sec.fileName, fileUrl: sec.fileUrl })}
+                                                    >
+                                                      View
+                                                    </Button>
+                                                  )}
+                                                  <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
+                                                    Delete
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  );
-                                })}
-
-                                {/* Render Custom Sections in Formatted Preview */}
-                                {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.map((sec: any) => (
-                                  <div key={sec.id} className="mb-3">
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: 'Arial, sans-serif' }}>
-                                      <thead>
-                                        <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                            {sec.title.toUpperCase()}
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        <tr>
-                                          <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>
-                                            {sec.textContent}
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         ) : item.subKeys ? (
                           <div className="mt-2 d-flex flex-wrap gap-2">
@@ -1337,15 +1536,15 @@ export default function FacultyCourseCoordinatorPage() {
       )}
 
       {/* Modal for adding custom section / box */}
-      <Modal show={showAddCustomModal} onHide={() => setShowAddCustomModal(false)} centered>
+      <Modal show={showAddCustomModal} onHide={() => { setShowAddCustomModal(false); setNewCustomFile(null); }} centered>
         <Modal.Header closeButton className="bg-light border-bottom">
           <Modal.Title className="h6 fw-bold mb-0 text-navy-900">
-            ➕ Add Custom Section / Box (e.g. Department Vision)
+            ➕ Add Custom Section / Box
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
           <Form.Group className="mb-3">
-            <Form.Label className="fw-semibold small">Section Title Label</Form.Label>
+            <Form.Label className="fw-semibold small">Section Title Label <span className="text-danger">*</span></Form.Label>
             <Form.Control
               type="text"
               placeholder="e.g. Department Vision, Department Mission..."
@@ -1354,18 +1553,26 @@ export default function FacultyCourseCoordinatorPage() {
             />
           </Form.Group>
           <Form.Group className="mb-3">
-            <Form.Label className="fw-semibold small">Section Content</Form.Label>
+            <Form.Label className="fw-semibold small">Text Content (Statement)</Form.Label>
             <Form.Control
               as="textarea"
               rows={4}
-              placeholder="Type statement text here..."
+              placeholder="Type or paste statement text here..."
               value={newCustomText}
               onChange={(e) => setNewCustomText(e.target.value)}
             />
           </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold small">Optional PDF File (for Upload Mode)</Form.Label>
+            <Form.Control
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setNewCustomFile((e.target as HTMLInputElement).files?.[0] || null)}
+            />
+          </Form.Group>
         </Modal.Body>
         <Modal.Footer className="bg-light border-top">
-          <Button variant="secondary" size="sm" onClick={() => setShowAddCustomModal(false)}>
+          <Button variant="secondary" size="sm" onClick={() => { setShowAddCustomModal(false); setNewCustomFile(null); }}>
             Cancel
           </Button>
           <Button
@@ -1373,9 +1580,37 @@ export default function FacultyCourseCoordinatorPage() {
             size="sm"
             className="fw-semibold"
             onClick={handleAddCustomSection}
-            disabled={!newCustomTitle.trim() || !newCustomText.trim()}
+            disabled={!newCustomTitle.trim()}
           >
-            Add Section
+            Add Custom Section
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Confirmation Modal for Switching Item 1 Modes */}
+      <Modal show={switchConfirmModal.show} onHide={() => setSwitchConfirmModal({ show: false, targetMode: null })} centered>
+        <Modal.Header closeButton className="bg-warning text-dark border-bottom">
+          <Modal.Title className="h6 fw-bold mb-0">⚠️ Confirm Input Mode Switch</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4">
+          <div className="alert alert-warning py-2 px-3 small fw-semibold mb-3">
+            Switching to {switchConfirmModal.targetMode === 'TEXT' ? 'Enter Text Mode' : 'Upload PDF Mode'} will hide your existing {switchConfirmModal.targetMode === 'TEXT' ? 'uploaded files' : 'text statements'} for Item 1. Faculty will only see content from the active mode. Continue?
+          </div>
+          <p className="small text-secondary mb-0">
+            Note: Your existing content in the other mode will be kept safely stored in the background. If you switch back later, your saved content will be restored.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="bg-light border-top">
+          <Button variant="secondary" size="sm" onClick={() => setSwitchConfirmModal({ show: false, targetMode: null })}>
+            Cancel
+          </Button>
+          <Button
+            variant="warning"
+            size="sm"
+            className="fw-bold"
+            onClick={() => switchConfirmModal.targetMode && executeModeSwitch(switchConfirmModal.targetMode)}
+          >
+            Continue &amp; Switch Mode
           </Button>
         </Modal.Footer>
       </Modal>

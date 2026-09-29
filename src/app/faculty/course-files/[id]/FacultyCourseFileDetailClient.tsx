@@ -1279,9 +1279,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     if (itemIndex === 1) {
       const subs: any = getSubItems(1) || {};
-      const hasText = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].every(k => subs[k]?.textContent?.trim());
-      const hasFile = subs.vision?.fileName && subs.mission?.fileName && subs.deptVision?.fileName && subs.deptMission?.fileName && subs.peo?.fileName && subs.pso?.fileName && subs.po?.fileName;
-      return hasText || Boolean(hasFile) || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
+      const mode: string = subs.item1Mode || 'TEXT';
+      const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
+      if (mode === 'UPLOAD') {
+        const hasFile = subKeys.some(k => subs[k]?.fileUrl || subs[k]?.fileName);
+        return hasFile || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
+      }
+      // TEXT mode
+      const hasText = subKeys.every(k => subs[k]?.textContent?.trim());
+      return hasText || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
     }
 
     if (itemIndex === 6) {
@@ -4785,8 +4791,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 {/* SECTION 1: Item 1 Read-Only Formatted Display for Faculty Course File */}
                 {isItem1 && !isRestricted && (() => {
                   const subs: any = getSubItems(1) || {};
+                  const item1Mode: string = subs.item1Mode || 'TEXT';
                   const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
-                  const hasAnyContent = subKeys.some((sk) => subs[sk]?.textContent?.trim() || subs[sk]?.fileUrl);
+                  const hasAnyContent = item1Mode === 'UPLOAD'
+                    ? subKeys.some((sk) => subs[sk]?.fileUrl || subs[sk]?.fileName)
+                    : subKeys.some((sk) => subs[sk]?.textContent?.trim());
 
                   return (
                     <div className="mt-3 ps-3 border-start border-2 border-info ms-1">
@@ -4800,6 +4809,53 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       {!hasAnyContent ? (
                         <div className="p-4 bg-light rounded border text-center text-muted small">
                           — No Vision, Mission, PEO, PSO, or PO content entered by Course Coordinator yet —
+                        </div>
+                      ) : item1Mode === 'UPLOAD' ? (
+                        <div className="p-3 bg-white border rounded shadow-sm">
+                          {subKeys.map((sk) => {
+                            const fileUrl = subs[sk]?.fileUrl;
+                            const fileName = subs[sk]?.fileName;
+                            if (!fileUrl && !fileName) return null;
+                            const labelMap: Record<string, string> = {
+                              vision: 'Institute Vision', mission: 'Institute Mission',
+                              deptVision: 'Department Vision', deptMission: 'Department Mission',
+                              peo: 'PEO', pso: 'PSO', po: 'PO'
+                            };
+                            return (
+                              <div key={sk} className="mb-3 d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold small">{labelMap[sk] || sk}</span>
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu" style={{ fontSize: 10 }}>
+                                    ✓ {fileName || 'Uploaded'}
+                                  </span>
+                                  {fileUrl && (
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }}
+                                      onClick={() => setViewingDoc({ title: `Item 1 — ${labelMap[sk] || sk}`, fileName: fileName || 'Document.pdf', fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {Array.isArray(subs.customSections) && subs.customSections.map((sec: any) => (
+                            !sec?.fileUrl && !sec?.fileName ? null : (
+                              <div key={sec.id} className="mb-3 d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                <span className="fw-semibold small">{sec.title || 'Custom Section'}</span>
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu" style={{ fontSize: 10 }}>
+                                    ✓ {sec.fileName || 'Uploaded'}
+                                  </span>
+                                  {sec.fileUrl && (
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }}
+                                      onClick={() => setViewingDoc({ title: `Item 1 — ${sec.title || 'Section'}`, fileName: sec.fileName || 'Document.pdf', fileUrl: sec.fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          ))}
                         </div>
                       ) : (
                         <div className="p-3 bg-white border rounded shadow-sm">
