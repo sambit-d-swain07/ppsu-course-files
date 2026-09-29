@@ -499,7 +499,14 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     }
   ];
 
-  await appendPdfMakeDoc(headerContent);
+  const pendingPdfMakeContent: any[] = [...headerContent];
+
+  const flushPendingPdfMake = async () => {
+    if (pendingPdfMakeContent.length > 0) {
+      await appendPdfMakeDoc(pendingPdfMakeContent);
+      pendingPdfMakeContent.length = 0;
+    }
+  };
 
   // 2. PROCESS EACH CHECKLIST ITEM SEQUENTIALLY
   for (const item of CHECKLIST_ITEMS) {
@@ -1029,7 +1036,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
     }
 
     if (hasStructuredContent) {
-      const chunk = [
+      pendingPdfMakeContent.push(
         ...itemDividerContent,
         { text: '', pageBreak: 'before' },
         buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
@@ -1041,20 +1048,19 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
           margin: [0, 0, 0, 14]
         },
         ...structuredContent
-      ];
-      await appendPdfMakeDoc(chunk);
+      );
       if (uploadedBuffers.length > 0) {
+        await flushPendingPdfMake();
         await appendRawBuffers(uploadedBuffers);
       }
     } else if (isUploaded) {
-      // Document is uploaded: Divider page + direct pages
-      await appendPdfMakeDoc(itemDividerContent);
-      let appendedAny = false;
       if (uploadedBuffers.length > 0) {
-        appendedAny = await appendRawBuffers(uploadedBuffers);
-      }
-      if (!appendedAny) {
-        const noticeChunk = [
+        pendingPdfMakeContent.push(...itemDividerContent);
+        await flushPendingPdfMake();
+        await appendRawBuffers(uploadedBuffers);
+      } else {
+        pendingPdfMakeContent.push(
+          ...itemDividerContent,
           { text: '', pageBreak: 'before' },
           buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
           {
@@ -1065,12 +1071,10 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
             margin: [0, 0, 0, 14]
           },
           ...buildMissingNotice(item.name, db?.fileName || sb?.fileName)
-        ];
-        await appendPdfMakeDoc(noticeChunk);
+        );
       }
     } else {
-      // Truly pending item
-      const chunk = [
+      pendingPdfMakeContent.push(
         ...itemDividerContent,
         { text: '', pageBreak: 'before' },
         buildPageHeader(schoolName, hasLogo, hasSchoolLogo),
@@ -1105,10 +1109,11 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
             vLineColor: () => '#e0e0e0'
           }
         }
-      ];
-      await appendPdfMakeDoc(chunk);
+      );
     }
   }
+
+  await flushPendingPdfMake();
 
   const mergedBytes = await mergedDoc.save();
   return Buffer.from(mergedBytes);
