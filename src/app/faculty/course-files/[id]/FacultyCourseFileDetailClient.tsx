@@ -328,8 +328,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     for (let i = 1; i <= numP; i++) {
       sum += Number(practicals[`P${i}`]) || 0;
     }
-    const avg10 = numP > 0 ? Number((sum / numP).toFixed(2)) : 0;
-    const avg20 = Number((avg10 * 2).toFixed(2));
+    const rawAvg10 = numP > 0 ? sum / numP : 0;
+    const avg10 = numP > 0 ? Math.ceil(rawAvg10 * 10) / 10 : 0; // ceiling to 1 decimal
+    const avg20 = Math.ceil(avg10 * 2 * 10) / 10; // ceiling to 1 decimal
     return { avg10, avg20 };
   }, []);
 
@@ -627,14 +628,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return targetBatch === String(access.batch || 'A').toUpperCase() && !access.isSubmitted;
     }
 
-    // Course Teacher (OWNER) mode:
-    // If the batch owner has already submitted, the CT cannot modify that batch.
-    const submittedBatchesMap = (access as any)?.submittedBatchesMap as Record<string, boolean> | undefined;
-    if (submittedBatchesMap && submittedBatchesMap[targetBatch]) {
-      return false; // batch owner has submitted — read-only even for CT
-    }
-
-    return true; // CT can edit (either they own it, or owner hasn't submitted yet)
+    // Course Teacher (OWNER) mode: view-only for rubric/practical marks.
+    // Only the allocated batch lab faculty may enter or change marks.
+    return false;
   }, [isLocked, access]);
 
   const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
@@ -3794,6 +3790,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                   className="text-center font-mono-ppsu px-1"
                                                   value={row.practicals?.[pKey] ?? 0}
                                                   disabled={!isRowEditable}
+                                                  onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                                  onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, '', 0, pKey); } }}
                                                   onChange={(e) => handleItem8StudentChange(row.studentId, '', e.target.value, pKey)}
                                                 />
                                               </td>
@@ -3980,6 +3978,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                 className="text-center font-mono-ppsu px-1"
                                                 value={row.internalViva ?? 0}
                                                 disabled={!isRowEditable}
+                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'internalViva', 0); } }}
                                                 onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
                                               />
                                             </td>
@@ -4111,6 +4111,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                 className="text-center font-mono-ppsu px-1"
                                                 value={row.esePerformance ?? 0}
                                                 disabled={!isRowEditable}
+                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'esePerformance', 0); } }}
                                                 onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
                                               />
                                             </td>
@@ -4232,6 +4234,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                                 className="text-center font-mono-ppsu px-1"
                                                 value={row.eseExternalViva ?? 0}
                                                 disabled={!isRowEditable}
+                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'eseExternalViva', 0); } }}
                                                 onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
                                               />
                                             </td>

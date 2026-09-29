@@ -1127,33 +1127,7 @@ export default function FacultyCourseCoordinatorPage() {
         </Modal.Footer>
       </Modal>
 
-      {/* Confirmation Modal for Switching Item 1 Modes */}
-      <Modal show={switchConfirmModal.show} onHide={() => setSwitchConfirmModal({ show: false, targetMode: null })} centered>
-        <Modal.Header closeButton className="bg-warning text-dark border-bottom">
-          <Modal.Title className="h6 fw-bold mb-0">⚠️ Confirm Input Mode Switch</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-4">
-          <div className="alert alert-warning py-2 px-3 small fw-semibold mb-3">
-            Switching to {switchConfirmModal.targetMode === 'TEXT' ? 'Enter Text Mode' : 'Upload PDF Mode'} will hide your existing {switchConfirmModal.targetMode === 'TEXT' ? 'uploaded files' : 'text statements'} for Item 1. Faculty will only see content from the active mode. Continue?
-          </div>
-          <p className="small text-secondary mb-0">
-            Note: Your existing content in the other mode will be kept safely stored in the background. If you switch back later, your saved content will be restored.
-          </p>
-        </Modal.Body>
-        <Modal.Footer className="bg-light border-top">
-          <Button variant="secondary" size="sm" onClick={() => setSwitchConfirmModal({ show: false, targetMode: null })}>
-            Cancel
-          </Button>
-          <Button
-            variant="warning"
-            size="sm"
-            className="fw-bold"
-            onClick={() => switchConfirmModal.targetMode && executeModeSwitch(switchConfirmModal.targetMode)}
-          >
-            Continue &amp; Switch Mode
-          </Button>
-        </Modal.Footer>
-      </Modal>
+
     </div>
   );
 }
