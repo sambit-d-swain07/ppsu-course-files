@@ -1073,7 +1073,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleDownloadCsvTemplate = () => {
-    const csvContent = 'Enrollment No,Name,Batch\n';
+    const csvContent = 'Enrollment No,Name,Batch\n21SOECE11001,Aarav Patel,Batch A\n21SOECE11002,Bhavya Shah,Batch A\n21SOECE11003,Chirag Desai,Batch B\n21SOECE11004,Drashti Mehta,Batch B\n';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
