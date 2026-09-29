@@ -20,6 +20,7 @@ import {
 } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
+import { getSubjectRoles, getBatchOwnerInfo, getLockBannerText, LAB_ITEMS } from '@/lib/subject-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -323,24 +324,33 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           labTeacherC: subject.labTeacherC ? { name: subject.labTeacherC.name, department: subject.labTeacherC.department } : null
         } : null,
         access: (() => {
-          const assignedBatches: string[] = [];
-          if (subject) {
-            if (subject.labTeacherAId === payload.userId || (!subject.labTeacherAId && (courseFile.facultyId === payload.userId || subject.courseTeacherId === payload.userId))) {
-              assignedBatches.push('A');
+          const roles = getSubjectRoles(payload.userId, subject);
+          const labSubmissions = courseFile.labSubmissions || [];
+          const submittedBatchesMap: Record<string, boolean> = {};
+          labSubmissions.forEach((sub: any) => {
+            if (sub.status === 'SUBMITTED' || sub.status === 'UPLOADED') {
+              submittedBatchesMap[sub.batch] = true;
             }
-            if (subject.labTeacherBId === payload.userId) {
-              assignedBatches.push('B');
-            }
-            if (subject.labTeacherCId === payload.userId) {
-              assignedBatches.push('C');
-            }
-          }
-          if (assignedBatches.length === 0) assignedBatches.push('A');
-          return isSubjectCoordinator
-            ? { mode: 'COURSE_COORDINATOR', assignedBatches, facultyName: callerName, role: payload.role, isAdmin: payload.role === 'ADMIN' }
-            : labBatch
-            ? { mode: 'LAB_BATCH', batch: labBatch, facultyName: callerName, assignedBatches: [labBatch], allowedItems: [2, 4, 8, 9, 14, 20], editableItems: [2, 8, 9, 14, 20], role: payload.role, isAdmin: payload.role === 'ADMIN' }
-            : { mode: 'OWNER', assignedBatches, facultyName: callerName, role: payload.role, isAdmin: payload.role === 'ADMIN' };
+          });
+
+          const primaryBatch = roles.ownedBatches[0] || 'A';
+          const isUserBatchSubmitted = Boolean(submittedBatchesMap[primaryBatch]);
+
+          return {
+            mode: roles.accessLevel === 'FULL' ? 'OWNER' : (roles.accessLevel === 'LAB' ? 'LAB_BATCH' : 'READ_ONLY'),
+            accessLevel: roles.accessLevel,
+            rolesSummary: roles.rolesSummary,
+            batch: primaryBatch,
+            ownedBatches: roles.ownedBatches,
+            allowedItems: roles.accessLevel === 'LAB' ? LAB_ITEMS : Array.from({ length: 20 }, (_, i) => i + 1),
+            editableItems: roles.accessLevel === 'LAB' ? (isUserBatchSubmitted ? [] : LAB_ITEMS) : Array.from({ length: 20 }, (_, i) => i + 1),
+            isSubmitted: isUserBatchSubmitted,
+            lockBannerText: (roles.accessLevel === 'LAB' && isUserBatchSubmitted) ? getLockBannerText(primaryBatch) : null,
+            submittedBatchesMap,
+            role: payload.role,
+            isAdmin: payload.role === 'ADMIN',
+            facultyName: callerName
+          };
         })()
       },
       checklistItems: checklist.sort((a, b) => a.itemIndex - b.itemIndex)

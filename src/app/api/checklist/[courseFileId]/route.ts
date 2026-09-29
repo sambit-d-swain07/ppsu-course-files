@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateChecklistItem, updateChecklistItemsBatch, getCourseFileById, getSubjectForCourseFile, getLabBatchForUser, getLabSubmission, upsertLabSubmission } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
+import { getSubjectRoles, canUserEditItem, canUserEditBatchData, getBatchOwnerInfo, LAB_ITEMS } from '@/lib/subject-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,44 +47,45 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
 
     const { itemIndex, status, fileName, fileUrl, subItemsJson, score, remarks } = body;
 
-
     if (itemIndex === undefined || itemIndex < 1 || itemIndex > 20) {
       return noStoreJson({ error: 'Invalid item index' }, { status: 400 });
     }
 
-    const isOwner = courseFile.facultyId === payload.userId;
-    const isCourseTeacher = subject?.courseTeacherId === payload.userId;
-    const isCourseCoordinator = subject?.courseCoordinatorId === payload.userId;
-    const isLabTeacherRole = Boolean(
-      subject && (
-        subject.labTeacherAId === payload.userId ||
-        subject.labTeacherBId === payload.userId ||
-        subject.labTeacherCId === payload.userId
-      )
-    );
-
     const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
-    if (!isCoordinator && !isOwner && !isCourseTeacher && !isCourseCoordinator && !isLabTeacherRole && !labBatch) {
-      return noStoreJson({ error: 'Forbidden' }, { status: 403 });
+    const numItem = Number(itemIndex);
+
+    // Compute subject roles for current user
+    const roles = getSubjectRoles(payload.userId, subject);
+
+    if (!isCoordinator) {
+      if (roles.accessLevel === 'NONE') {
+        return noStoreJson({ error: 'Forbidden: You have no active teaching role on this subject.' }, { status: 403 });
+      }
+      if (!['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status)) {
+        return noStoreJson({ error: 'This course file is locked after submission.' }, { status: 409 });
+      }
+      // Check if user is allowed to edit this item index
+      if (!canUserEditItem(payload.userId, subject, numItem)) {
+        if (roles.accessLevel === 'LAB') {
+          return noStoreJson({ error: `Lab Teachers may only edit Items ${LAB_ITEMS.join(', ')}. Item ${numItem} is locked.` }, { status: 403 });
+        }
+        return noStoreJson({ error: `You do not have permission to edit Item ${numItem}.` }, { status: 403 });
+      }
     }
-    if (!isCoordinator && !['DRAFT', 'NEEDS_REVISION'].includes(courseFile.status)) {
-      return noStoreJson({ error: 'This course file is locked after submission.' }, { status: 409 });
-    }
-    if (labBatch && ![2, 8, 9, 14, 20].includes(Number(itemIndex))) {
-      return noStoreJson({ error: `Batch ${labBatch} lab teachers may only edit Items 2, 8, 9, 14, and 20. Item 4 is maintained by the Course Teacher.` }, { status: 403 });
-    }
-    if (Number(itemIndex) === 5 && payload.role !== 'ADMIN') {
+
+    if (numItem === 5 && payload.role !== 'ADMIN') {
       return noStoreJson({ error: 'Item 5 (Department Academic Calendar) is managed centrally by Admin only.' }, { status: 403 });
     }
-    const isSubjectCoordinator = subject?.courseCoordinatorId === payload.userId || payload.role === 'ADMIN';
-    const isSharedCoordinatorItem = [1, 3, 6, 7, 10, 11, 12, 15].includes(Number(itemIndex));
+
+    const isSubjectCoordinator = roles.isCourseCoordinator || payload.role === 'ADMIN';
+    const isSharedCoordinatorItem = [1, 3, 6, 7, 10, 11, 12, 15].includes(numItem);
     if (isSharedCoordinatorItem && !isSubjectCoordinator) {
-      // Allow faculty to update teacher-specific sub-fields (6d/e/f outcomes, 11c/12c sample answer sheets, 15b/c grade sheet)
-      const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(Number(itemIndex)) && Boolean(subItemsJson);
+      const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(numItem) && Boolean(subItemsJson);
       if (!isTeacherSubFieldOnly) {
         return noStoreJson({ error: 'This item is centrally managed by the Course Coordinator.' }, { status: 403 });
       }
     }
+
     if (!isCoordinator && (score !== undefined || remarks !== undefined)) {
       return noStoreJson({ error: 'Only coordinators can score checklist items.' }, { status: 403 });
     }
@@ -96,56 +98,36 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     if (score !== undefined) updates.score = score;
     if (remarks !== undefined) updates.remarks = remarks;
 
-    if (Number(itemIndex) === 8 && subItemsJson && !labBatch) {
-      const userAssignedBatches: string[] = [];
-      if (subject) {
-        if (subject.labTeacherAId === payload.userId || (!subject.labTeacherAId && (courseFile.facultyId === payload.userId || subject.courseTeacherId === payload.userId))) {
-          userAssignedBatches.push('A');
-        }
-        if (subject.labTeacherBId === payload.userId) userAssignedBatches.push('B');
-        if (subject.labTeacherCId === payload.userId) userAssignedBatches.push('C');
-      }
-      if (userAssignedBatches.length === 0) userAssignedBatches.push('A');
-
+    // Student Batch Row Ownership Enforcement for Items 4, 8, 14
+    if (roles.accessLevel === 'LAB' && [4, 8, 14].includes(numItem) && subItemsJson) {
       try {
-        const parsedNew = JSON.parse(subItemsJson);
-        if (Array.isArray(parsedNew.students)) {
-          const dbItem = (courseFile as any).checklistItems?.find((c: any) => c.itemIndex === 8);
-          let existingStudents: any[] = [];
-          if (dbItem?.subItemsJson) {
-            try {
-              const parsedExisting = JSON.parse(dbItem.subItemsJson);
-              if (Array.isArray(parsedExisting.students)) existingStudents = parsedExisting.students;
-            } catch (e) {}
-          }
-          const existingMap = new Map(existingStudents.map((s: any) => [s.studentId || s.id || s.enrolmentNumber, s]));
-
-          parsedNew.students = parsedNew.students.map((newRow: any) => {
-            const rowBatch = String(newRow.batch || 'A').toUpperCase();
-            if (!userAssignedBatches.includes(rowBatch)) {
-              const origRow = existingMap.get(newRow.studentId || newRow.id || newRow.enrolmentNumber);
-              return origRow || newRow;
+        const parsed = JSON.parse(subItemsJson);
+        if (Array.isArray(parsed.students)) {
+          const userBatches = roles.ownedBatches;
+          for (const studentRow of parsed.students) {
+            const rowBatch = String(studentRow.batch || 'A').toUpperCase().trim().replace(/^BATCH[-\s]*/i, '');
+            if (!userBatches.includes(rowBatch)) {
+              return noStoreJson({ error: `Forbidden: You are assigned to Batch ${userBatches.join(', ')} and cannot modify data for Batch ${rowBatch}.` }, { status: 403 });
             }
-            return newRow;
-          });
-          updates.subItemsJson = JSON.stringify(parsedNew);
+          }
         }
       } catch (e) {}
     }
 
-    if (labBatch) {
+    if (roles.accessLevel === 'LAB') {
+      const primaryBatch = roles.ownedBatches[0] || 'A';
       let taggedSubItems = subItemsJson;
       if (typeof taggedSubItems === 'string') {
-        try { taggedSubItems = JSON.stringify({ ...JSON.parse(taggedSubItems), batch: labBatch }); } catch (e) { taggedSubItems = JSON.stringify({ batch: labBatch }); }
+        try { taggedSubItems = JSON.stringify({ ...JSON.parse(taggedSubItems), batch: primaryBatch }); } catch (e) { taggedSubItems = JSON.stringify({ batch: primaryBatch }); }
       } else if (taggedSubItems === undefined) {
-        const existing = await getLabSubmission(courseFileId, labBatch, Number(itemIndex));
+        const existing = await getLabSubmission(courseFileId, primaryBatch, numItem);
         if (existing?.subItemsJson) {
-          try { taggedSubItems = JSON.stringify({ ...JSON.parse(existing.subItemsJson), batch: labBatch }); } catch (e) {}
+          try { taggedSubItems = JSON.stringify({ ...JSON.parse(existing.subItemsJson), batch: primaryBatch }); } catch (e) {}
         }
       }
       if (taggedSubItems !== undefined) updates.subItemsJson = taggedSubItems;
-      const submission = await upsertLabSubmission(courseFileId, payload.userId, labBatch, Number(itemIndex), updates);
-      return noStoreJson({ success: true, batch: labBatch, checklistItem: submission });
+      const submission = await upsertLabSubmission(courseFileId, payload.userId, primaryBatch, numItem, updates);
+      return noStoreJson({ success: true, batch: primaryBatch, checklistItem: submission });
     }
 
     const item = await updateChecklistItem(courseFileId, itemIndex, updates);

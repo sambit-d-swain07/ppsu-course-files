@@ -7,6 +7,7 @@ import { Row, Col, ProgressBar, Spinner, Alert, Button, Form, Modal, Table, Card
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 import * as XLSX from 'xlsx';
 import { parseItem4StudentList } from '@/lib/student-parser';
+import { LAB_VISIBLE_ITEMS, LAB_EDITABLE_ITEMS } from '@/lib/subject-access';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
@@ -45,8 +46,9 @@ const PREDEFINED_THEORY_CRITERIA = [
   { id: 'predef-faculty-eval', label: 'Faculty Evaluation' },
 ];
 
-const LAB_TEACHER_ITEM_INDICES = [2, 4, 8, 9, 14, 20];
-const LAB_TEACHER_EDITABLE_ITEM_INDICES = [2, 8, 9, 14, 20];
+// Lab-teacher visible and editable item indices — sourced from shared config to stay in sync.
+const LAB_TEACHER_ITEM_INDICES     = LAB_VISIBLE_ITEMS;   // shown to lab teacher (9, 20 visible but locked)
+const LAB_TEACHER_EDITABLE_ITEM_INDICES = LAB_EDITABLE_ITEMS; // actually writable [2, 4, 8, 14]
 
 // Title-case helper for criterion labels
 const toTitleCase = (s: string) => s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
@@ -159,7 +161,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   });
   const [facultyConfirmed, setFacultyConfirmed] = useState(false);
   const [facultySignatureName, setFacultySignatureName] = useState('');
-  const [access, setAccess] = useState<{ mode: string; batch?: string; facultyName?: string; allowedItems?: number[]; editableItems?: number[]; role?: string; isAdmin?: boolean }>({ mode: 'OWNER' });
+  const [access, setAccess] = useState<{
+    mode: string;
+    accessLevel?: 'FULL' | 'LAB' | 'NONE';
+    batch?: string;
+    ownedBatches?: string[];
+    facultyName?: string;
+    allowedItems?: number[];
+    editableItems?: number[];
+    role?: string;
+    isAdmin?: boolean;
+    rolesSummary?: string;
+    lockBannerText?: string | null;
+    isSubmitted?: boolean;
+    submittedBatchesMap?: Record<string, boolean>;
+  }>({ mode: 'OWNER' });
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -581,31 +597,40 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (courseFileId) fetchData(true); }, [courseFileId]);
 
-  const isBatchSubmitted = access?.mode === 'LAB_BATCH' && checklist.length > 0 && checklist.some((c: any) => c.status === 'SUBMITTED');
+  // isBatchSubmitted: use server-computed flag so it's consistent with backend enforcement
+  const isBatchSubmitted = access?.mode === 'LAB_BATCH' && Boolean(access?.isSubmitted);
   const isLocked = !['DRAFT', 'NEEDS_REVISION'].includes(courseFile?.status) || isBatchSubmitted;
 
+  /**
+   * isRowEditableByCurrentFaculty — determines whether a student row (identified by its batch)
+   * can be edited by the currently logged-in user.
+   *
+   * Rules:
+   *  - If the file is locked entirely → false.
+   *  - LAB_BATCH mode: only rows in the user's own batch AND only if not submitted yet.
+   *  - OWNER (Course Teacher) mode: editable if EITHER this user owns the batch (no separate owner
+   *    submitted it yet) OR no one has submitted that batch yet (CT fallback).
+   *    Once the batch owner submits, that batch becomes read-only for the CT too.
+   */
   const isRowEditableByCurrentFaculty = useCallback((rowBatch?: string) => {
     if (isLocked) return false;
     const targetBatch = String(rowBatch || 'A').toUpperCase();
     const isLabTeacherMode = access?.mode === 'LAB_BATCH';
 
     if (isLabTeacherMode) {
-      return targetBatch === String(access.batch || 'A').toUpperCase();
+      // Lab teacher can only edit their own batch, and only if not yet submitted
+      return targetBatch === String(access.batch || 'A').toUpperCase() && !access.isSubmitted;
     }
 
-    const assignedBatches: string[] = (access as any)?.assignedBatches;
-    if (Array.isArray(assignedBatches) && assignedBatches.length > 0) {
-      return assignedBatches.includes(targetBatch);
+    // Course Teacher (OWNER) mode:
+    // If the batch owner has already submitted, the CT cannot modify that batch.
+    const submittedBatchesMap = (access as any)?.submittedBatchesMap as Record<string, boolean> | undefined;
+    if (submittedBatchesMap && submittedBatchesMap[targetBatch]) {
+      return false; // batch owner has submitted — read-only even for CT
     }
 
-    const hasLabTeacherB = Boolean(courseFile?.subject?.labTeacherBId);
-    const hasLabTeacherC = Boolean(courseFile?.subject?.labTeacherCId);
-
-    if (targetBatch === 'B' && hasLabTeacherB) return false;
-    if (targetBatch === 'C' && hasLabTeacherC) return false;
-
-    return true;
-  }, [isLocked, access, courseFile]);
+    return true; // CT can edit (either they own it, or owner hasn't submitted yet)
+  }, [isLocked, access]);
 
   const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
     if (isLocked) return;
@@ -2853,7 +2878,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const studentListUploaded = access.mode === 'OWNER' ? true : isItemComplete(4);
-  const visibleChecklistItems = CHECKLIST_ITEMS;
+  // Use the pre-scoped list: lab teachers only see their allowed items; CT and others see all
+  const visibleChecklistItems = scopedChecklistItems;
 
   if (loading) return (
     <div className="d-flex justify-content-center py-5">
@@ -2923,32 +2949,48 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       )}
 
       {access.mode === 'LAB_BATCH' && (
-        <Card className="mb-4 border-0 shadow-sm" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a' }}>
+        <Card className="mb-4 border-0 shadow-sm" style={{ background: isBatchSubmitted ? '#fef9c3' : '#f0fdf4', borderLeft: `4px solid ${isBatchSubmitted ? '#ca8a04' : '#16a34a'}` }}>
           <Card.Body className="py-3">
             <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
-                <h6 className="fw-bold text-success mb-1 d-flex align-items-center gap-2">
+                <h6 className={`fw-bold mb-1 d-flex align-items-center gap-2 ${isBatchSubmitted ? 'text-warning-emphasis' : 'text-success'}`}>
                   <span>Batch {access.batch} Lab Teacher Submission Portal</span>
-                  {isBatchSubmitted && <Badge bg="success" className="px-2 py-1">✓ SUBMITTED</Badge>}
+                  {isBatchSubmitted && <Badge bg="warning" text="dark" className="px-2 py-1">🔒 SUBMITTED &amp; LOCKED</Badge>}
                 </h6>
+                {/* Roles summary line — helps verify per-subject access rules */}
+                {access.rolesSummary && (
+                  <p className="small text-secondary mb-1" style={{ fontStyle: 'italic' }}>
+                    {access.rolesSummary}
+                  </p>
+                )}
                 <p className="small text-secondary mb-0">
                   {isBatchSubmitted
-                    ? `Your Batch ${access.batch} lab data (Items 2, 8, 9, 14, 20) has been submitted to the Course Teacher and is locked.`
-                    : `Manage your assigned lab items (Items 2, 4, 8, 9, 14, and 20). Submitting will send your lab data & rubrics directly to the Course Teacher.`}
+                    ? (access.lockBannerText || `Your Batch ${access.batch} lab data (Items ${LAB_EDITABLE_ITEMS.join(', ')}) has been submitted to the Course Teacher and is locked.`)
+                    : `Manage your assigned lab items (Items ${LAB_EDITABLE_ITEMS.join(', ')}). Items 9 and 20 are view-only for lab teachers. Submitting will send your data directly to the Course Teacher.`}
                 </p>
               </div>
               <Button
-                variant="success"
+                variant={isBatchSubmitted ? 'outline-secondary' : 'success'}
                 size="sm"
                 className="fw-bold px-3 py-2"
                 disabled={isLocked || submitLoading || (!isBatchSubmitted && !labTeacherDeclared)}
                 onClick={handleLabTeacherSubmit}
               >
-                {submitLoading ? <Spinner animation="border" size="sm" /> : isBatchSubmitted ? '✓ Submitted' : `✓ Submit Batch ${access.batch} Data`}
+                {submitLoading ? <Spinner animation="border" size="sm" /> : isBatchSubmitted ? '🔒 Submitted' : `✓ Submit Batch ${access.batch} Data`}
               </Button>
             </div>
           </Card.Body>
         </Card>
+      )}
+
+      {/* Roles summary for Course Teacher and other full-access users (non-lab-teacher mode) */}
+      {access.mode !== 'LAB_BATCH' && access.rolesSummary && access.rolesSummary !== 'Your roles on this subject: None' && (
+        <div className="alert alert-light border d-flex align-items-center gap-2 py-2 px-3 mb-3" style={{ fontSize: 13 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
+          </svg>
+          <span className="text-secondary">{access.rolesSummary}</span>
+        </div>
       )}
 
       {/* SECTION 0: Faculty & Course Details Header Block */}
@@ -3596,6 +3638,22 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             ? `Student rows are automatically filtered to Batch ${access.batch} from Item 4. Unassigned students are hidden.`
                             : "Student rows appear automatically from Item 4's Student List. Use '+ Add Student' to add someone not on that list."}
                         </div>
+
+                        {access.mode !== 'LAB_BATCH' && courseFile?.subject && (
+                          <div className="d-flex flex-wrap gap-2 mb-3 align-items-center bg-light p-2.5 rounded border">
+                            <span className="small text-secondary fw-semibold">Lab Batch Teachers & Submissions:</span>
+                            {['A', 'B', 'C'].map((bKey) => {
+                              const teacherName = bKey === 'A' ? courseFile.subject.labTeacherA?.name : bKey === 'B' ? courseFile.subject.labTeacherB?.name : courseFile.subject.labTeacherC?.name;
+                              if (!teacherName) return null;
+                              const isSubmitted = Boolean(access?.submittedBatchesMap?.[bKey]);
+                              return (
+                                <span key={bKey} className={`badge border ${isSubmitted ? 'bg-warning-subtle text-dark border-warning' : 'bg-white text-dark border-secondary-subtle'}`} style={{ fontSize: 11 }}>
+                                  Entered by <strong>{teacherName}</strong> (Batch {bKey}) {isSubmitted ? '🔒 Submitted' : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* 2. CONTINUOUS EVALUATION (CE) SECTION */}
 <div className="mb-4 border rounded p-3 bg-white shadow-sm">
@@ -4615,6 +4673,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                           </div>
                         )}
 
+                        {!isLabBatchView && courseFile?.subject && (
+                          <div className="d-flex flex-wrap gap-2 mb-2 align-items-center">
+                            {['A', 'B', 'C'].map((bKey) => {
+                              const teacherName = bKey === 'A' ? courseFile.subject.labTeacherA?.name : bKey === 'B' ? courseFile.subject.labTeacherB?.name : courseFile.subject.labTeacherC?.name;
+                              if (!teacherName) return null;
+                              const isSubmitted = Boolean(access?.submittedBatchesMap?.[bKey]);
+                              return (
+                                <span key={bKey} className={`badge border ${isSubmitted ? 'bg-success-subtle text-success border-success-subtle' : 'bg-light text-dark border-secondary-subtle'}`} style={{ fontSize: 11 }}>
+                                  Batch {bKey}: Entered by <strong>{teacherName}</strong> {isSubmitted ? '✓ Submitted (Read-only)' : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
                         {isLabBatchView && (
                           <div className="alert alert-info small py-1.5 px-3 mb-2 d-flex align-items-center justify-content-between">
                             <span>🔍 <strong>Auto-filtered for Batch {access.batch}:</strong> Showing only students assigned to Batch {access.batch}.</span>
@@ -4634,32 +4707,37 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 </tr>
                               </thead>
                               <tbody>
-                                {mergedStudents.map((student: any, idx: number) => (
-                                  <tr key={student.id}>
-                                    <td className="text-muted font-mono-ppsu">{idx + 1}</td>
-                                    <td className="fw-semibold">{student.name}</td>
-                                    <td className="font-mono-ppsu">{student.enrolmentNumber}</td>
-                                    <td>
-                                      {!isLocked && !isLabBatchView ? (
-                                        <Form.Select
-                                          size="sm"
-                                          style={{ fontSize: 11, padding: '2px 4px', width: 100 }}
-                                          value={student.batch ? (['A','B','C'].includes(String(student.batch).toUpperCase()) ? String(student.batch).toUpperCase() : (/B/i.test(student.batch) ? 'B' : /C/i.test(student.batch) ? 'C' : 'A')) : ''}
-                                          onChange={(e) => handleStudentBatchChange(student.id, e.target.value)}
-                                        >
-                                          <option value="">Unassigned</option>
-                                          <option value="A">Batch A</option>
-                                          <option value="B">Batch B</option>
-                                          <option value="C">Batch C</option>
-                                        </Form.Select>
-                                      ) : (
-                                        <span className={`badge ${student.batch ? 'bg-primary text-white' : 'bg-secondary text-white'}`} style={{ fontSize: 11 }}>
-                                          {student.batch ? `Batch ${student.batch}` : 'Unassigned'}
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {mergedStudents.map((student: any, idx: number) => {
+                                  const studentBatchKey = student.batch ? String(student.batch).toUpperCase() : '';
+                                  const isStudentBatchSubmitted = Boolean(studentBatchKey && access?.submittedBatchesMap?.[studentBatchKey]);
+                                  const canEditStudentBatch = !isLocked && !isLabBatchView && !isStudentBatchSubmitted;
+                                  return (
+                                    <tr key={student.id}>
+                                      <td className="text-muted font-mono-ppsu">{idx + 1}</td>
+                                      <td className="fw-semibold">{student.name}</td>
+                                      <td className="font-mono-ppsu">{student.enrolmentNumber}</td>
+                                      <td>
+                                        {canEditStudentBatch ? (
+                                          <Form.Select
+                                            size="sm"
+                                            style={{ fontSize: 11, padding: '2px 4px', width: 100 }}
+                                            value={student.batch ? (['A','B','C'].includes(String(student.batch).toUpperCase()) ? String(student.batch).toUpperCase() : (/B/i.test(student.batch) ? 'B' : /C/i.test(student.batch) ? 'C' : 'A')) : ''}
+                                            onChange={(e) => handleStudentBatchChange(student.id, e.target.value)}
+                                          >
+                                            <option value="">Unassigned</option>
+                                            <option value="A">Batch A</option>
+                                            <option value="B">Batch B</option>
+                                            <option value="C">Batch C</option>
+                                          </Form.Select>
+                                        ) : (
+                                          <span className={`badge ${student.batch ? (isStudentBatchSubmitted ? 'bg-success text-white' : 'bg-primary text-white') : 'bg-secondary text-white'}`} style={{ fontSize: 11 }}>
+                                            {student.batch ? `Batch ${student.batch}` : 'Unassigned'} {isStudentBatchSubmitted ? '🔒' : ''}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </Table>
                           </div>
@@ -5579,18 +5657,29 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         {['A', 'B', 'C'].map((batchKey) => {
                           if (isLabTeacher && access?.batch !== batchKey) return null;
                           const batchData = batchSubs.find((s: any) => s.batch === batchKey);
+                          const isBatchLocked = !isLabTeacher && batchData?.status === 'SUBMITTED';
+                          const batchOwnerName = batchData?.facultyName
+                            || (batchKey === 'A' ? courseFile?.subject?.labTeacherA?.name : batchKey === 'B' ? courseFile?.subject?.labTeacherB?.name : courseFile?.subject?.labTeacherC?.name)
+                            || null;
 
                           return (
                             <Col xs={12} md={6} key={batchKey}>
-                              <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
+                              <div className={`p-3 rounded border h-100 d-flex flex-column justify-content-between ${isBatchLocked ? 'bg-warning-subtle border-warning' : 'bg-light'}`}>
                                 <div>
                                   <div className="fw-bold mb-1 text-dark d-flex align-items-center flex-wrap gap-1">
                                     <span>Attendance Register — Batch {batchKey}</span>
                                     <span className="badge bg-primary" style={{ fontSize: 9 }}>Lab Batch {batchKey}</span>
                                     {!isLabTeacher && batchData?.status === 'SUBMITTED' && (
-                                      <span className="badge bg-success" style={{ fontSize: 9 }}>✓ Submitted by Lab Teacher</span>
+                                      <span className="badge bg-success" style={{ fontSize: 9 }}>✓ Submitted</span>
                                     )}
                                   </div>
+                                  {/* "Entered by" attribution — visible to Course Teacher and Evaluator */}
+                                  {!isLabTeacher && batchOwnerName && (
+                                    <div className="text-secondary small mb-1" style={{ fontSize: 11, fontStyle: 'italic' }}>
+                                      Entered by <strong>{batchOwnerName}</strong> (Batch {batchKey})
+                                      {isBatchLocked && <span className="ms-1 badge bg-warning text-dark" style={{ fontSize: 9 }}>🔒 Read-only</span>}
+                                    </div>
+                                  )}
                                   {batchData?.fileName ? (
                                     <div className="text-success fw-bold font-mono-ppsu mb-1 text-truncate">✓ {batchData.fileName}</div>
                                   ) : (
@@ -5603,14 +5692,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setViewingDoc({ title: `Attendance Register — Batch ${batchKey}`, fileName: batchData.fileName, fileUrl: batchData.fileUrl })}>
                                         👁️ View
                                       </Button>
-                                      {!isLocked && ((isLabTeacher && access?.batch === batchKey) || (!isLabTeacher && access?.mode === 'OWNER')) && (
+                                      {!isLocked && !isBatchLocked && ((isLabTeacher && access?.batch === batchKey) || (!isLabTeacher && access?.mode === 'OWNER')) && (
                                         <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
                                           Remove
                                         </Button>
                                       )}
                                     </>
                                   ) : (
-                                    !isLocked && (isLabTeacher ? access?.batch === batchKey : true) && (
+                                    !isLocked && !isBatchLocked && (isLabTeacher ? access?.batch === batchKey : true) && (
                                       <label className="btn btn-outline-secondary btn-sm m-0" style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
                                         Upload Register
                                         <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(14, 'Attendance Register', f); e.currentTarget.value = ''; }} />
