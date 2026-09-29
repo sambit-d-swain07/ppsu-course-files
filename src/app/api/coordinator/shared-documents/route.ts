@@ -51,24 +51,29 @@ export async function POST(req: NextRequest) {
     }
 
     if ([1, 18].includes(Number(itemIndex))) {
-      if (!school) {
-        return noStoreJson({ error: `school is required for Item ${itemIndex} shared documents` }, { status: 400 });
-      }
-      const schoolCode = normalizeSchoolCode(school);
-      const coordinatorSubjects = await getSubjectsByCoordinatorId(payload.userId);
-      const canUploadForSchool = payload.role === 'ADMIN' || coordinatorSubjects.some((subject: any) => normalizeSchoolCode(subject.school) === schoolCode);
-      if (!canUploadForSchool) {
-        return noStoreJson({ error: 'Forbidden: You are not assigned as Course Coordinator for this school' }, { status: 403 });
+      // If subjectId is provided, store per-subject (prevents cross-subject data leakage).
+      // If only school is provided (legacy), store at school level.
+      if (!subjectId && !school) {
+        return noStoreJson({ error: `subjectId or school is required for Item ${itemIndex} shared documents` }, { status: 400 });
       }
 
-      const doc = await upsertSchoolSharedDocument(schoolCode, Number(itemIndex), {
-        status: status || 'UPLOADED',
-        fileName: fileName || null,
-        fileUrl: fileUrl || null,
-        subItemsJson: subItemsJson !== undefined ? subItemsJson : null
-      });
-
-      return noStoreJson({ success: true, schoolSharedDocument: doc });
+      if (!subjectId && school) {
+        // Legacy school-level path
+        const schoolCode = normalizeSchoolCode(school);
+        const coordinatorSubjects = await getSubjectsByCoordinatorId(payload.userId);
+        const canUploadForSchool = payload.role === 'ADMIN' || coordinatorSubjects.some((subject: any) => normalizeSchoolCode(subject.school) === schoolCode);
+        if (!canUploadForSchool) {
+          return noStoreJson({ error: 'Forbidden: You are not assigned as Course Coordinator for this school' }, { status: 403 });
+        }
+        const doc = await upsertSchoolSharedDocument(schoolCode, Number(itemIndex), {
+          status: status || 'UPLOADED',
+          fileName: fileName || null,
+          fileUrl: fileUrl || null,
+          subItemsJson: subItemsJson !== undefined ? subItemsJson : null
+        });
+        return noStoreJson({ success: true, schoolSharedDocument: doc });
+      }
+      // Fall through to per-subject handling below
     }
 
     if (!subjectId) {
