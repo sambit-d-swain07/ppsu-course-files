@@ -39,16 +39,19 @@ const SCHOOL_LABELS: Record<string, string> = {
 };
 
 const uploadFileToServer = async (file: File): Promise<string> => {
-  const dataUrl = await readFileAsDataUrl(file);
   try {
     const formData = new FormData();
     formData.append('file', file);
-    fetch('/api/upload', {
+    const res = await fetch('/api/upload', {
       method: 'POST',
       body: formData
-    }).catch(() => {});
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.fileUrl) return data.fileUrl;
+    }
   } catch (e) {}
-  return dataUrl;
+  return await readFileAsDataUrl(file);
 };
 
 const readFileAsDataUrl = (file: File): Promise<string> => {

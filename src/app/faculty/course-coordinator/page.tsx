@@ -78,6 +78,22 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
   });
 };
 
+const uploadFileToServer = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.fileUrl) return data.fileUrl;
+    }
+  } catch (e) {}
+  return await readFileAsDataUrl(file);
+};
+
 function statusBadgeClass(status: string) {
   switch (status) {
     case 'APPROVED':        return 'bg-success text-white';
@@ -183,7 +199,7 @@ export default function FacultyCourseCoordinatorPage() {
     if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       const isSchoolItem = [1, 18].includes(itemIndex);
       const schoolCode = activeSubject?.school || 'SOE';
 
@@ -217,7 +233,7 @@ export default function FacultyCourseCoordinatorPage() {
     if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await uploadFileToServer(file);
       const isSchoolItem = [1, 18].includes(itemIndex);
       const schoolCode = activeSubject?.school || 'SOE';
       const existingDoc = isSchoolItem ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);

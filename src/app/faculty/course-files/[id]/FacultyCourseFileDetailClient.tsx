@@ -121,18 +121,23 @@ const readFileAsDataUrl = (file: File): Promise<string> => {
 };
 
 const uploadFileToServer = async (file: File): Promise<string> => {
-  const dataUrl = await readFileAsDataUrl(file);
   try {
     const formData = new FormData();
     formData.append('file', file);
-    fetch('/api/upload', {
+    const res = await fetch('/api/upload', {
       method: 'POST',
       body: formData,
-    }).catch(() => {});
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.fileUrl) {
+        return data.fileUrl;
+      }
+    }
   } catch (e) {
-    console.warn('Background upload backup log:', e);
+    console.warn('File upload to /api/upload failed, falling back to data URL:', e);
   }
-  return dataUrl;
+  return await readFileAsDataUrl(file);
 };
 
 const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
@@ -2346,7 +2351,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }];
     }
 
-    const dataUrl = await readFileAsDataUrl(file);
+    const dataUrl = await uploadFileToServer(file);
     const updatedDocs = docs.map((d: any) => {
       if (d.id === docId) {
         return {
