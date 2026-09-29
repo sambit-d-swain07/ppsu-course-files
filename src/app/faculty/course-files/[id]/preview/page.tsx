@@ -411,14 +411,19 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
     setDownloadingDocx(true);
     try {
       const res = await fetch(`/api/course-files/${courseFileId}/merged-report`);
-      if (!res.ok) throw new Error('Failed to generate DOCX report');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to generate DOCX report (HTTP ${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `merged-course-file-${codeName}.docx`;
+      a.download = `merged-course-file-${codeName || 'report'}.docx`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err: any) {
       alert(err.message || 'Error downloading DOCX');
     } finally {
@@ -430,10 +435,20 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
     setDownloadingPdf(true);
     try {
       const res = await fetch(`/api/course-files/${courseFileId}/merged-pdf`);
-      if (!res.ok) throw new Error('Failed to generate PDF report');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to generate PDF report (HTTP ${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.download = `merged-course-file-${code || 'report'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err: any) {
       alert(err.message || 'Error generating PDF');
     } finally {

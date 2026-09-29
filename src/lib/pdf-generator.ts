@@ -398,7 +398,16 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
       content: docContent
     };
     const chunkPdf = pdfmake.createPdf(docDef);
-    const chunkBuffer: Buffer = await chunkPdf.getBuffer();
+    const chunkBuffer: Buffer = await new Promise((resolve, reject) => {
+      try {
+        chunkPdf.getBuffer((buf: Buffer) => {
+          if (buf && buf.length > 0) resolve(buf);
+          else reject(new Error('pdfmake getBuffer returned empty buffer'));
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
     const chunkLoaded = await PDFDocument.load(chunkBuffer);
     const copiedPages = await mergedDoc.copyPages(chunkLoaded, Array.from({ length: chunkLoaded.getPageCount() }, (_, i) => i));
     copiedPages.forEach((p) => mergedDoc.addPage(p));
