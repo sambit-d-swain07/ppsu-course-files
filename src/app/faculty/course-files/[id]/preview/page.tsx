@@ -469,6 +469,19 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
   const [downloadingDocx, setDownloadingDocx] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState('');
+  const [mobileScale, setMobileScale] = useState(1);
+
+  // Scale preview pages to fit mobile screen width
+  useEffect(() => {
+    const DESIGN_WIDTH = 860;
+    const update = () => {
+      const w = window.innerWidth;
+      setMobileScale(w < DESIGN_WIDTH ? w / DESIGN_WIDTH : 1);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     fetch(`/api/course-files/${courseFileId}`)
@@ -517,9 +530,26 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         return;
       }
 
+      // ---- Force desktop layout (860px) before capture ----
+      // On mobile the elements render narrow; we need A4-width layout for correct PDF.
+      const CAPTURE_WIDTH = 860;
+      const container = document.querySelector('.preview-page-container') as HTMLElement | null;
+      const savedContainerStyle = container ? container.style.cssText : '';
+      const savedPageStyles = pages.map(p => p.style.cssText);
+
+      if (container) {
+        container.style.cssText = `width:${CAPTURE_WIDTH}px !important;min-width:${CAPTURE_WIDTH}px !important;max-width:${CAPTURE_WIDTH}px !important;transform:none !important;overflow:visible !important;`;
+      }
+      pages.forEach(p => {
+        p.style.cssText += `width:${CAPTURE_WIDTH}px !important;min-width:${CAPTURE_WIDTH}px !important;overflow:visible !important;`;
+      });
+
+      // Wait for reflow
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const A4_W_MM = 210;
       const A4_H_MM = 297;
-      const A4_RATIO = A4_H_MM / A4_W_MM; // 297/210 ≈ 1.4143
+      const A4_RATIO = A4_H_MM / A4_W_MM;
       const SCALE = 2;
 
       const pdf = new jsPDF({
@@ -531,55 +561,51 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
 
       let firstPage = true;
 
-      for (let i = 0; i < pages.length; i++) {
-        setPdfProgress(`Rendering page ${i + 1} of ${pages.length}…`);
-        const page = pages[i];
+      try {
+        for (let i = 0; i < pages.length; i++) {
+          setPdfProgress(`Rendering page ${i + 1} of ${pages.length}…`);
+          const page = pages[i];
 
-        // Capture at the element's natural screen size — NO width/windowWidth override.
-        // Overriding windowWidth causes CSS (tables, flex, widths) to reflow narrower,
-        // which is why content appeared in only half the page.
-        const canvas = await html2canvas(page, {
-          scale: SCALE,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          scrollX: 0,
-          scrollY: 0,
-          logging: false,
-        });
+          const canvas = await html2canvas(page, {
+            scale: SCALE,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            scrollX: 0,
+            scrollY: 0,
+            logging: false,
+          });
 
-        const canvasW = canvas.width;  // element width × SCALE
-        const canvasH = canvas.height; // element height × SCALE
+          const canvasW = canvas.width;
+          const canvasH = canvas.height;
+          const pageH = Math.round(canvasW * A4_RATIO);
+          const numSlices = Math.ceil(canvasH / pageH);
 
-        // Derive one A4 page height in canvas pixels from the A4 aspect ratio.
-        // This is independent of the element’s on-screen width.
-        const pageH = Math.round(canvasW * A4_RATIO);
+          for (let s = 0; s < numSlices; s++) {
+            const sliceTop    = s * pageH;
+            const sliceHeight = Math.min(pageH, canvasH - sliceTop);
 
-        const numSlices = Math.ceil(canvasH / pageH);
+            const sliceCanvas = document.createElement('canvas');
+            sliceCanvas.width  = canvasW;
+            sliceCanvas.height = sliceHeight;
+            const ctx = sliceCanvas.getContext('2d')!;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvasW, sliceHeight);
+            ctx.drawImage(canvas, 0, sliceTop, canvasW, sliceHeight, 0, 0, canvasW, sliceHeight);
 
-        for (let s = 0; s < numSlices; s++) {
-          const sliceTop    = s * pageH;
-          const sliceHeight = Math.min(pageH, canvasH - sliceTop);
+            const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
+            const sliceH_MM = (sliceHeight / pageH) * A4_H_MM;
 
-          const sliceCanvas = document.createElement('canvas');
-          sliceCanvas.width  = canvasW;
-          sliceCanvas.height = sliceHeight;
-          const ctx = sliceCanvas.getContext('2d')!;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvasW, sliceHeight);
-          ctx.drawImage(canvas, 0, sliceTop, canvasW, sliceHeight, 0, 0, canvasW, sliceHeight);
+            if (!firstPage) pdf.addPage();
+            firstPage = false;
 
-          const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
-
-          // Height in mm: proportional to how much of a full A4 page this slice fills.
-          const sliceH_MM = (sliceHeight / pageH) * A4_H_MM;
-
-          if (!firstPage) pdf.addPage();
-          firstPage = false;
-
-          // Always fill the full A4 page width (210mm)
-          pdf.addImage(imgData, 'JPEG', 0, 0, A4_W_MM, sliceH_MM);
+            pdf.addImage(imgData, 'JPEG', 0, 0, A4_W_MM, sliceH_MM);
+          }
         }
+      } finally {
+        // ---- Restore original styles ----
+        if (container) container.style.cssText = savedContainerStyle;
+        pages.forEach((p, idx) => { p.style.cssText = savedPageStyles[idx]; });
       }
 
       setPdfProgress('Saving PDF…');
@@ -725,7 +751,17 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
       </div>
 
-      <div className="preview-page-container mx-auto my-4 shadow-lg" style={{ maxWidth: '860px' }}>
+      {/* Preview container — scales down on mobile so A4 pages fit the screen */}
+      <div
+        className="preview-page-container mx-auto my-4 shadow-lg"
+        style={{
+          maxWidth: '860px',
+          transformOrigin: 'top center',
+          transform: mobileScale < 1 ? `scale(${mobileScale})` : undefined,
+          // Compensate for the height reduction caused by scaling
+          marginBottom: mobileScale < 1 ? `calc(${(mobileScale - 1) * 100}% * 6)` : undefined,
+        }}
+      >
 
         {/* PAGE 1: COVER PAGE */}
         <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', width: '100%', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
