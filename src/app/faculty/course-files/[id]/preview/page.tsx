@@ -517,15 +517,10 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         return;
       }
 
-      // A4 dimensions
       const A4_W_MM = 210;
       const A4_H_MM = 297;
-
-      // Pixel width to render at (A4 at 96dpi = 794px)
-      const A4_PX_W = 794;
-      // A4 page height in pixels at same DPI
-      const A4_PX_H = 1123;
-      const SCALE = 2; // High-res capture
+      const A4_RATIO = A4_H_MM / A4_W_MM; // 297/210 ≈ 1.4143
+      const SCALE = 2;
 
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -540,7 +535,9 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         setPdfProgress(`Rendering page ${i + 1} of ${pages.length}…`);
         const page = pages[i];
 
-        // Capture at exactly A4_PX_W wide so centering and widths are correct
+        // Capture at the element's natural screen size — NO width/windowWidth override.
+        // Overriding windowWidth causes CSS (tables, flex, widths) to reflow narrower,
+        // which is why content appeared in only half the page.
         const canvas = await html2canvas(page, {
           scale: SCALE,
           useCORS: true,
@@ -548,26 +545,22 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           backgroundColor: '#ffffff',
           scrollX: 0,
           scrollY: 0,
-          width: A4_PX_W,
-          windowWidth: A4_PX_W,
           logging: false,
         });
 
-        // Canvas height in scaled pixels
-        const canvasW = canvas.width;           // A4_PX_W * SCALE
-        const canvasH = canvas.height;          // actual rendered height * SCALE
+        const canvasW = canvas.width;  // element width × SCALE
+        const canvasH = canvas.height; // element height × SCALE
 
-        // One A4 page height in scaled pixels
-        const pageH = A4_PX_H * SCALE;
+        // Derive one A4 page height in canvas pixels from the A4 aspect ratio.
+        // This is independent of the element’s on-screen width.
+        const pageH = Math.round(canvasW * A4_RATIO);
 
-        // How many PDF pages does this element need?
         const numSlices = Math.ceil(canvasH / pageH);
 
         for (let s = 0; s < numSlices; s++) {
           const sliceTop    = s * pageH;
           const sliceHeight = Math.min(pageH, canvasH - sliceTop);
 
-          // Create an offscreen canvas for this slice
           const sliceCanvas = document.createElement('canvas');
           sliceCanvas.width  = canvasW;
           sliceCanvas.height = sliceHeight;
@@ -578,12 +571,13 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
 
           const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
 
-          // Proportional height in mm for this slice
+          // Height in mm: proportional to how much of a full A4 page this slice fills.
           const sliceH_MM = (sliceHeight / pageH) * A4_H_MM;
 
           if (!firstPage) pdf.addPage();
           firstPage = false;
 
+          // Always fill the full A4 page width (210mm)
           pdf.addImage(imgData, 'JPEG', 0, 0, A4_W_MM, sliceH_MM);
         }
       }
@@ -731,7 +725,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
       </div>
 
-      <div className="preview-page-container mx-auto" style={{ width: '794px', maxWidth: '100%' }}>
+      <div className="preview-page-container mx-auto my-4 shadow-lg" style={{ maxWidth: '860px' }}>
 
         {/* PAGE 1: COVER PAGE */}
         <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', width: '100%', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
