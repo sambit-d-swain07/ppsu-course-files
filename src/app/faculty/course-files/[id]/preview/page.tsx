@@ -467,7 +467,7 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloadingDocx, setDownloadingDocx] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [printHint, setPrintHint] = useState(false);
 
   useEffect(() => {
     fetch(`/api/course-files/${courseFileId}`)
@@ -501,30 +501,14 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
     }
   };
 
-  const handleDownloadPdf = async () => {
-    setDownloadingPdf(true);
-    try {
-      const res = await fetch(`/api/course-files/${courseFileId}/merged-pdf`);
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to generate PDF report (HTTP ${res.status})`);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      const safeCode = cf?.courseCode || 'report';
-      a.download = `merged-course-file-${safeCode}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch (err: any) {
-      alert(err.message || 'Error generating PDF');
-    } finally {
-      setDownloadingPdf(false);
-    }
+  const handleDownloadPdf = () => {
+    // Show the hint banner briefly, then trigger the browser print dialog.
+    // Users select "Save as PDF" in the print dialog to download the PDF.
+    setPrintHint(true);
+    setTimeout(() => {
+      window.print();
+      setPrintHint(false);
+    }, 600);
   };
 
   if (loading) return (
@@ -604,6 +588,20 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         }
       `}</style>
 
+      {/* Print hint banner — shown briefly before print dialog opens */}
+      {printHint && (
+        <div
+          className="no-print"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+            background: '#16a34a', color: '#fff', textAlign: 'center',
+            padding: '10px 20px', fontWeight: 600, fontSize: '14px'
+          }}
+        >
+          📄 Opening print dialog… In the dialog, set <strong>Destination → Save as PDF</strong> then click Save.
+        </div>
+      )}
+
       {/* Top Navbar */}
       <div className="no-print sticky-top bg-dark text-white p-3 shadow d-flex justify-content-between align-items-center flex-wrap gap-2" style={{ zIndex: 1050 }}>
         <div>
@@ -623,11 +621,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           <a href={`/report/${courseFileId}`} target="_blank" className="btn btn-outline-info btn-sm fw-semibold">
             📋 Official Evaluation Report
           </a>
-          <Button variant="light" size="sm" className="fw-bold" onClick={() => window.print()}>
-            🖨️ Print Preview
-          </Button>
-          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf} disabled={downloadingPdf}>
-            {downloadingPdf ? <><Spinner animation="border" size="sm" className="me-1" /> Generating PDF...</> : '📄 Download PDF Report'}
+          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf}>
+            📄 Download PDF Report
           </Button>
         </div>
       </div>
