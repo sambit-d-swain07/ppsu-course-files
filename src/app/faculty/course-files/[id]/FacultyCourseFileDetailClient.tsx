@@ -1420,8 +1420,17 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       fallbackSource.forEach(addStudent);
     }
 
-    return resultList.filter((student) => isRowEditableByCurrentFaculty(student.batch));
-  }, [checklist, item8Rows, item9Rows, isRowEditableByCurrentFaculty]);
+    if (access?.mode === 'LAB_BATCH' && access?.batch) {
+      const targetBatch = String(access.batch).toUpperCase().trim();
+      return resultList.filter((student) => {
+        const rawBatch = String(student.batch || 'A').toUpperCase().trim();
+        const normalized = rawBatch.replace(/^BATCH[-\s]*/i, '').trim();
+        return normalized === targetBatch;
+      });
+    }
+
+    return resultList;
+  }, [checklist, item8Rows, item9Rows, access]);
 
   const syncStudentRows = (arg1: any, arg2: any[] = [], arg3: any[] = []) => {
     let itemIndex = 8;

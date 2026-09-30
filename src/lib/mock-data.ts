@@ -968,7 +968,7 @@ export async function updateChecklistItem(courseFileId: string, itemIndex: numbe
     const progress = Math.min(20, items.filter(i => i.status === 'UPLOADED').length);
     await tx.courseFile.update({ where: { id: courseFileId }, data: { progress } });
     return item;
-  });
+  }, { timeout: 20000, maxWait: 10000 });
 }
 
 export async function updateChecklistItemsBatch(courseFileId: string, updatesList: Array<{ itemIndex: number; updates: Partial<Omit<ChecklistItem, 'id' | 'courseFileId' | 'itemIndex'>> }>) {
@@ -984,7 +984,7 @@ export async function updateChecklistItemsBatch(courseFileId: string, updatesLis
     const progress = Math.min(20, items.filter(i => i.status === 'UPLOADED').length);
     await tx.courseFile.update({ where: { id: courseFileId }, data: { progress } });
     return items;
-  });
+  }, { timeout: 20000, maxWait: 10000 });
 }
 
 
