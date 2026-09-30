@@ -40,6 +40,7 @@ import bcrypt from 'bcryptjs';
 const PASS_HASH = bcrypt.hashSync('password123', 10);
 
 export const MOCK_SEED_USERS: User[] = [
+  { id: 'user-admin', name: 'Academic Admin', email: 'admin@ppsu.ac.in', passwordHash: PASS_HASH, role: 'ADMIN', department: 'Administration', school: 'SOE', employeeId: 'EMP-ADMIN' },
   { id: 'user-saima', name: 'Prof. Saima', email: 'saima@ppsu.ac.in', passwordHash: PASS_HASH, role: 'FACULTY', department: 'Computer Engineering', school: 'SOE', employeeId: 'EMP-SAIMA' },
   { id: 'user-sambit', name: 'Sambit D. Swain', email: 'sambit@ppsu.ac.in', passwordHash: PASS_HASH, role: 'COORDINATOR', department: 'Computer Engineering', school: 'SOE', employeeId: 'EMP-SAMBIT' },
   { id: 'user-kamini', name: 'Prof. Kamini', email: 'kamini@ppsu.ac.in', passwordHash: PASS_HASH, role: 'FACULTY', department: 'Computer Engineering', school: 'SOE', employeeId: 'EMP-KAMINI' },
