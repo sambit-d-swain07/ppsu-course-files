@@ -624,22 +624,26 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const match = rawStr.match(/[A-C]/);
     const targetBatch = match ? match[0] : 'A';
 
-    const isLabTeacherMode = access?.mode === 'LAB_BATCH';
+    // Get user's explicitly assigned lab batches (e.g. ['A'] for Kamini Sharma)
+    const ownedBatches = (access?.ownedBatches && access.ownedBatches.length > 0)
+      ? access.ownedBatches.map((b) => String(b).toUpperCase().trim())
+      : (access?.batch ? [String(access.batch).toUpperCase().trim()] : []);
 
-    if (isLabTeacherMode) {
-      const userBatches = (access.ownedBatches && access.ownedBatches.length > 0)
-        ? access.ownedBatches.map((b) => String(b).toUpperCase().trim())
-        : [String(access.batch || 'A').toUpperCase().trim()];
-
-      const isOwned = userBatches.includes(targetBatch);
-      const isBatchSubmitted = Boolean(access?.submittedBatchesMap?.[targetBatch] || (targetBatch === access.batch && access.isSubmitted));
+    // If user is assigned as lab teacher to specific batch(es), enforce strict batch ownership
+    if (ownedBatches.length > 0) {
+      const isOwned = ownedBatches.includes(targetBatch);
+      const isBatchSubmitted = Boolean(access?.submittedBatchesMap?.[targetBatch] || (targetBatch === access?.batch && access?.isSubmitted));
       return isOwned && !isBatchSubmitted;
     }
 
-    // Course Teacher (OWNER / FULL) mode:
-    // Course Teacher can edit all batches except those already submitted by a separate lab teacher
-    const isBatchSubmittedByOther = Boolean(access?.submittedBatchesMap?.[targetBatch]);
-    return !isBatchSubmittedByOther;
+    // Fallback for Course Teacher without specific lab batch assignments:
+    // Course Teacher can edit batches that have not been submitted by a separate lab teacher
+    if (access?.accessLevel === 'FULL' || access?.mode === 'OWNER') {
+      const isBatchSubmittedByOther = Boolean(access?.submittedBatchesMap?.[targetBatch]);
+      return !isBatchSubmittedByOther;
+    }
+
+    return false;
   }, [isLocked, access]);
 
   const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
