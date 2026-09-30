@@ -4712,7 +4712,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               const isSubmitted = Boolean(access?.submittedBatchesMap?.[bKey]);
                               return (
                                 <span key={bKey} className={`badge border ${isSubmitted ? 'bg-success-subtle text-success border-success-subtle' : 'bg-light text-dark border-secondary-subtle'}`} style={{ fontSize: 11 }}>
-                                  Batch {bKey}: Entered by <strong>{teacherName}</strong> {isSubmitted ? '✓ Submitted (Read-only)' : ''}
+                                  Batch {bKey}: Entered by <strong>{teacherName}</strong> {isSubmitted ? '✓ Submitted' : ''}
                                 </span>
                               );
                             })}
@@ -4739,9 +4739,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                               </thead>
                               <tbody>
                                 {mergedStudents.map((student: any, idx: number) => {
-                                  const studentBatchKey = student.batch ? String(student.batch).toUpperCase() : '';
-                                  const isStudentBatchSubmitted = Boolean(studentBatchKey && access?.submittedBatchesMap?.[studentBatchKey]);
-                                  const canEditStudentBatch = !isLocked && !isLabBatchView && !isStudentBatchSubmitted;
+                                  const canEditStudentBatch = !isLocked && !isLabBatchView;
                                   return (
                                     <tr key={student.id}>
                                       <td className="text-muted font-mono-ppsu">{idx + 1}</td>
@@ -4761,8 +4759,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                             <option value="C">Batch C</option>
                                           </Form.Select>
                                         ) : (
-                                          <span className={`badge ${student.batch ? (isStudentBatchSubmitted ? 'bg-success text-white' : 'bg-primary text-white') : 'bg-secondary text-white'}`} style={{ fontSize: 11 }}>
-                                            {student.batch ? `Batch ${student.batch}` : 'Unassigned'} {isStudentBatchSubmitted ? '🔒' : ''}
+                                          <span className={`badge ${student.batch ? 'bg-primary text-white' : 'bg-secondary text-white'}`} style={{ fontSize: 11 }}>
+                                            {student.batch ? `Batch ${student.batch}` : 'Unassigned'}
                                           </span>
                                         )}
                                       </td>
