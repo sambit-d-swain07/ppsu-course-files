@@ -449,7 +449,25 @@ const subjectInclude = {
 };
 
 export async function getSubjects() {
-  return (await prisma.subject.findMany({ include: subjectInclude, orderBy: { createdAt: 'desc' } })) as unknown as Subject[];
+  await ensureSeedData();
+  try {
+    const list = await prisma.subject.findMany({ include: subjectInclude, orderBy: { createdAt: 'desc' } });
+    if (list.length > 0) return list as unknown as Subject[];
+  } catch (e) {}
+  // Fallback: attach mock user references so the UI can still show faculty dropdowns
+  return MOCK_SEED_SUBJECTS.map((s) => {
+    const byId = new Map(MOCK_SEED_USERS.map(u => [u.id, u]));
+    return {
+      ...s,
+      courseCoordinator: byId.get(s.courseCoordinatorId),
+      courseTeacher: byId.get(s.courseTeacherId),
+      labTeacherA: s.labTeacherAId ? byId.get(s.labTeacherAId) : null,
+      labTeacherB: s.labTeacherBId ? byId.get(s.labTeacherBId) : null,
+      labTeacherC: s.labTeacherCId ? byId.get(s.labTeacherCId) : null,
+      evaluator: byId.get(s.evaluatorId),
+      courseFile: null,
+    };
+  }) as unknown as Subject[];
 }
 
 export async function getSubjectById(id: string) {
