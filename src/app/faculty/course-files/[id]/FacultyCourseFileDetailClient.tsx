@@ -620,17 +620,26 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
    */
   const isRowEditableByCurrentFaculty = useCallback((rowBatch?: string) => {
     if (isLocked) return false;
-    const targetBatch = String(rowBatch || 'A').toUpperCase();
+    const rawStr = String(rowBatch || 'A').toUpperCase().trim();
+    const match = rawStr.match(/[A-C]/);
+    const targetBatch = match ? match[0] : 'A';
+
     const isLabTeacherMode = access?.mode === 'LAB_BATCH';
 
     if (isLabTeacherMode) {
-      // Lab teacher can only edit their own batch, and only if not yet submitted
-      return targetBatch === String(access.batch || 'A').toUpperCase() && !access.isSubmitted;
+      const userBatches = (access.ownedBatches && access.ownedBatches.length > 0)
+        ? access.ownedBatches.map((b) => String(b).toUpperCase().trim())
+        : [String(access.batch || 'A').toUpperCase().trim()];
+
+      const isOwned = userBatches.includes(targetBatch);
+      const isBatchSubmitted = Boolean(access?.submittedBatchesMap?.[targetBatch] || (targetBatch === access.batch && access.isSubmitted));
+      return isOwned && !isBatchSubmitted;
     }
 
-    // Course Teacher (OWNER) mode: view-only for rubric/practical marks.
-    // Only the allocated batch lab faculty may enter or change marks.
-    return false;
+    // Course Teacher (OWNER / FULL) mode:
+    // Course Teacher can edit all batches except those already submitted by a separate lab teacher
+    const isBatchSubmittedByOther = Boolean(access?.submittedBatchesMap?.[targetBatch]);
+    return !isBatchSubmittedByOther;
   }, [isLocked, access]);
 
   const handleItem8StudentChange = useCallback((studentId: string, field: string, value: any, pKey?: string) => {
