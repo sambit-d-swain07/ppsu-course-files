@@ -48,9 +48,12 @@ function normalize(body: any) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
+  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden. Academic Admin permissions required.' }, { status: 403 });
   const [subjects, users] = await Promise.all([getSubjects(), getUsers()]);
-  return noStoreJson({ subjects, users: users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR' || user.role === 'EVALUATOR') });
+  const facultyUsers = users.filter(user =>
+    ['FACULTY', 'COORDINATOR', 'EVALUATOR', 'ADMIN'].includes(String(user.role || '').toUpperCase())
+  );
+  return noStoreJson({ subjects, users: facultyUsers.length > 0 ? facultyUsers : users });
 }
 
 export async function POST(req: NextRequest) {

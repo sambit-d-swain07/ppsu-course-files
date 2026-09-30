@@ -19,17 +19,33 @@ export default function SubjectAllocationPage() {
 
   const load = async () => {
     const response = await fetch('/api/admin/subjects');
-    const data = await response.json();
+    let data: any = {};
+    try {
+      const text = await response.text();
+      if (text) data = JSON.parse(text);
+    } catch (e) {
+      if (!response.ok) {
+        throw new Error(`Unable to load subjects (Status ${response.status})`);
+      }
+    }
     if (!response.ok) throw new Error(data.error || 'Unable to load subjects');
     setSubjects(data.subjects || []); setUsers(data.users || []);
   };
   useEffect(() => { load().catch(error => setError(error.message)).finally(() => setLoading(false)); }, []);
 
-  const coordinators = useMemo(() => users.filter(user => user.role === 'COORDINATOR' || user.role === 'FACULTY'), [users]);
-  const faculty = useMemo(() => users.filter(user => user.role === 'FACULTY' || user.role === 'COORDINATOR'), [users]);
+  const coordinators = useMemo(() => {
+    const list = users.filter(user => ['COORDINATOR', 'FACULTY', 'ADMIN'].includes(String(user.role || '').toUpperCase()));
+    return list.length > 0 ? list : users;
+  }, [users]);
+
+  const faculty = useMemo(() => {
+    const list = users.filter(user => ['FACULTY', 'COORDINATOR', 'ADMIN'].includes(String(user.role || '').toUpperCase()));
+    return list.length > 0 ? list : users;
+  }, [users]);
+
   const evaluators = useMemo(() => {
-    const list = users.filter(user => user.role === 'EVALUATOR' || user.role === 'COORDINATOR');
-    return list.length > 0 ? list : users.filter(user => user.role !== 'ADMIN');
+    const list = users.filter(user => ['EVALUATOR', 'COORDINATOR', 'FACULTY'].includes(String(user.role || '').toUpperCase()));
+    return list.length > 0 ? list : users;
   }, [users]);
   const duplicateCoordinatorEvaluator = Boolean(form.courseCoordinatorId && form.courseCoordinatorId === form.evaluatorId);
   const divisionValue = form.division === 'Custom' ? form.customDivision.trim() : form.division.trim();
