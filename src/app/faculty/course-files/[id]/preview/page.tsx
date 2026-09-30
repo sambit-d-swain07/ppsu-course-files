@@ -467,7 +467,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloadingDocx, setDownloadingDocx] = useState(false);
-  const [printHint, setPrintHint] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState('');
 
   useEffect(() => {
     fetch(`/api/course-files/${courseFileId}`)
@@ -501,14 +502,69 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
     }
   };
 
-  const handleDownloadPdf = () => {
-    // Show the hint banner briefly, then trigger the browser print dialog.
-    // Users select "Save as PDF" in the print dialog to download the PDF.
-    setPrintHint(true);
-    setTimeout(() => {
-      window.print();
-      setPrintHint(false);
-    }, 600);
+  const handleDownloadPdf = async () => {
+    setGeneratingPdf(true);
+    setPdfProgress('Preparing pages…');
+    try {
+      // Dynamic imports — loaded only when user clicks download
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
+
+      const pages = Array.from(document.querySelectorAll('.preview-page')) as HTMLElement[];
+      if (pages.length === 0) {
+        alert('No preview pages found. Please wait for the page to fully load and try again.');
+        return;
+      }
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+
+      const A4_W = 210;
+      const A4_H = 297;
+
+      for (let i = 0; i < pages.length; i++) {
+        setPdfProgress(`Rendering page ${i + 1} of ${pages.length}…`);
+        const page = pages[i];
+
+        const canvas = await html2canvas(page, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          width: page.scrollWidth,
+          height: page.scrollHeight,
+          windowWidth: page.scrollWidth,
+          windowHeight: page.scrollHeight,
+          logging: false,
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.90);
+
+        if (i > 0) pdf.addPage();
+        // Scale image to fill A4, preserving ratio
+        const canvasRatio = canvas.height / canvas.width;
+        const pdfH = Math.min(A4_H, A4_W * canvasRatio);
+        pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, pdfH);
+      }
+
+      setPdfProgress('Saving PDF…');
+      const safeCode = (cf?.courseCode || 'course-file').replace(/[^a-z0-9_-]/gi, '_');
+      pdf.save(`merged-course-file-${safeCode}.pdf`);
+    } catch (err: any) {
+      console.error('PDF generation error:', err);
+      alert('Error generating PDF: ' + (err.message || 'Unknown error'));
+    } finally {
+      setGeneratingPdf(false);
+      setPdfProgress('');
+    }
   };
 
   if (loading) return (
@@ -588,17 +644,30 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         }
       `}</style>
 
-      {/* Print hint banner — shown briefly before print dialog opens */}
-      {printHint && (
+      {/* PDF generating overlay */}
+      {generatingPdf && (
         <div
           className="no-print"
           style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-            background: '#16a34a', color: '#fff', textAlign: 'center',
-            padding: '10px 20px', fontWeight: 600, fontSize: '14px'
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: '16px'
           }}
         >
-          📄 Opening print dialog… In the dialog, set <strong>Destination → Save as PDF</strong> then click Save.
+          <div style={{
+            background: '#fff', borderRadius: '12px',
+            padding: '32px 40px', textAlign: 'center', maxWidth: '360px'
+          }}>
+            <div style={{ fontSize: '36px', marginBottom: '12px' }}>📄</div>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>Generating PDF…</div>
+            <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>{pdfProgress}</div>
+            <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: '#f59e0b', borderRadius: '99px', animation: 'pdfProgressAnim 1.5s ease-in-out infinite' }} />
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '12px', color: '#94a3b8' }}>Please keep this tab open</div>
+          </div>
+          <style>{`@keyframes pdfProgressAnim { 0%{width:10%} 50%{width:80%} 100%{width:10%} }`}</style>
         </div>
       )}
 
@@ -621,8 +690,10 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           <a href={`/report/${courseFileId}`} target="_blank" className="btn btn-outline-info btn-sm fw-semibold">
             📋 Official Evaluation Report
           </a>
-          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf}>
-            📄 Download PDF Report
+          <Button variant="warning" size="sm" className="fw-bold px-3" onClick={handleDownloadPdf} disabled={generatingPdf}>
+            {generatingPdf
+              ? <><Spinner animation="border" size="sm" className="me-1" />{pdfProgress || 'Generating PDF…'}</>
+              : '📄 Download PDF Report'}
           </Button>
         </div>
       </div>
