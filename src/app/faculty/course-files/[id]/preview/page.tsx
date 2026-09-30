@@ -337,8 +337,13 @@ function FileEmbed({ url, name }: { url: string; name?: string }) {
     fileNameOrUrl.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/i) ||
     url.startsWith('data:image/')
   );
+  const isCsvOrTxt = Boolean(
+    fileNameOrUrl.match(/\.(csv|txt)$/i) ||
+    url.includes('data:text/csv') ||
+    url.includes('data:text/plain')
+  );
   const isDoc = Boolean(
-    fileNameOrUrl.match(/\.(docx|doc|xlsx|xls|csv|txt)(\?.*)?$/i) ||
+    fileNameOrUrl.match(/\.(docx|doc|xlsx|xls)(\?.*)?$/i) ||
     url.startsWith('data:text/') ||
     url.startsWith('data:application/vnd') ||
     url.startsWith('data:application/msword')
@@ -352,16 +357,81 @@ function FileEmbed({ url, name }: { url: string; name?: string }) {
     );
   }
 
+  if (isCsvOrTxt) {
+    const parseCsvContent = (rawUrl: string): string[][] => {
+      try {
+        let text = '';
+        if (rawUrl.startsWith('data:')) {
+          const b64Idx = rawUrl.indexOf(';base64,');
+          if (b64Idx !== -1) {
+            text = atob(rawUrl.slice(b64Idx + 8));
+          } else {
+            const cIdx = rawUrl.indexOf(',');
+            if (cIdx !== -1) text = decodeURIComponent(rawUrl.slice(cIdx + 1));
+          }
+        } else if (rawUrl.includes(',') || rawUrl.includes('\n')) {
+          text = rawUrl;
+        }
+
+        if (text) {
+          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          return lines.map(line => {
+            const row: string[] = [];
+            let cur = '';
+            let inQ = false;
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') inQ = !inQ;
+              else if (char === ',' && !inQ) { row.push(cur.trim()); cur = ''; }
+              else cur += char;
+            }
+            row.push(cur.trim());
+            return row;
+          });
+        }
+      } catch (e) {}
+      return [];
+    };
+
+    const rows = parseCsvContent(url);
+    if (rows.length > 0) {
+      return (
+        <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '20px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', width: '100%' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
+              📊 {name || 'CSV Data Table'}
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', border: '1px solid #ccc' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  {rows[0].map((h, i) => (
+                    <th key={i} style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textTransform: 'uppercase', textAlign: 'left' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(1).map((r, rIdx) => (
+                  <tr key={rIdx} style={{ background: rIdx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                    {r.map((c, cIdx) => (
+                      <td key={cIdx} style={{ border: '1px solid #cbd5e1', padding: '6px 8px' }}>{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+  }
+
   if (isDoc) {
     return (
       <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ padding: '30px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', maxWidth: '450px' }}>
           <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
           <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{name || 'Document File'}</div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>Office / Text Document</div>
-          <a href={url} download={name || 'document'} className="btn btn-sm btn-primary no-print" target="_blank" rel="noreferrer">
-            Download / Open {name || 'Document'}
-          </a>
+          <div style={{ fontSize: '12px', color: '#64748b' }}>Office / Text Document</div>
         </div>
       </div>
     );
@@ -444,7 +514,8 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
       const a = document.createElement('a');
       a.href = url;
       a.target = '_blank';
-      a.download = `merged-course-file-${code || 'report'}.pdf`;
+      const safeCode = cf?.courseCode || 'report';
+      a.download = `merged-course-file-${safeCode}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
