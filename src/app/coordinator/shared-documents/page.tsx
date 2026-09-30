@@ -38,6 +38,58 @@ const SCHOOL_LABELS: Record<string, string> = {
   ICA: 'ICA'
 };
 
+const ITEM1_CONFIG: Record<string, { label: string; col1Header: string; col2Header: string; prefix: string; placeholder: string }> = {
+  vision: {
+    label: 'Institute Vision',
+    col1Header: 'Sr. No.',
+    col2Header: 'INSTITUTE VISION',
+    prefix: '',
+    placeholder: 'Enter Institute Vision statement...'
+  },
+  mission: {
+    label: 'Institute Mission',
+    col1Header: 'Sr. No.',
+    col2Header: 'INSTITUTE MISSION',
+    prefix: '',
+    placeholder: 'Enter Institute Mission statement...'
+  },
+  deptVision: {
+    label: 'Department Vision',
+    col1Header: 'Sr. No.',
+    col2Header: 'DEPARTMENT VISION',
+    prefix: '',
+    placeholder: 'Enter Department Vision statement...'
+  },
+  deptMission: {
+    label: 'Department Mission',
+    col1Header: 'Sr. No.',
+    col2Header: 'DEPARTMENT MISSION',
+    prefix: '',
+    placeholder: 'Enter Department Mission statement...'
+  },
+  peo: {
+    label: 'Programme Educational Objectives (PEO)',
+    col1Header: 'PEO No',
+    col2Header: 'PROGRAMME EDUCATIONAL OBJECTIVES',
+    prefix: 'PEO ',
+    placeholder: 'Enter PEO objective details...'
+  },
+  pso: {
+    label: 'Programme Specific Outcomes (PSO)',
+    col1Header: 'PSO No',
+    col2Header: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
+    prefix: 'PSO ',
+    placeholder: 'Enter PSO outcome details...'
+  },
+  po: {
+    label: 'Programme Outcomes (PO)',
+    col1Header: 'PO No',
+    col2Header: 'PROGRAMME OUTCOMES',
+    prefix: 'PO ',
+    placeholder: 'Enter PO outcome details...'
+  }
+};
+
 const uploadFileToServer = async (file: File): Promise<string> => {
   try {
     const formData = new FormData();
@@ -74,33 +126,62 @@ export default function CoordinatorSharedDocumentsPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
-  // Item 1: per-subKey input mode toggle ('upload' | 'text') and draft text state
-  const [item1TextMode, setItem1TextMode] = useState<Record<string, 'upload' | 'text'>>({});
-  const [item1TextDraft, setItem1TextDraft] = useState<Record<string, string>>({});
+  const [item1RowsState, setItem1RowsState] = useState<Record<string, string[]>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [switchConfirmModal, setSwitchConfirmModal] = useState<{
-    open: boolean;
-    subKey: string;
-    targetMode: 'upload' | 'text';
-    existingType: 'file' | 'text';
-  } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const applyFormatting = (subKey: string, format: 'bold' | 'italic' | 'underline' | 'bullet' | 'number') => {
-    const current = item1TextDraft[subKey] || '';
-    let updated = current;
-    switch (format) {
-      case 'bold': updated += ' <b>Bold Text</b>'; break;
-      case 'italic': updated += ' <i>Italic Text</i>'; break;
-      case 'underline': updated += ' <u>Underlined Text</u>'; break;
-      case 'bullet': updated += '\n• List item'; break;
-      case 'number': updated += '\n1. List item'; break;
+  const parseTextToRows = (text?: string): string[] => {
+    if (!text || !text.trim()) return [''];
+    const clean = text.replace(/<[^>]*>/g, '');
+    const lines = clean
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return [''];
+    return lines.map((l) =>
+      l
+        .replace(/^(PEO|PSO|PO|\d+)\s*[\d\.\:\-]*\s*/i, '')
+        .replace(/^[•\-\*]\s*/, '')
+        .trim()
+    );
+  };
+
+  const getRowsForSubKey = (subKey: string, subDoc?: any): string[] => {
+    if (item1RowsState[subKey] !== undefined) {
+      return item1RowsState[subKey];
     }
-    setItem1TextDraft((prev) => ({ ...prev, [subKey]: updated }));
+    return parseTextToRows(subDoc?.textContent);
+  };
+
+  const updateRowText = (subKey: string, idx: number, val: string, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current[idx] = val;
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+  };
+
+  const addRow = (subKey: string, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current.push('');
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+  };
+
+  const removeRow = (subKey: string, idx: number, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current.splice(idx, 1);
+    if (current.length === 0) current.push('');
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
+    handleSaveSubItemText(1, subKey, combined);
+  };
+
+  const handleSaveSection = (subKey: string, subDoc?: any) => {
+    const current = getRowsForSubKey(subKey, subDoc);
+    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
+    handleSaveSubItemText(1, subKey, combined);
   };
 
   const fetchSubjects = async (showSpinner = true) => {
@@ -213,7 +294,6 @@ export default function CoordinatorSharedDocumentsPage() {
   };
 
   const handleSaveSubItemText = async (itemIndex: number, subKey: string, text: string) => {
-    if (!text.trim()) return;
     if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId)) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
@@ -231,11 +311,9 @@ export default function CoordinatorSharedDocumentsPage() {
         throw new Error(errData.error || 'Save failed');
       }
       const data = await res.json();
-      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
-      showToast('Saved successfully.');
-      setActionSuccess(`Item 1 ${label} text saved for School ${selectedSchool}.`);
-      setItem1TextMode(prev => ({ ...prev, [subKey]: 'text' }));
-      setItem1TextDraft(prev => ({ ...prev, [subKey]: text }));
+      const label = SUB_KEY_CONFIG[subKey]?.label || ITEM1_CONFIG[subKey]?.label || subKey;
+      showToast(`${label} saved successfully.`);
+      setActionSuccess(`Item 1 ${label} saved for School ${selectedSchool}.`);
       fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message || 'Save failed');
@@ -507,7 +585,7 @@ export default function CoordinatorSharedDocumentsPage() {
 
                             {/* Render Sub-keys for multi-part shared items */}
                             {item.subKeys ? (
-                              <div className="d-flex flex-column gap-3">
+                              <div className="d-flex flex-column gap-4">
                                 {item.subKeys.map((subKey) => {
                                   const subDoc = subParsed[subKey];
                                   const hasSubFile = !!subDoc?.fileName;
@@ -515,38 +593,117 @@ export default function CoordinatorSharedDocumentsPage() {
                                   const isDone = hasSubFile || hasSubText;
                                   const config = SUB_KEY_CONFIG[subKey] || { label: subKey };
                                   const isItem1 = item.index === 1;
-                                  
-                                  // Default: show text boxes unless a file was explicitly uploaded
-                                  const defaultMode: 'upload' | 'text' = hasSubFile ? 'upload' : 'text';
-                                  const curMode: 'upload' | 'text' = isItem1 ? (item1TextMode[subKey] ?? defaultMode) : 'upload';
-                                  const charLimit = ({ vision: 2000, mission: 2000, deptVision: 2000, deptMission: 2000, peo: 6000, pso: 6000, po: 6000 } as any)[subKey] || 2000;
 
-                                  const draftVal = item1TextDraft[subKey] ?? subDoc?.textContent ?? '';
-                                  const charCount = draftVal.length;
-                                  const isOverLimit = charCount > charLimit;
-                                  const isDraftEmpty = !draftVal.trim();
+                                  // ITEM 1: Dynamic Multi-Row Table Editor (matching PEO/PSO/PO paper structure)
+                                  if (isItem1) {
+                                    const item1Cfg = ITEM1_CONFIG[subKey] || {
+                                      label: config.label,
+                                      col1Header: 'Sr. No.',
+                                      col2Header: config.label.toUpperCase(),
+                                      prefix: '',
+                                      placeholder: `Enter ${config.label} details...`
+                                    };
+                                    const rows = getRowsForSubKey(subKey, subDoc);
 
-                                  const handleModeChange = (targetMode: 'upload' | 'text') => {
-                                    if (targetMode === curMode) return;
-                                    const oppositeHasData = targetMode === 'text' ? hasSubFile : hasSubText;
-                                    if (oppositeHasData) {
-                                      setSwitchConfirmModal({
-                                        open: true,
-                                        subKey,
-                                        targetMode,
-                                        existingType: targetMode === 'text' ? 'file' : 'text'
-                                      });
-                                    } else {
-                                      setItem1TextMode((prev) => ({ ...prev, [subKey]: targetMode }));
-                                      if (targetMode === 'text' && subDoc?.textContent && item1TextDraft[subKey] === undefined) {
-                                        setItem1TextDraft((prev) => ({ ...prev, [subKey]: subDoc.textContent }));
-                                      }
-                                    }
-                                  };
+                                    return (
+                                      <div key={subKey} className="border rounded-3 overflow-hidden shadow-sm bg-white">
+                                        {/* Header Bar */}
+                                        <div className="d-flex align-items-center justify-content-between p-3 border-bottom" style={{ backgroundColor: '#f8fafc' }}>
+                                          <div className="d-flex align-items-center gap-2">
+                                            <span className="fw-bold text-navy-900" style={{ fontSize: '0.95rem', color: '#1E3A8A' }}>
+                                              {item1Cfg.label}
+                                            </span>
+                                            {isDone ? (
+                                              <Badge bg="success" style={{ fontSize: '0.75rem' }}>✓ Saved ({subDoc.textDate || 'Recent'})</Badge>
+                                            ) : (
+                                              <Badge bg="warning" text="dark" style={{ fontSize: '0.75rem' }}>Pending</Badge>
+                                            )}
+                                          </div>
+                                          <Button
+                                            variant="success"
+                                            size="sm"
+                                            className="fw-bold d-flex align-items-center gap-1"
+                                            disabled={uploadingItem === 1}
+                                            onClick={() => handleSaveSection(subKey, subDoc)}
+                                          >
+                                            💾 Save Section
+                                          </Button>
+                                        </div>
 
+                                        {/* Styled Table matching print / PDF output (Light green header #d9ead3, clean dark borders) */}
+                                        <div className="p-3">
+                                          <Table bordered hover responsive className="mb-2" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+                                            <thead>
+                                              <tr style={{ background: '#d9ead3', borderBottom: '2px solid #000' }}>
+                                                <th style={{ width: '100px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                  {item1Cfg.col1Header}
+                                                </th>
+                                                <th style={{ textAlign: 'left', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                  {item1Cfg.col2Header}
+                                                </th>
+                                                <th style={{ width: '60px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                  Action
+                                                </th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {rows.map((rowText, rIdx) => {
+                                                const rowLabel = item1Cfg.prefix ? `${item1Cfg.prefix}${rIdx + 1}` : `${rIdx + 1}.`;
+                                                return (
+                                                  <tr key={rIdx} style={{ verticalAlign: 'top' }}>
+                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', paddingTop: '12px', color: '#000' }}>
+                                                      {rowLabel}
+                                                    </td>
+                                                    <td>
+                                                      <Form.Control
+                                                        as="textarea"
+                                                        rows={2}
+                                                        value={rowText}
+                                                        placeholder={item1Cfg.placeholder}
+                                                        onChange={(e) => updateRowText(subKey, rIdx, e.target.value, subDoc)}
+                                                        style={{ fontSize: '13px', fontFamily: 'inherit' }}
+                                                      />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center', paddingTop: '10px' }}>
+                                                      <Button
+                                                        variant="outline-danger"
+                                                        size="sm"
+                                                        title="Delete Row"
+                                                        onClick={() => removeRow(subKey, rIdx, subDoc)}
+                                                        style={{ padding: '2px 8px', fontSize: '12px' }}
+                                                      >
+                                                        🗑️
+                                                      </Button>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </Table>
+
+                                          <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                                            <Button
+                                              variant="outline-primary"
+                                              size="sm"
+                                              className="fw-semibold"
+                                              onClick={() => addRow(subKey, subDoc)}
+                                            >
+                                              ➕ Add Row ({item1Cfg.prefix ? `${item1Cfg.prefix}${rows.length + 1}` : `${rows.length + 1}.`})
+                                            </Button>
+                                            {subDoc?.lastSavedBy && subDoc?.lastSavedAt && (
+                                              <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
+                                                Last saved by <strong>{subDoc.lastSavedBy}</strong> on {new Date(subDoc.lastSavedAt).toLocaleDateString('en-IN')}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  {/* Standard Sub-item Upload layout for other items (Item 6, 11, 12, 15) */}
                                   return (
                                     <div key={subKey} className="rounded-2 border bg-light p-3">
-                                      {/* Sub-key header */}
                                       <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                                         <span className="fw-bold small text-navy-900">
                                           {config.label}
@@ -554,132 +711,40 @@ export default function CoordinatorSharedDocumentsPage() {
                                         </span>
                                         {isDone ? (
                                           <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>
-                                            {hasSubFile ? `✓ File: ${subDoc.fileName}` : `✓ Text Saved (${subDoc.textDate || 'Recent'})`}
+                                            ✓ File: {subDoc.fileName}
                                           </span>
                                         ) : (
                                           <span className="badge bg-warning text-dark" style={{ fontSize: '0.7rem' }}>Pending</span>
                                         )}
                                       </div>
 
-                                      {/* Input mode tabs (Item 1) */}
-                                      {isItem1 && (
-                                        <div className="d-flex mb-2 rounded-2 overflow-hidden border" style={{ width: 'fit-content' }}>
-                                          <button
-                                            type="button"
-                                            className={`btn btn-sm px-3 py-1 rounded-0 border-0 ${curMode === 'upload' ? 'btn-primary' : 'btn-light text-secondary'}`}
-                                            style={{ fontSize: '0.75rem', fontWeight: 600 }}
-                                            onClick={() => handleModeChange('upload')}
-                                          >
-                                            📎 Upload File
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className={`btn btn-sm px-3 py-1 rounded-0 border-0 ${curMode === 'text' ? 'btn-primary' : 'btn-light text-secondary'}`}
-                                            style={{ fontSize: '0.75rem', fontWeight: 600 }}
-                                            onClick={() => handleModeChange('text')}
-                                          >
-                                            ✏️ Enter Text
-                                          </button>
-                                        </div>
-                                      )}
-
-                                      {/* Upload File Mode Panel */}
-                                      {curMode === 'upload' && (
-                                        <div className="d-flex align-items-center gap-2 flex-wrap mt-2">
-                                          {hasSubFile && (
-                                            <Button
-                                              variant="outline-primary"
-                                              size="sm"
-                                              onClick={() => setViewingDoc({
-                                                title: `${item.name} — ${config.label}`,
-                                                fileName: subDoc.fileName,
-                                                fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
-                                              })}
-                                            >
-                                              👁️ View Document
-                                            </Button>
-                                          )}
-                                          <Form.Control
-                                            type="file"
+                                      <div className="d-flex align-items-center gap-2 flex-wrap mt-2">
+                                        {hasSubFile && (
+                                          <Button
+                                            variant="outline-primary"
                                             size="sm"
-                                            style={{ width: '220px' }}
-                                            disabled={uploadingItem === item.index}
-                                            onChange={(e: any) => {
-                                              const file = e.target.files?.[0];
-                                              if (file) handleUploadSubItem(item.index, subKey, file);
-                                              e.target.value = '';
-                                            }}
-                                          />
-                                          {uploadingItem === item.index && <span className="spinner-border spinner-border-sm text-primary" />}
-                                        </div>
-                                      )}
-
-                                      {/* Enter Text Mode Panel */}
-                                      {curMode === 'text' && (
-                                        <div className="mt-2">
-                                          {/* Formatting Toolbar */}
-                                          <div className="d-flex align-items-center gap-1 mb-1 p-1 bg-white border rounded">
-                                            <span className="small text-muted me-1 fw-bold" style={{ fontSize: 11 }}>Format:</span>
-                                            <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold" style={{ fontSize: 11 }} title="Bold" onClick={() => applyFormatting(subKey, 'bold')}>B</button>
-                                            <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-2 italic" style={{ fontSize: 11 }} title="Italic" onClick={() => applyFormatting(subKey, 'italic')}><i>I</i></button>
-                                            <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-2" style={{ fontSize: 11 }} title="Underline" onClick={() => applyFormatting(subKey, 'underline')}><u>U</u></button>
-                                            <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-2" style={{ fontSize: 11 }} title="Bullet List" onClick={() => applyFormatting(subKey, 'bullet')}>• List</button>
-                                            <button type="button" className="btn btn-sm btn-outline-secondary py-0 px-2" style={{ fontSize: 11 }} title="Numbered List" onClick={() => applyFormatting(subKey, 'number')}>1. List</button>
-                                          </div>
-
-                                          {/* Auto-expanding textarea */}
-                                          <Form.Control
-                                            as="textarea"
-                                            rows={4}
-                                            className="mb-1"
-                                            placeholder={`Enter ${config.label} content here...`}
-                                            value={draftVal}
-                                            onChange={(e) => {
-                                              const el = e.target;
-                                              el.style.height = 'auto';
-                                              el.style.height = Math.max(90, el.scrollHeight) + 'px';
-                                              setItem1TextDraft((prev) => ({ ...prev, [subKey]: el.value }));
-                                            }}
-                                            disabled={uploadingItem === item.index}
-                                            style={{ fontSize: '0.85rem', minHeight: 90 }}
-                                          />
-
-                                          {/* Character Counter */}
-                                          <div className="d-flex justify-content-between align-items-center mb-2">
-                                            <div className="small">
-                                              {subDoc?.lastSavedBy && subDoc?.lastSavedAt && (
-                                                <span className="text-muted" style={{ fontSize: 11 }}>
-                                                  Last saved by <strong>{subDoc.lastSavedBy}</strong> on {new Date(subDoc.lastSavedAt).toLocaleDateString('en-IN')}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className={`small fw-semibold ${isOverLimit ? 'text-danger' : 'text-secondary'}`} style={{ fontSize: 11 }}>
-                                              {charCount} / {charLimit} characters
-                                            </div>
-                                          </div>
-
-                                          {/* Action Buttons */}
-                                          <div className="d-flex gap-2">
-                                            <Button
-                                              variant="primary"
-                                              size="sm"
-                                              disabled={uploadingItem === item.index || isDraftEmpty || isOverLimit}
-                                              onClick={() => handleSaveSubItemText(item.index, subKey, draftVal)}
-                                            >
-                                              {uploadingItem === item.index ? 'Saving…' : 'Save Text'}
-                                            </Button>
-                                            <Button
-                                              variant="outline-secondary"
-                                              size="sm"
-                                              onClick={() => {
-                                                setItem1TextDraft((prev) => ({ ...prev, [subKey]: subDoc?.textContent || '' }));
-                                              }}
-                                            >
-                                              Cancel
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      )}
+                                            onClick={() => setViewingDoc({
+                                              title: `${item.name} — ${config.label}`,
+                                              fileName: subDoc.fileName,
+                                              fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
+                                            })}
+                                          >
+                                            👁️ View Document
+                                          </Button>
+                                        )}
+                                        <Form.Control
+                                          type="file"
+                                          size="sm"
+                                          style={{ width: '220px' }}
+                                          disabled={uploadingItem === item.index}
+                                          onChange={(e: any) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleUploadSubItem(item.index, subKey, file);
+                                            e.target.value = '';
+                                          }}
+                                        />
+                                        {uploadingItem === item.index && <span className="spinner-border spinner-border-sm text-primary" />}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -776,42 +841,6 @@ export default function CoordinatorSharedDocumentsPage() {
           <span>✓</span> {toastMessage}
         </div>
       )}
-
-      {/* Mode Switch Confirmation Modal */}
-      <Modal show={Boolean(switchConfirmModal?.open)} onHide={() => setSwitchConfirmModal(null)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title className="h6 fw-bold">Switch Input Mode?</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="small">
-          This field currently has {switchConfirmModal?.existingType === 'file' ? 'an uploaded file' : 'saved text content'}. Switching modes will hide it but not delete it. Continue?
-        </Modal.Body>
-        <Modal.Footer className="py-2">
-          <Button variant="secondary" size="sm" onClick={() => setSwitchConfirmModal(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="warning"
-            size="sm"
-            className="fw-bold"
-            onClick={() => {
-              if (switchConfirmModal) {
-                const { subKey, targetMode } = switchConfirmModal;
-                setItem1TextMode((prev) => ({ ...prev, [subKey]: targetMode }));
-                const doc = schoolSharedMap.get(1);
-                let subParsed: any = {};
-                try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
-                const subDoc = subParsed[subKey];
-                if (targetMode === 'text' && subDoc?.textContent && item1TextDraft[subKey] === undefined) {
-                  setItem1TextDraft((prev) => ({ ...prev, [subKey]: subDoc.textContent }));
-                }
-                setSwitchConfirmModal(null);
-              }
-            }}
-          >
-            Yes, Switch Mode
-          </Button>
-        </Modal.Footer>
-      </Modal>
 
       {/* Document View Modal */}
       <Modal show={!!viewingDoc} onHide={() => setViewingDoc(null)} size="lg" centered>
