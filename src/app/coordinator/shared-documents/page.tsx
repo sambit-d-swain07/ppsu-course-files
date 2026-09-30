@@ -516,9 +516,9 @@ export default function CoordinatorSharedDocumentsPage() {
                                   const config = SUB_KEY_CONFIG[subKey] || { label: subKey };
                                   const isItem1 = item.index === 1;
                                   
-                                  // Default mode logic: whichever has data, else 'text'
-                                  const defaultMode = subDoc?.inputMode || (hasSubFile ? 'upload' : 'text');
-                                  const curMode = isItem1 ? (item1TextMode[subKey] || defaultMode) : 'upload';
+                                  // Default: show text boxes unless a file was explicitly uploaded
+                                  const defaultMode: 'upload' | 'text' = hasSubFile ? 'upload' : 'text';
+                                  const curMode: 'upload' | 'text' = isItem1 ? (item1TextMode[subKey] ?? defaultMode) : 'upload';
                                   const charLimit = ({ vision: 2000, mission: 2000, deptVision: 2000, deptMission: 2000, peo: 6000, pso: 6000, po: 6000 } as any)[subKey] || 2000;
 
                                   const draftVal = item1TextDraft[subKey] ?? subDoc?.textContent ?? '';
