@@ -29,7 +29,7 @@ const TH: React.CSSProperties = { border: '1px solid #000', padding: '6px 10px',
 const TD: React.CSSProperties = { border: '1px solid #000', padding: '5px 10px', verticalAlign: 'middle', fontSize: '12px' };
 const TDC: React.CSSProperties = { ...TD, textAlign: 'center' };
 const TBLSTYLE: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontFamily: "'Times New Roman', Times, serif" };
-const PAGE: React.CSSProperties = { padding: '60px 70px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: "'Times New Roman', Times, serif", color: '#000', background: '#fff', boxSizing: 'border-box' };
+const PAGE: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '50px 60px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: "'Times New Roman', Times, serif", color: '#000', background: '#fff' };
 const RAW_PAGE: React.CSSProperties = { width: '100%', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', background: '#fff', lineHeight: 0, padding: 0, margin: 0, boxSizing: 'border-box' };
 
 function hashString(str: string) {
@@ -506,7 +506,6 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
     setGeneratingPdf(true);
     setPdfProgress('Preparing pages…');
     try {
-      // Dynamic imports — loaded only when user clicks download
       const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
         import('jspdf'),
         import('html2canvas'),
@@ -518,6 +517,16 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         return;
       }
 
+      // A4 dimensions
+      const A4_W_MM = 210;
+      const A4_H_MM = 297;
+
+      // Pixel width to render at (A4 at 96dpi = 794px)
+      const A4_PX_W = 794;
+      // A4 page height in pixels at same DPI
+      const A4_PX_H = 1123;
+      const SCALE = 2; // High-res capture
+
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -525,34 +534,58 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         compress: true,
       });
 
-      const A4_W = 210;
-      const A4_H = 297;
+      let firstPage = true;
 
       for (let i = 0; i < pages.length; i++) {
         setPdfProgress(`Rendering page ${i + 1} of ${pages.length}…`);
         const page = pages[i];
 
+        // Capture at exactly A4_PX_W wide so centering and widths are correct
         const canvas = await html2canvas(page, {
-          scale: 2,
+          scale: SCALE,
           useCORS: true,
           allowTaint: true,
           backgroundColor: '#ffffff',
           scrollX: 0,
           scrollY: 0,
-          width: page.scrollWidth,
-          height: page.scrollHeight,
-          windowWidth: page.scrollWidth,
-          windowHeight: page.scrollHeight,
+          width: A4_PX_W,
+          windowWidth: A4_PX_W,
           logging: false,
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.90);
+        // Canvas height in scaled pixels
+        const canvasW = canvas.width;           // A4_PX_W * SCALE
+        const canvasH = canvas.height;          // actual rendered height * SCALE
 
-        if (i > 0) pdf.addPage();
-        // Scale image to fill A4, preserving ratio
-        const canvasRatio = canvas.height / canvas.width;
-        const pdfH = Math.min(A4_H, A4_W * canvasRatio);
-        pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, pdfH);
+        // One A4 page height in scaled pixels
+        const pageH = A4_PX_H * SCALE;
+
+        // How many PDF pages does this element need?
+        const numSlices = Math.ceil(canvasH / pageH);
+
+        for (let s = 0; s < numSlices; s++) {
+          const sliceTop    = s * pageH;
+          const sliceHeight = Math.min(pageH, canvasH - sliceTop);
+
+          // Create an offscreen canvas for this slice
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width  = canvasW;
+          sliceCanvas.height = sliceHeight;
+          const ctx = sliceCanvas.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvasW, sliceHeight);
+          ctx.drawImage(canvas, 0, sliceTop, canvasW, sliceHeight, 0, 0, canvasW, sliceHeight);
+
+          const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
+
+          // Proportional height in mm for this slice
+          const sliceH_MM = (sliceHeight / pageH) * A4_H_MM;
+
+          if (!firstPage) pdf.addPage();
+          firstPage = false;
+
+          pdf.addImage(imgData, 'JPEG', 0, 0, A4_W_MM, sliceH_MM);
+        }
       }
 
       setPdfProgress('Saving PDF…');
@@ -698,10 +731,10 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
         </div>
       </div>
 
-      <div className="preview-page-container mx-auto my-4 shadow-lg" style={{ maxWidth: '920px' }}>
+      <div className="preview-page-container mx-auto" style={{ width: '794px', maxWidth: '100%' }}>
 
         {/* PAGE 1: COVER PAGE */}
-        <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
+        <div className="preview-page" style={{ ...PAGE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '1050px', width: '100%', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}>
           <div style={{ fontWeight: 'bold', fontSize: '26px', letterSpacing: '1px', marginBottom: '12px' }}>P P SAVANI UNIVERSITY</div>
           <div style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '28px' }}>({school})</div>
           
