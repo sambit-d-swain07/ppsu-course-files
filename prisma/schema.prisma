@@ -191,3 +191,11 @@ model Notification {
   @@index([userId])
   @@index([userId, read])
 }
+
+model UploadedFile {
+  id        String   @id
+  buffer    String   @db.Text
+  mimeType  String
+  fileName  String
+  createdAt DateTime @default(now())
+}

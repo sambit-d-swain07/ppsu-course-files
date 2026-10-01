@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileFromStore } from '@/lib/file-storage';
+import { getFileFromStoreAsync } from '@/lib/file-storage';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +45,7 @@ async function createPlaceholderPdfBuffer(fileName?: string): Promise<Uint8Array
 export async function GET(req: NextRequest, props: { params: Promise<{ fileId: string }> }) {
   try {
     const { fileId } = await props.params;
-    const file = getFileFromStore(fileId);
+    const file = await getFileFromStoreAsync(fileId);
 
     if (file) {
       const uint8Array = new Uint8Array(file.buffer);
