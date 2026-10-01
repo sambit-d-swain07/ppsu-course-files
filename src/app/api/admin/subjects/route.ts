@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSubject, getSubjects, getUsers, updateSubject } from '@/lib/mock-data';
+import { createSubject, deleteSubject, getSubjects, updateSubject } from '@/lib/mock-data';
+import { prisma } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 
@@ -10,6 +11,11 @@ async function requireAdmin(req: NextRequest) {
   if (!token) return null;
   const payload = await verifyToken(token);
   return payload?.role === 'ADMIN' ? payload : null;
+}
+
+/** Fetch all users directly from the database — no mock fallback */
+async function getUsersFromDb() {
+  return prisma.user.findMany({ orderBy: { name: 'asc' } });
 }
 
 function validateAssignments(body: any, users: any[]) {
@@ -49,18 +55,20 @@ function normalize(body: any) {
 
 export async function GET(req: NextRequest) {
   if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden. Academic Admin permissions required.' }, { status: 403 });
-  const [subjects, users] = await Promise.all([getSubjects(), getUsers()]);
-  const facultyUsers = users.filter(user =>
-    ['FACULTY', 'COORDINATOR', 'EVALUATOR', 'ADMIN'].includes(String(user.role || '').toUpperCase())
-  );
-  return noStoreJson({ subjects, users: facultyUsers.length > 0 ? facultyUsers : users });
+  const [subjects, users] = await Promise.all([
+    getSubjects(),
+    getUsersFromDb()
+  ]);
+  // Return all users — UI dropdowns filter by role client-side
+  return noStoreJson({ subjects, users });
 }
+
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
   try {
     const body = await req.json();
-    const users = await getUsers();
+    const users = await getUsersFromDb();
     const error = validateAssignments(body, users);
     if (error) return noStoreJson({ error }, { status: 400 });
     return noStoreJson({ subject: await createSubject(normalize(body)) }, { status: 201 });
@@ -74,11 +82,24 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     if (!body.id) return noStoreJson({ error: 'Subject id is required' }, { status: 400 });
-    const users = await getUsers();
+    const users = await getUsersFromDb();
     const error = validateAssignments(body, users);
     if (error) return noStoreJson({ error }, { status: 400 });
     return noStoreJson({ subject: await updateSubject(body.id, normalize(body)) });
   } catch (error: any) {
     return noStoreJson({ error: error.message || 'Unable to update subject' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  if (!await requireAdmin(req)) return noStoreJson({ error: 'Forbidden' }, { status: 403 });
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return noStoreJson({ error: 'Subject id is required' }, { status: 400 });
+    await deleteSubject(id);
+    return noStoreJson({ success: true });
+  } catch (error: any) {
+    return noStoreJson({ error: error.message || 'Unable to delete subject' }, { status: 500 });
   }
 }

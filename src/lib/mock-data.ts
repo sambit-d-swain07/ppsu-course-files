@@ -474,6 +474,18 @@ export async function getSubjectById(id: string) {
   return prisma.subject.findUnique({ where: { id }, include: subjectInclude });
 }
 
+export async function deleteSubject(id: string) {
+  // Delete associated course file checklist items, then course file, then subject
+  const courseFile = await prisma.courseFile.findFirst({ where: { subjectId: id } });
+  if (courseFile) {
+    await prisma.checklistItem.deleteMany({ where: { courseFileId: courseFile.id } });
+    await prisma.labChecklistSubmission.deleteMany({ where: { courseFileId: courseFile.id } });
+    await prisma.courseFile.delete({ where: { id: courseFile.id } });
+  }
+  await prisma.subjectSharedDocument.deleteMany({ where: { subjectId: id } });
+  return prisma.subject.delete({ where: { id } });
+}
+
 export async function getSubjectForCourseFile(courseFileId: string) {
   const file = await prisma.courseFile.findUnique({ where: { id: courseFileId }, select: { subjectId: true } });
   return file?.subjectId ? getSubjectById(file.subjectId) : null;

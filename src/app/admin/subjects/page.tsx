@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 
 const semesters = Array.from({ length: 8 }, (_, index) => `SEM ${index + 1}`);
 const divisionOptions = ['CB3A', 'CB3B', 'IT3A', 'IT3B', 'ME3A', 'ME3B', 'CE3A', 'EC3A'];
@@ -16,6 +16,8 @@ export default function SubjectAllocationPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; code: string } | null>(null);
 
   const load = async () => {
     const response = await fetch('/api/admin/subjects');
@@ -72,6 +74,18 @@ export default function SubjectAllocationPage() {
 
   const edit = (subject: any) => setForm({ subjectCode: subject.subjectCode, subjectName: subject.subjectName, department: subject.department, school: subject.school || '', division: divisionOptions.includes(subject.division) ? subject.division : subject.division ? 'Custom' : '', customDivision: divisionOptions.includes(subject.division) ? '' : subject.division || '', semester: subject.semester, academicYear: subject.academicYear, courseCoordinatorId: subject.courseCoordinatorId, courseTeacherId: subject.courseTeacherId, labTeacherAId: subject.labTeacherAId || '', labTeacherBId: subject.labTeacherBId || '', labTeacherCId: subject.labTeacherCId || '', evaluatorId: subject.evaluatorId });
 
+  const deleteAllocation = async (id: string) => {
+    setDeletingId(id); setError(''); setMessage('');
+    try {
+      const response = await fetch(`/api/admin/subjects?id=${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to delete allocation');
+      await load();
+      setMessage('Subject allocation deleted successfully.');
+      if (editingId === id) { setEditingId(null); setForm(emptyForm); }
+    } catch (error: any) { setError(error.message); } finally { setDeletingId(null); setConfirmDelete(null); }
+  };
+
   return <div>
     <div className="mb-4"><h4 className="fw-bold text-navy-900 mb-1">Subject Allocation</h4><p className="text-secondary small mb-0">Create a subject and assign the four subject-specific responsibilities.</p></div>
     {message && <Alert variant="success" dismissible onClose={() => setMessage('')}>{message}</Alert>}
@@ -92,6 +106,12 @@ export default function SubjectAllocationPage() {
         <Col md={6}><Form.Label className="small fw-semibold text-secondary">Evaluator *</Form.Label><Form.Select required value={form.evaluatorId} onChange={event => setField('evaluatorId', event.target.value)}><option value="">Select Evaluator</option>{evaluators.map(user => <option key={user.id} value={user.id}>{displayUser(user)}</option>)}</Form.Select></Col>
       </Row><div className="mt-4 d-flex gap-2"><Button type="submit" className="btn-ppsu-accent" disabled={saving || Boolean(assignmentValidationError)}>{saving ? <Spinner size="sm" /> : editingId ? 'Save Changes' : 'Create & Allocate Subject'}</Button>{editingId && <Button variant="light" onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel</Button>}</div></Form>
     </div>
-    <div className="card-custom p-0 overflow-hidden"><div className="p-4"><h5 className="fw-bold text-navy-900 mb-0">Allocated Subjects</h5></div>{loading ? <div className="text-center py-5"><Spinner /></div> : <Table responsive hover className="mb-0 align-middle"><thead><tr><th className="px-4">Subject</th><th>Division</th><th>Course Coordinator</th><th>Course Teacher</th><th>Lab Teachers</th><th>Evaluator</th><th>File</th><th></th></tr></thead><tbody>{subjects.map(subject => <tr key={subject.id}><td className="px-4"><span className="font-mono-ppsu fw-bold">{subject.subjectCode}</span><br /><small>{subject.subjectName}</small></td><td>{subject.division || '—'}</td><td>{displayUser(subject.courseCoordinator)}</td><td>{displayUser(subject.courseTeacher)}</td><td><small>A: {displayUser(subject.labTeacherA)}<br />B: {displayUser(subject.labTeacherB)}<br />C: {displayUser(subject.labTeacherC)}</small></td><td>{displayUser(subject.evaluator)}</td><td><span className="badge-custom badge-custom-draft">{subject.courseFile?.status || 'DRAFT'}</span></td><td><Button size="sm" variant="outline-primary" onClick={() => { setEditingId(subject.id); edit(subject); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit</Button></td></tr>)}</tbody></Table>}</div>
+    <div className="card-custom p-0 overflow-hidden"><div className="p-4"><h5 className="fw-bold text-navy-900 mb-0">Allocated Subjects</h5></div>{loading ? <div className="text-center py-5"><Spinner /></div> : <Table responsive hover className="mb-0 align-middle"><thead><tr><th className="px-4">Subject</th><th>Division</th><th>Course Coordinator</th><th>Course Teacher</th><th>Lab Teachers</th><th>Evaluator</th><th>File</th><th></th></tr></thead><tbody>{subjects.map(subject => <tr key={subject.id}><td className="px-4"><span className="font-mono-ppsu fw-bold">{subject.subjectCode}</span><br /><small>{subject.subjectName}</small></td><td>{subject.division || '—'}</td><td>{displayUser(subject.courseCoordinator)}</td><td>{displayUser(subject.courseTeacher)}</td><td><small>A: {displayUser(subject.labTeacherA)}<br />B: {displayUser(subject.labTeacherB)}<br />C: {displayUser(subject.labTeacherC)}</small></td><td>{displayUser(subject.evaluator)}</td><td><span className="badge-custom badge-custom-draft">{subject.courseFile?.status || 'DRAFT'}</span></td><td><div className="d-flex gap-2"><Button size="sm" variant="outline-primary" onClick={() => { setEditingId(subject.id); edit(subject); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit</Button><Button size="sm" variant="outline-danger" disabled={deletingId === subject.id} onClick={() => setConfirmDelete({ id: subject.id, code: subject.subjectCode })}>{deletingId === subject.id ? <Spinner size="sm" /> : 'Delete'}</Button></div></td></tr>)}</tbody></Table>}</div>
+    <Modal show={Boolean(confirmDelete)} onHide={() => setConfirmDelete(null)} centered>
+      <Modal.Header closeButton><Modal.Title className="fs-6 fw-bold text-danger">Delete Subject Allocation</Modal.Title></Modal.Header>
+      <Modal.Body><p className="mb-1">Are you sure you want to delete the allocation for <strong>{confirmDelete?.code}</strong>?</p><p className="text-secondary small mb-0">This will also permanently delete the associated course file and all its data.</p></Modal.Body>
+      <Modal.Footer><Button variant="light" onClick={() => setConfirmDelete(null)}>Cancel</Button><Button variant="danger" disabled={Boolean(deletingId)} onClick={() => confirmDelete && deleteAllocation(confirmDelete.id)}>{deletingId ? <><Spinner size="sm" className="me-2" />Deleting…</> : 'Yes, Delete'}</Button></Modal.Footer>
+    </Modal>
   </div>;
+
 }
