@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUsers, assignFacultyCoordinator, getCourseFileStatusCountsByFaculty } from '@/lib/mock-data';
+import { prisma, assignFacultyCoordinator, getCourseFileStatusCountsByFaculty } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 
@@ -15,10 +15,12 @@ export async function GET(req: NextRequest) {
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Fetch all users directly from the real database — no mock fallback
     const [allUsers, statusCounts] = await Promise.all([
-      getUsers(),
+      prisma.user.findMany({ orderBy: { name: 'asc' } }),
       getCourseFileStatusCountsByFaculty()
     ]);
+
     const faculty = allUsers.filter(u => u.role === 'FACULTY').map(u => ({
       id: u.id,
       name: u.name,
@@ -27,19 +29,23 @@ export async function GET(req: NextRequest) {
       department: u.department,
       school: u.school,
       assignedCoordinatorId: u.assignedCoordinatorId,
-      assignedCoordinatorName: u.assignedCoordinatorId ? allUsers.find(v => v.id === u.assignedCoordinatorId)?.name : 'Unassigned',
+      assignedCoordinatorName: u.assignedCoordinatorId
+        ? allUsers.find(v => v.id === u.assignedCoordinatorId)?.name ?? 'Unassigned'
+        : 'Unassigned',
       statusCounts: statusCounts[u.id] ?? { completed: 0, pending: 0, revision: 0 }
     }));
 
-    const coordinators = allUsers.filter(u => u.role === 'COORDINATOR' || u.role === 'EVALUATOR').map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      employeeId: u.employeeId,
-      department: u.department,
-      school: u.school,
-      designation: u.designation
-    }));
+    const coordinators = allUsers
+      .filter(u => u.role === 'COORDINATOR' || u.role === 'EVALUATOR')
+      .map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        employeeId: u.employeeId,
+        department: u.department,
+        school: u.school,
+        designation: u.designation
+      }));
 
     const admins = allUsers.filter(u => u.role === 'ADMIN').map(u => ({
       id: u.id,
@@ -82,3 +88,4 @@ export async function PUT(req: NextRequest) {
     return noStoreJson({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+
