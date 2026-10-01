@@ -128,31 +128,19 @@ async function ensureSeedData() {
 }
 
 export async function getUsers() {
-  await ensureSeedData();
-  try {
-    const list = await prisma.user.findMany();
-    if (list.length > 0) return list.map(toUser);
-  } catch (e) {}
-  return MOCK_SEED_USERS;
+  const list = await prisma.user.findMany({ orderBy: { name: 'asc' } });
+  return list.map(toUser);
 }
 
 export async function getUserByEmail(email: string) {
-  await ensureSeedData();
   const searchEmail = email.trim().toLowerCase();
-  try {
-    const user = await prisma.user.findFirst({ where: { email: { equals: searchEmail, mode: 'insensitive' } } });
-    if (user) return toUser(user);
-  } catch (e) {}
-  return MOCK_SEED_USERS.find(u => u.email.toLowerCase() === searchEmail);
+  const user = await prisma.user.findFirst({ where: { email: { equals: searchEmail, mode: 'insensitive' } } });
+  return user ? toUser(user) : null;
 }
 
 export async function getUserById(id: string) {
-  await ensureSeedData();
-  try {
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (user) return toUser(user);
-  } catch (e) {}
-  return MOCK_SEED_USERS.find(u => u.id === id);
+  const user = await prisma.user.findUnique({ where: { id } });
+  return user ? toUser(user) : null;
 }
 
 export async function getCourseFiles() {
@@ -449,25 +437,8 @@ const subjectInclude = {
 };
 
 export async function getSubjects() {
-  await ensureSeedData();
-  try {
-    const list = await prisma.subject.findMany({ include: subjectInclude, orderBy: { createdAt: 'desc' } });
-    if (list.length > 0) return list as unknown as Subject[];
-  } catch (e) {}
-  // Fallback: attach mock user references so the UI can still show faculty dropdowns
-  return MOCK_SEED_SUBJECTS.map((s) => {
-    const byId = new Map(MOCK_SEED_USERS.map(u => [u.id, u]));
-    return {
-      ...s,
-      courseCoordinator: byId.get(s.courseCoordinatorId),
-      courseTeacher: byId.get(s.courseTeacherId),
-      labTeacherA: s.labTeacherAId ? byId.get(s.labTeacherAId) : null,
-      labTeacherB: s.labTeacherBId ? byId.get(s.labTeacherBId) : null,
-      labTeacherC: s.labTeacherCId ? byId.get(s.labTeacherCId) : null,
-      evaluator: byId.get(s.evaluatorId),
-      courseFile: null,
-    };
-  }) as unknown as Subject[];
+  const list = await prisma.subject.findMany({ include: subjectInclude, orderBy: { createdAt: 'desc' } });
+  return list as unknown as Subject[];
 }
 
 export async function getSubjectById(id: string) {
