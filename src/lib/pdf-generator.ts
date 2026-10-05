@@ -598,7 +598,8 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                 },
                 layout: standardTableLayout
               });
-            } else if (isMission || isDeptMission || lines.length > 1) {
+            } else if (isMission || isDeptMission) {
+              // Always numbered rows for mission sections
               const rows = lines.map((line: string, idx: number) => {
                 const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
                 return [
@@ -606,7 +607,32 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                   { text: cleanText, fontSize: 10, alignment: 'justify' }
                 ];
               });
-
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: [40, '*'],
+                  body: [
+                    [
+                      { text: col2Header, colSpan: 2, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 },
+                      {}
+                    ],
+                    ...rows
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            } else if (lines.length > 1) {
+              // Multi-line plain sections use numbered rows
+              const rows = lines.map((line: string, idx: number) => {
+                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                return [
+                  { text: `${idx + 1}.`, bold: true, alignment: 'center', fontSize: 10 },
+                  { text: cleanText, fontSize: 10, alignment: 'justify' }
+                ];
+              });
               structuredContent.push({
                 margin: [0, 0, 0, 14],
                 table: {
@@ -635,6 +661,52 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
                   body: [
                     [{ text: col2Header, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
                     [{ text: text, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            }
+          });
+
+          // Custom sections
+          const customSections = Array.isArray(item1Sub.customSections) ? item1Sub.customSections : [];
+          customSections.forEach((sec: any) => {
+            if (!sec?.textContent?.trim()) return;
+            const secLines = sec.textContent.split('\n').map((l: string) => l.trim()).filter(Boolean);
+            const secTitle = (sec.title || 'Custom Section').toUpperCase();
+            if (secLines.length > 1) {
+              const rows = secLines.map((line: string, idx: number) => {
+                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                return [
+                  { text: `${idx + 1}.`, bold: true, alignment: 'center', fontSize: 10 },
+                  { text: cleanText, fontSize: 10, alignment: 'justify' }
+                ];
+              });
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: [40, '*'],
+                  body: [
+                    [{ text: secTitle, colSpan: 2, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }, {}],
+                    ...rows
+                  ]
+                },
+                layout: standardTableLayout
+              });
+            } else {
+              structuredContent.push({
+                margin: [0, 0, 0, 14],
+                table: {
+                  headerRows: 1,
+                  dontBreakRows: true,
+                  keepWithHeaderRows: 1,
+                  widths: ['*'],
+                  body: [
+                    [{ text: secTitle, bold: true, alignment: 'center', fillColor: '#d9ead3', fontSize: 10 }],
+                    [{ text: sec.textContent, fontSize: 10, alignment: 'justify', margin: [4, 4, 4, 4] }]
                   ]
                 },
                 layout: standardTableLayout

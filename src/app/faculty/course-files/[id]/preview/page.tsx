@@ -867,141 +867,144 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
             // TEXT MODE
             const hasAnyText = subKeys.some((k) => sb?.[k]?.textContent?.trim()) || customSecs.some((s: any) => s?.textContent?.trim());
             if (hasAnyText) {
+              const headerBg = '#d9ead3';
+
+              // Helper: render a section table matching the reference image
+              const renderSection = (key: string, title: string, text: string, isPeo: boolean, isPso: boolean, isPo: boolean, isMission: boolean, isDeptMission: boolean) => {
+                const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+                const prefix = isPeo ? 'PEO ' : isPso ? 'PSO ' : isPo ? 'PO ' : '';
+                const col1Header = isPeo ? 'PEO No' : isPso ? 'PSO No' : isPo ? 'PO No' : '';
+
+                if (isPeo || isPso || isPo) {
+                  // Two-column numbered table (PEO / PSO / PO)
+                  return (
+                    <div key={key} style={{ marginBottom: '24px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                        <thead>
+                          <tr style={{ background: headerBg }}>
+                            <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', borderBottom: '1px solid #000', color: '#000' }}>{col1Header}</th>
+                            <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((line: string, idx: number) => {
+                            const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                                <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{prefix}{idx + 1}</td>
+                                <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000', textAlign: 'justify' }}>{cleanText}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+
+                if (isMission || isDeptMission) {
+                  // Always numbered rows for mission-type sections
+                  return (
+                    <div key={key} style={{ marginBottom: '24px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                        <thead>
+                          <tr style={{ background: headerBg }}>
+                            <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((line: string, idx: number) => {
+                            const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                                <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>
+                                <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000', textAlign: 'justify' }}>{cleanText}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+
+                if (lines.length > 1) {
+                  // Multi-line vision/custom — numbered rows
+                  return (
+                    <div key={key} style={{ marginBottom: '24px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                        <thead>
+                          <tr style={{ background: headerBg }}>
+                            <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((line: string, idx: number) => {
+                            const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                                <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>
+                                <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000', textAlign: 'justify' }}>{cleanText}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+
+                // Single-line plain section (Institute Vision, Dept Vision)
+                return (
+                  <div key={key} style={{ marginBottom: '24px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                      <thead>
+                        <tr style={{ background: headerBg }}>
+                          <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '12px 14px', fontSize: '13px', lineHeight: '1.7', color: '#000', textAlign: 'justify' }}>{text}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              };
+
               return (
                 <div key={item.index}>
                   {dividerPage}
-                  {/* Structured Vision/Mission content in template page */}
+                  {/* Structured Vision/Mission content matching reference image */}
                   <div className="preview-page" style={{ ...PAGE }}>
                     <PageHeader cf={cf} />
-                    <div style={{ fontWeight: 'bold', fontSize: '14px', textDecoration: 'underline', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.3px' }}>
-                      {item.index}. {item.name}
-                    </div>
                     <div>
                       {subKeys.map((key) => {
                         const sub = sb?.[key];
                         const text = sub?.textContent;
+                        if (!text?.trim()) return null;
                         const isMission = key === 'mission';
                         const isDeptVision = key === 'deptVision';
                         const isDeptMission = key === 'deptMission';
-                        const lines = text?.split('\n').map((l: string) => l.trim()).filter(Boolean) || [];
-                        if (!text?.trim()) return null;
-
-                        const headerBg = '#d9ead3';
                         const isPeo = key === 'peo';
                         const isPso = key === 'pso';
                         const isPo = key === 'po';
-
-                        let col1Header = '';
-                        let col2Header = '';
-                        let prefix = '';
-
-                        if (isPeo) {
-                          col1Header = 'PEO No';
-                          col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-                          prefix = 'PEO ';
-                        } else if (isPso) {
-                          col1Header = 'PSO No';
-                          col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-                          prefix = 'PSO ';
-                        } else if (isPo) {
-                          col1Header = 'PO No';
-                          col2Header = 'PROGRAMME OUTCOMES';
-                          prefix = 'PO ';
-                        } else if (isMission) {
-                          col2Header = 'INSTITUTE MISSION';
-                        } else if (isDeptVision) {
-                          col2Header = 'DEPARTMENT VISION';
-                        } else if (isDeptMission) {
-                          col2Header = 'DEPARTMENT MISSION';
-                        } else {
-                          col2Header = 'INSTITUTE VISION';
-                        }
-
-                        if (isPeo || isPso || isPo) {
-                          return (
-                            <div key={key} style={{ marginBottom: '24px' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                                <thead>
-                                  <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                    <th style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>{col1Header}</th>
-                                    <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>{col2Header}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {lines.map((line: string, idx: number) => {
-                                    const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
-                                    return (
-                                      <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                        <td style={{ width: '90px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{prefix}{idx + 1}</td>
-                                        <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>{cleanText}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        }
-
-                        if (isMission || isDeptMission || lines.length > 1) {
-                          return (
-                            <div key={key} style={{ marginBottom: '24px' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                                <thead>
-                                  <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                    <th colSpan={2} style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{col2Header}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {lines.map((line: string, idx: number) => {
-                                    const cleanText = line.replace(/^\d+[\.]\s*/, '').trim() || line;
-                                    return (
-                                      <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                        <td style={{ width: '45px', padding: '8px 12px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>
-                                        <td style={{ padding: '8px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000' }}>{cleanText}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div key={key} style={{ marginBottom: '24px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                              <thead>
-                                <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                  <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{col2Header}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>{text}</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        );
+                        const titleMap: Record<string, string> = {
+                          vision: 'INSTITUTE VISION',
+                          mission: 'INSTITUTE MISSION',
+                          deptVision: 'DEPARTMENT VISION',
+                          deptMission: 'DEPARTMENT MISSION',
+                          peo: 'PROGRAMME EDUCATIONAL OBJECTIVES',
+                          pso: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
+                          po: 'PROGRAMME OUTCOMES',
+                        };
+                        return renderSection(key, titleMap[key] || key.toUpperCase(), text, isPeo, isPso, isPo, isMission, isDeptMission);
                       })}
-
-                      {customSecs.map((sec: any) => (
-                        <div key={sec.id} style={{ marginBottom: '24px' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                            <thead>
-                              <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                                <th style={{ padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>{sec.title.toUpperCase()}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td style={{ padding: '12px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: '#000' }}>{sec.textContent}</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
+                      {customSecs.map((sec: any) => {
+                        if (!sec?.textContent?.trim()) return null;
+                        return renderSection(sec.id, (sec.title || 'Custom Section').toUpperCase(), sec.textContent, false, false, false, false, false);
+                      })}
                     </div>
                   </div>
                   <UploadedFileEmbeds files={uploadedFiles} />

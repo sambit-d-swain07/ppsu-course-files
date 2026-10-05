@@ -4966,147 +4966,102 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                         </div>
                       ) : (
                         <div className="p-3 bg-white border rounded shadow-sm">
-                          {subKeys.map((sk) => {
-                            const text = subs[sk]?.textContent;
-                            const fileUrl = subs[sk]?.fileUrl;
-                            const fileName = subs[sk]?.fileName;
-                            if (!text?.trim() && !fileUrl) return null;
-
-                            const lines = text ? text.split('\n').map((l: string) => l.trim()).filter(Boolean) : [];
+                          {(() => {
                             const headerBg = '#d9ead3';
-                            const isMission = sk === 'mission';
-                            const isDeptVision = sk === 'deptVision';
-                            const isDeptMission = sk === 'deptMission';
-                            const isPeo = sk === 'peo';
-                            const isPso = sk === 'pso';
-                            const isPo = sk === 'po';
-
-                            let col1Header = '';
-                            let col2Header = '';
-                            let prefix = '';
-
-                            if (isPeo) {
-                              col1Header = 'PEO No';
-                              col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-                              prefix = 'PEO ';
-                            } else if (isPso) {
-                              col1Header = 'PSO No';
-                              col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-                              prefix = 'PSO ';
-                            } else if (isPo) {
-                              col1Header = 'PO No';
-                              col2Header = 'PROGRAMME OUTCOMES';
-                              prefix = 'PO ';
-                            } else if (isMission) {
-                              col1Header = '';
-                              col2Header = 'INSTITUTE MISSION';
-                            } else if (isDeptVision) {
-                              col1Header = '';
-                              col2Header = 'DEPARTMENT VISION';
-                            } else if (isDeptMission) {
-                              col1Header = '';
-                              col2Header = 'DEPARTMENT MISSION';
-                            } else {
-                              col1Header = '';
-                              col2Header = 'INSTITUTE VISION';
-                            }
-
-                            return (
-                              <div key={sk} className="mb-4">
-                                {lines.length > 0 && (
-                                  <>
-                                    {(isPeo || isPso || isPo) ? (
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                                        <thead>
-                                          <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                            <th style={{ width: '90px', padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
-                                              {col1Header}
-                                            </th>
-                                            <th style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textAlign: 'left', color: '#000' }}>
-                                              {col2Header}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {lines.map((line: string, idx: number) => {
-                                            const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
-                                            return (
-                                              <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                <td style={{ width: '90px', padding: '6px 10px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                                  {prefix}{idx + 1}
-                                                </td>
-                                                <td style={{ padding: '6px 10px', fontSize: '13px', lineHeight: '1.5', color: '#000' }}>
-                                                  {cleanText}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    ) : (isMission || isDeptMission || lines.length > 1) ? (
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                                        <thead>
-                                          <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                            <th colSpan={2} style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                              {col2Header}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {lines.map((line: string, idx: number) => {
-                                            const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
-                                            return (
-                                              <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                <td style={{ width: '45px', padding: '6px 10px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                                  {idx + 1}.
-                                                </td>
-                                                <td style={{ padding: '6px 10px', fontSize: '13px', lineHeight: '1.5', color: '#000' }}>
-                                                  {cleanText}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    ) : (
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
-                                        <thead>
-                                          <tr style={{ background: headerBg, borderBottom: '1px solid #000' }}>
-                                            <th style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                              {col2Header}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          <tr>
-                                            <td style={{ padding: '10px', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: '#000' }}>
-                                              {text}
-                                            </td>
-                                          </tr>
-                                        </tbody>
-                                      </table>
-                                    )}
-                                  </>
-                                )}
-
-                                {fileUrl && (
-                                  <div className="mt-2 d-flex align-items-center gap-2">
-                                    <span className="badge bg-success-subtle text-success border border-success-subtle font-mono-ppsu">
-                                      ✓ Document: {fileName}
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      variant="outline-info"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      onClick={() => setViewingDoc({ title: 'Item 1 File', fileName: fileName || 'Document', fileUrl })}
-                                    >
-                                      👁️ View Uploaded File
-                                    </Button>
+                            const renderSection = (key: string, title: string, text: string, isPeo: boolean, isPso: boolean, isPo: boolean, isMission: boolean, isDeptMission: boolean) => {
+                              const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+                              const prefix = isPeo ? 'PEO ' : isPso ? 'PSO ' : isPo ? 'PO ' : '';
+                              const col1Header = isPeo ? 'PEO No' : isPso ? 'PSO No' : isPo ? 'PO No' : '';
+                              if (isPeo || isPso || isPo) {
+                                return (
+                                  <div key={key} className="mb-4">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                                      <thead>
+                                        <tr style={{ background: headerBg }}>
+                                          <th style={{ width: '90px', padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderRight: '1px solid #000', borderBottom: '1px solid #000', color: '#000' }}>{col1Header}</th>
+                                          <th style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {lines.map((line: string, idx: number) => {
+                                          const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
+                                          return (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                                              <td style={{ width: '90px', padding: '6px 10px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{prefix}{idx + 1}</td>
+                                              <td style={{ padding: '6px 10px', fontSize: '13px', lineHeight: '1.5', color: '#000', textAlign: 'justify' }}>{cleanText}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
                                   </div>
-                                )}
-                              </div>
+                                );
+                              }
+                              if (isMission || isDeptMission || lines.length > 1) {
+                                return (
+                                  <div key={key} className="mb-4">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                                      <thead>
+                                        <tr style={{ background: headerBg }}>
+                                          <th colSpan={2} style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {lines.map((line: string, idx: number) => {
+                                          const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
+                                          return (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                                              <td style={{ width: '45px', padding: '6px 10px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>{idx + 1}.</td>
+                                              <td style={{ padding: '6px 10px', fontSize: '13px', lineHeight: '1.5', color: '#000', textAlign: 'justify' }}>{cleanText}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={key} className="mb-4">
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontFamily: "'Times New Roman', Times, serif" }}>
+                                    <thead>
+                                      <tr style={{ background: headerBg }}>
+                                        <th style={{ padding: '6px 10px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', textAlign: 'center', borderBottom: '1px solid #000', color: '#000' }}>{title}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr>
+                                        <td style={{ padding: '10px 12px', fontSize: '13px', lineHeight: '1.6', color: '#000', textAlign: 'justify' }}>{text}</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            };
+                            const titleMap: Record<string, string> = {
+                              vision: 'INSTITUTE VISION',
+                              mission: 'INSTITUTE MISSION',
+                              deptVision: 'DEPARTMENT VISION',
+                              deptMission: 'DEPARTMENT MISSION',
+                              peo: 'PROGRAMME EDUCATIONAL OBJECTIVES',
+                              pso: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
+                              po: 'PROGRAMME OUTCOMES',
+                            };
+                            return (
+                              <>
+                                {subKeys.map((sk) => {
+                                  const text = subs[sk]?.textContent;
+                                  if (!text?.trim()) return null;
+                                  return renderSection(sk, titleMap[sk] || sk.toUpperCase(), text,
+                                    sk === 'peo', sk === 'pso', sk === 'po', sk === 'mission', sk === 'deptMission');
+                                })}
+                                {Array.isArray(subs.customSections) && subs.customSections.map((sec: any) => {
+                                  if (!sec?.textContent?.trim()) return null;
+                                  return renderSection(sec.id, (sec.title || 'Custom Section').toUpperCase(), sec.textContent, false, false, false, false, false);
+                                })}
+                              </>
                             );
-                          })}
+                          })()}
                         </div>
                       )}
                     </div>
