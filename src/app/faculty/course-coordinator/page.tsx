@@ -34,6 +34,58 @@ const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
   sampleAnswerSheet: { label: 'Sample Answer Sheet', required: true },
 };
 
+const ITEM1_CONFIG: Record<string, { label: string; col1Header: string; col2Header: string; prefix: string; placeholder: string }> = {
+  vision: {
+    label: 'Institute Vision',
+    col1Header: 'Sr. No.',
+    col2Header: 'INSTITUTE VISION',
+    prefix: '',
+    placeholder: 'Enter Institute Vision statement...'
+  },
+  mission: {
+    label: 'Institute Mission',
+    col1Header: 'Sr. No.',
+    col2Header: 'INSTITUTE MISSION',
+    prefix: '',
+    placeholder: 'Enter Institute Mission statement...'
+  },
+  deptVision: {
+    label: 'Department Vision',
+    col1Header: 'Sr. No.',
+    col2Header: 'DEPARTMENT VISION',
+    prefix: '',
+    placeholder: 'Enter Department Vision statement...'
+  },
+  deptMission: {
+    label: 'Department Mission',
+    col1Header: 'Sr. No.',
+    col2Header: 'DEPARTMENT MISSION',
+    prefix: '',
+    placeholder: 'Enter Department Mission statement...'
+  },
+  peo: {
+    label: 'Programme Educational Objectives (PEO)',
+    col1Header: 'PEO No',
+    col2Header: 'PROGRAMME EDUCATIONAL OBJECTIVES',
+    prefix: 'PEO ',
+    placeholder: 'Enter PEO objective details...'
+  },
+  pso: {
+    label: 'Programme Specific Outcomes (PSO)',
+    col1Header: 'PSO No',
+    col2Header: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
+    prefix: 'PSO ',
+    placeholder: 'Enter PSO outcome details...'
+  },
+  po: {
+    label: 'Programme Outcomes (PO)',
+    col1Header: 'PO No',
+    col2Header: 'PROGRAMME OUTCOMES',
+    prefix: 'PO ',
+    placeholder: 'Enter PO outcome details...'
+  }
+};
+
 const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (file.type.startsWith('image/')) {
@@ -132,11 +184,13 @@ export default function FacultyCourseCoordinatorPage() {
   // Item 1 Text Entry & Custom Section State
   const [item1TextDrafts, setItem1TextDrafts] = useState<Record<string, string>>({});
   const [item1RowDrafts, setItem1RowDrafts] = useState<Record<string, string[]>>({});
+  const [item1RowsState, setItem1RowsState] = useState<Record<string, string[]>>({});
+  const [switchModal, setSwitchModal] = useState<{ open: boolean; targetMode: 'text' | 'upload' } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [newCustomTitle, setNewCustomTitle] = useState('');
   const [newCustomText, setNewCustomText] = useState('');
   const [newCustomFile, setNewCustomFile] = useState<File | null>(null);
-  // Mode switch removed — upload-only mode is now the default for all items
 
   const fetchData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -409,7 +463,148 @@ export default function FacultyCourseCoordinatorPage() {
     }
   };
 
-  // Mode switch removed — upload-only per sub-key
+  const parseTextToRows = (text?: string): string[] => {
+    if (!text || !text.trim()) return [''];
+    const clean = text.replace(/<[^>]*>/g, '');
+    const lines = clean
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return [''];
+    return lines.map((l) =>
+      l
+        .replace(/^(PEO|PSO|PO|\d+)\s*[\d\.\:\-]*\s*/i, '')
+        .replace(/^[•\-\*]\s*/, '')
+        .trim()
+    );
+  };
+
+  const getRowsForSubKey = (subKey: string, subDoc?: any): string[] => {
+    if (item1RowsState[subKey] !== undefined) {
+      return item1RowsState[subKey];
+    }
+    return parseTextToRows(subDoc?.textContent);
+  };
+
+  const updateRowText = (subKey: string, idx: number, val: string, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current[idx] = val;
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+  };
+
+  const addRow = (subKey: string, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current.push('');
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+  };
+
+  const removeRow = (subKey: string, idx: number, subDoc?: any) => {
+    const current = [...getRowsForSubKey(subKey, subDoc)];
+    current.splice(idx, 1);
+    if (current.length === 0) current.push('');
+    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
+    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
+    handleSaveTextSubItem(1, subKey, combined);
+  };
+
+  const handleSaveSection = (subKey: string, subDoc?: any) => {
+    const current = getRowsForSubKey(subKey, subDoc);
+    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
+    handleSaveTextSubItem(1, subKey, combined);
+  };
+
+  const handleSaveCustomSectionText = async (secId: string, text: string) => {
+    if (!selectedSubjectId) return;
+    setUploadingItem(1); setActionError(''); setActionSuccess('');
+    try {
+      const existingDoc = sharedMap.get(1);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      if (Array.isArray(existingSubJson.customSections)) {
+        const target = existingSubJson.customSections.find((s: any) => s.id === secId);
+        if (target) {
+          target.textContent = text.trim();
+          target.updatedAt = new Date().toISOString();
+        }
+      }
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId: selectedSubjectId,
+          itemIndex: 1,
+          status: 'UPLOADED',
+          fileName: existingDoc?.fileName || 'Custom Sections',
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) throw new Error('Saving text failed');
+      setActionSuccess('Saved custom section text.');
+      fetchData(false);
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
+  const handleToggleItem1Mode = async (targetMode: 'text' | 'upload') => {
+    if (!selectedSubjectId) return;
+    setUploadingItem(1); setActionError(''); setActionSuccess('');
+    try {
+      const existingDoc = sharedMap.get(1);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      existingSubJson.item1Mode = targetMode === 'text' ? 'TEXT' : 'UPLOAD';
+
+      const res = await fetch('/api/coordinator/shared-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId: selectedSubjectId,
+          itemIndex: 1,
+          status: existingDoc?.status || 'UPLOADED',
+          fileName: existingDoc?.fileName || null,
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to switch mode');
+      }
+      setActionSuccess(`Switched Item 1 mode to ${targetMode === 'text' ? 'Enter Text Mode' : 'Upload PDF Mode'}. Content in both modes is preserved.`);
+      fetchData(false);
+    } catch (err: any) {
+      setActionError(err.message || 'Mode switch failed');
+    } finally {
+      setUploadingItem(null);
+    }
+  };
+
+  const onModeBtnClick = (targetMode: 'text' | 'upload', activeItem1Mode: 'text' | 'upload') => {
+    if (targetMode === activeItem1Mode) return;
+
+    const doc = sharedMap.get(1);
+    let subParsed: any = {};
+    try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
+
+    const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
+    const hasTextData = subKeys.some((k) => !!subParsed[k]?.textContent?.trim());
+    const hasFileData = subKeys.some((k) => !!subParsed[k]?.fileName);
+
+    const currentHasData = activeItem1Mode === 'text' ? hasTextData : hasFileData;
+
+    if (currentHasData) {
+      setSwitchModal({ open: true, targetMode });
+    } else {
+      handleToggleItem1Mode(targetMode);
+    }
+  };
 
   const handleAddCustomSection = async () => {
     if (!selectedSubjectId || !newCustomTitle.trim()) return;
@@ -685,121 +880,295 @@ export default function FacultyCourseCoordinatorPage() {
                         {/* Render Sub-keys list if multi-part item */}
                         {item.index === 1 ? (
                           <div className="mt-3 p-3 bg-white border rounded shadow-sm">
-                            {/* Add Custom Section Button */}
-                            <div className="d-flex justify-content-end align-items-center mb-3">
-                              <Button
-                                variant="outline-primary"
-                                size="sm"
-                                className="fw-bold"
-                                style={{ fontSize: 12 }}
-                                onClick={() => setShowAddCustomModal(true)}
-                              >
-                                ➕ Add Custom Section
-                              </Button>
-                            </div>
-
-                            {/* UPLOAD-ONLY MODE for Item 1 sub-keys */}
                             {(() => {
+                              const activeItem1Mode: 'text' | 'upload' = (parsedSubs?.item1Mode === 'UPLOAD' || parsedSubs?.inputMode === 'upload') ? 'upload' : 'text';
+
                               return (
                                 <>
+                                  {/* Top Controls: Mode Toggle & Add Custom Section */}
+                                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 p-3 bg-light rounded border">
+                                    {/* Mode Switch Toggle Button Group */}
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="small text-muted fw-bold">Item 1 Mode:</span>
+                                      <div className="d-flex rounded-3 overflow-hidden border shadow-sm" style={{ backgroundColor: '#fff' }}>
+                                        <button
+                                          type="button"
+                                          className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all`}
+                                          style={{
+                                            backgroundColor: activeItem1Mode === 'text' ? '#1E3A8A' : '#ffffff',
+                                            color: activeItem1Mode === 'text' ? '#ffffff' : '#475569',
+                                            fontSize: '0.8rem'
+                                          }}
+                                          onClick={() => onModeBtnClick('text', activeItem1Mode)}
+                                        >
+                                          ✏️ Enter Text Mode
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all`}
+                                          style={{
+                                            backgroundColor: activeItem1Mode === 'upload' ? '#1E3A8A' : '#ffffff',
+                                            color: activeItem1Mode === 'upload' ? '#ffffff' : '#475569',
+                                            fontSize: '0.8rem'
+                                          }}
+                                          onClick={() => onModeBtnClick('upload', activeItem1Mode)}
+                                        >
+                                          📎 Upload PDF Mode
+                                        </button>
+                                      </div>
+                                    </div>
 
-                                  {/* Upload button per sub-key */}
-                                  <div className="d-flex flex-column gap-3 mb-4">
-                                    {item.subKeys?.map((sk) => {
-                                      const skData = parsedSubs[sk] || {};
-                                      const config = SUB_KEY_CONFIG[sk] || { label: sk };
-
-                                      return (
-                                        <div key={sk} className="p-3 border rounded bg-light">
-                                          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                            <div>
-                                              <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
-                                                {config.label} {config.required && <span className="text-danger">*</span>}
-                                              </span>
-                                              {skData.fileName && (
-                                                <div className="small text-success font-mono-ppsu mt-1">
-                                                  ✓ {skData.fileName}
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            <div className="d-flex align-items-center gap-2">
-                                              <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                                {skData.fileName ? 'Replace File' : 'Upload File (PDF)'}
-                                                <input
-                                                  type="file"
-                                                  accept=".pdf"
-                                                  className="d-none"
-                                                  onChange={(e) => {
-                                                    const f = e.target.files?.[0];
-                                                    if (f) handleUploadSubItem(1, sk, f);
-                                                    e.currentTarget.value = '';
-                                                  }}
-                                                />
-                                              </label>
-                                              {skData.fileUrl && (
-                                                <>
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline-info"
-                                                    style={{ fontSize: 11, padding: '2px 8px' }}
-                                                    onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
-                                                  >
-                                                    View File
-                                                  </Button>
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline-danger"
-                                                    style={{ fontSize: 11, padding: '2px 8px' }}
-                                                    onClick={() => handleRemoveSubItem(1, sk)}
-                                                  >
-                                                    Remove
-                                                  </Button>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                                    {/* Add Custom Section Button */}
+                                    <Button
+                                      variant="outline-primary"
+                                      size="sm"
+                                      className="fw-bold"
+                                      style={{ fontSize: 12 }}
+                                      onClick={() => setShowAddCustomModal(true)}
+                                    >
+                                      ➕ Add Custom Section
+                                    </Button>
                                   </div>
 
-                                  {/* Custom Sections */}
-                                  {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
-                                    <div className="mt-2">
-                                      <h6 className="fw-bold text-navy-900 mb-2 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections</h6>
-                                      <div className="d-flex flex-column gap-2">
-                                        {parsedSubs.customSections.map((sec: any) => (
-                                          <div key={sec.id} className="p-3 border rounded bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                            <div>
-                                              <div className="fw-bold text-navy-900 small">{sec.title}</div>
-                                              {sec.textContent && <div className="text-secondary small mt-1" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{sec.textContent}</div>}
-                                              {sec.fileName && <div className="small text-success font-mono-ppsu mt-1">✓ {sec.fileName}</div>}
+                                  {/* ITEM 1 SECTIONS */}
+                                  {activeItem1Mode === 'upload' ? (
+                                    /* UPLOAD MODE */
+                                    <div className="d-flex flex-column gap-3 mb-4">
+                                      {item.subKeys?.map((sk) => {
+                                        const skData = parsedSubs[sk] || {};
+                                        const config = SUB_KEY_CONFIG[sk] || { label: sk };
+
+                                        return (
+                                          <div key={sk} className="p-3 border rounded bg-light">
+                                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                              <div>
+                                                <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
+                                                  {config.label} {config.required && <span className="text-danger">*</span>}
+                                                </span>
+                                                {skData.fileName && (
+                                                  <div className="small text-success font-mono-ppsu mt-1">
+                                                    ✓ {skData.fileName}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              <div className="d-flex align-items-center gap-2">
+                                                <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                                  {skData.fileName ? 'Replace File' : 'Upload File (PDF)'}
+                                                  <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    className="d-none"
+                                                    onChange={(e) => {
+                                                      const f = e.target.files?.[0];
+                                                      if (f) handleUploadSubItem(1, sk, f);
+                                                      e.currentTarget.value = '';
+                                                    }}
+                                                  />
+                                                </label>
+                                                {skData.fileUrl && (
+                                                  <>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline-info"
+                                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
+                                                    >
+                                                      View File
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline-danger"
+                                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => handleRemoveSubItem(1, sk)}
+                                                    >
+                                                      Remove
+                                                    </Button>
+                                                  </>
+                                                )}
+                                              </div>
                                             </div>
-                                            <div className="d-flex align-items-center gap-2">
-                                              <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                                {sec.fileName ? 'Replace File' : 'Upload File (PDF)'}
-                                                <input
-                                                  type="file"
-                                                  accept=".pdf"
-                                                  className="d-none"
-                                                  onChange={(e) => {
-                                                    const f = e.target.files?.[0];
-                                                    if (f) handleUploadCustomSectionFile(sec.id, f);
-                                                    e.currentTarget.value = '';
-                                                  }}
-                                                />
-                                              </label>
-                                              {sec.fileUrl && (
-                                                <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }}
-                                                  onClick={() => setViewingDoc({ title: `Item 1 — ${sec.title}`, fileName: sec.fileName, fileUrl: sec.fileUrl })}>
-                                                  View
-                                                </Button>
-                                              )}
-                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
-                                                Delete
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    /* TEXT MODE */
+                                    <div className="d-flex flex-column gap-4 mb-4">
+                                      {item.subKeys?.map((sk) => {
+                                        const subDoc = parsedSubs[sk] || {};
+                                        const hasSubText = !!subDoc?.textContent?.trim();
+                                        const config = SUB_KEY_CONFIG[sk] || { label: sk };
+                                        const item1Cfg = ITEM1_CONFIG[sk] || {
+                                          label: config.label,
+                                          col1Header: 'Sr. No.',
+                                          col2Header: config.label.toUpperCase(),
+                                          prefix: '',
+                                          placeholder: `Enter ${config.label} details...`
+                                        };
+                                        const rows = getRowsForSubKey(sk, subDoc);
+
+                                        return (
+                                          <div key={sk} className="border rounded-3 overflow-hidden shadow-sm bg-white">
+                                            {/* Section Header */}
+                                            <div className="d-flex align-items-center justify-content-between p-3 border-bottom" style={{ backgroundColor: '#f8fafc' }}>
+                                              <div className="d-flex align-items-center gap-2">
+                                                <span className="fw-bold text-navy-900" style={{ fontSize: '0.95rem', color: '#1E3A8A' }}>
+                                                  {item1Cfg.label}
+                                                </span>
+                                                {hasSubText ? (
+                                                  <Badge bg="success" style={{ fontSize: '0.75rem' }}>✓ Saved</Badge>
+                                                ) : (
+                                                  <Badge bg="warning" text="dark" style={{ fontSize: '0.75rem' }}>Pending Text</Badge>
+                                                )}
+                                              </div>
+                                              <Button
+                                                variant="success"
+                                                size="sm"
+                                                className="fw-bold d-flex align-items-center gap-1"
+                                                disabled={uploadingItem === 1}
+                                                onClick={() => handleSaveSection(sk, subDoc)}
+                                              >
+                                                💾 Save Section
                                               </Button>
                                             </div>
+
+                                            {/* Table Input */}
+                                            <div className="p-3">
+                                              <Table bordered hover responsive className="mb-2" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+                                                <thead>
+                                                  <tr style={{ background: '#d9ead3', borderBottom: '2px solid #000' }}>
+                                                    <th style={{ width: '100px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                      {item1Cfg.col1Header}
+                                                    </th>
+                                                    <th style={{ textAlign: 'left', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                      {item1Cfg.col2Header}
+                                                    </th>
+                                                    <th style={{ width: '60px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+                                                      Action
+                                                    </th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {rows.map((rowText, rIdx) => {
+                                                    const rowLabel = item1Cfg.prefix ? `${item1Cfg.prefix}${rIdx + 1}` : `${rIdx + 1}.`;
+                                                    return (
+                                                      <tr key={rIdx} style={{ verticalAlign: 'top' }}>
+                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', paddingTop: '12px', color: '#000' }}>
+                                                          {rowLabel}
+                                                        </td>
+                                                        <td>
+                                                          <Form.Control
+                                                            as="textarea"
+                                                            rows={2}
+                                                            style={{ fontSize: '13px', fontFamily: "'Times New Roman', Times, serif" }}
+                                                            placeholder={item1Cfg.placeholder}
+                                                            value={rowText}
+                                                            onChange={(e) => updateRowText(sk, rIdx, e.target.value, subDoc)}
+                                                          />
+                                                        </td>
+                                                        <td style={{ textAlign: 'center', paddingTop: '10px' }}>
+                                                          <Button
+                                                            variant="outline-danger"
+                                                            size="sm"
+                                                            style={{ fontSize: '11px', padding: '2px 6px' }}
+                                                            onClick={() => removeRow(sk, rIdx, subDoc)}
+                                                            title="Remove line"
+                                                          >
+                                                            ×
+                                                          </Button>
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </Table>
+                                              <div className="d-flex justify-content-start">
+                                                <Button
+                                                  variant="outline-secondary"
+                                                  size="sm"
+                                                  style={{ fontSize: '12px' }}
+                                                  onClick={() => addRow(sk, subDoc)}
+                                                >
+                                                  ➕ Add Line
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {/* CUSTOM SECTIONS */}
+                                  {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
+                                    <div className="mt-4 pt-3 border-top">
+                                      <h6 className="fw-bold text-navy-900 mb-3 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections</h6>
+                                      <div className="d-flex flex-column gap-3">
+                                        {parsedSubs.customSections.map((sec: any) => (
+                                          <div key={sec.id} className="p-3 border rounded bg-white shadow-sm">
+                                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                              <div className="fw-bold text-navy-900">{sec.title}</div>
+                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
+                                                🗑️ Delete Section
+                                              </Button>
+                                            </div>
+
+                                            {activeItem1Mode === 'text' ? (
+                                              /* Custom Section Text Mode */
+                                              <div>
+                                                <Form.Control
+                                                  as="textarea"
+                                                  rows={3}
+                                                  className="mb-2"
+                                                  style={{ fontSize: 13 }}
+                                                  placeholder={`Enter details for ${sec.title}...`}
+                                                  defaultValue={sec.textContent || ''}
+                                                  onBlur={(e) => handleSaveCustomSectionText(sec.id, e.target.value)}
+                                                />
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                  <small className="text-muted" style={{ fontSize: 11 }}>Text saves automatically on blur when clicking outside.</small>
+                                                  <Button size="sm" variant="success" style={{ fontSize: 11 }} onClick={(e) => {
+                                                    const textarea = e.currentTarget.parentElement?.parentElement?.querySelector('textarea');
+                                                    if (textarea) handleSaveCustomSectionText(sec.id, textarea.value);
+                                                  }}>
+                                                    💾 Save Text
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              /* Custom Section Upload Mode */
+                                              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                <div>
+                                                  {sec.fileName ? (
+                                                    <div className="small text-success font-mono-ppsu">✓ {sec.fileName}</div>
+                                                  ) : (
+                                                    <div className="small text-muted">No PDF uploaded</div>
+                                                  )}
+                                                </div>
+                                                <div className="d-flex align-items-center gap-2">
+                                                  <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
+                                                    {sec.fileName ? 'Replace File' : 'Upload File (PDF)'}
+                                                    <input
+                                                      type="file"
+                                                      accept=".pdf"
+                                                      className="d-none"
+                                                      onChange={(e) => {
+                                                        const f = e.target.files?.[0];
+                                                        if (f) handleUploadCustomSectionFile(sec.id, f);
+                                                        e.currentTarget.value = '';
+                                                      }}
+                                                    />
+                                                  </label>
+                                                  {sec.fileUrl && (
+                                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }}
+                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${sec.title}`, fileName: sec.fileName, fileUrl: sec.fileUrl })}>
+                                                      View
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
                                         ))}
                                       </div>
@@ -1127,6 +1496,37 @@ export default function FacultyCourseCoordinatorPage() {
         </Modal.Footer>
       </Modal>
 
+      {/* Mode Switch Confirmation Modal */}
+      <Modal show={!!switchModal?.open} onHide={() => setSwitchModal(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="h6 fw-bold">Switch Input Mode?</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="small">
+          <p className="mb-2">
+            You are switching to <strong>{switchModal?.targetMode === 'text' ? 'Enter Text Mode' : 'Upload PDF Mode'}</strong> for Item 1.
+          </p>
+          <Alert variant="info" className="p-2 mb-0" style={{ fontSize: 12 }}>
+            ℹ️ Your existing content in both modes will be preserved. You can switch back at any time.
+          </Alert>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setSwitchModal(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              if (switchModal?.targetMode) {
+                handleToggleItem1Mode(switchModal.targetMode);
+              }
+              setSwitchModal(null);
+            }}
+          >
+            Confirm Switch
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
     </div>
   );
