@@ -4365,9 +4365,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     const computeRow = (row: any) => {
                       const i1 = Number(row.marks?.['internal-1'] || 0);
                       const i2 = Number(row.marks?.['internal-2'] || 0);
-                      const avgInternals = Number(((i1 + i2) / 2).toFixed(1));
+                      const avgInternals = Math.ceil((i1 + i2) / 2); // ceiling to whole number
                       const criteriaSum = selectedCriteria.reduce((sum: number, c: any) => sum + (Number(row.marks?.[c.id]) || 0), 0);
-                      const total = Number((avgInternals + criteriaSum).toFixed(1));
+                      const total = Math.ceil(avgInternals + criteriaSum); // ceiling to whole number
                       return { avgInternals, total };
                     };
 

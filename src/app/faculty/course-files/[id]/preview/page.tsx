@@ -79,8 +79,9 @@ function calcStudentAverages(row: any, numP: number) {
   for (let i = 1; i <= numP; i++) {
     sum += Number(practicals[`P${i}`]) || 0;
   }
-  const avg10 = numP > 0 ? Number((sum / numP).toFixed(2)) : 0;
-  const avg20 = Number((avg10 * 2).toFixed(2));
+  const rawAvg10 = numP > 0 ? sum / numP : 0;
+  const avg10 = numP > 0 ? Math.ceil(rawAvg10 * 10) / 10 : 0; // ceiling to 1 decimal
+  const avg20 = Math.ceil(avg10 * 2 * 10) / 10;               // ceiling to 1 decimal
   return { avg10, avg20 };
 }
 
