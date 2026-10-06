@@ -42,7 +42,7 @@ function hashString(str: string) {
 }
 
 function generateBreakdown(totalMark: number, seedKey: string, maxMark = 20) {
-  const roundedTotal = Number(totalMark || 0);
+  const roundedTotal = Math.max(0, Math.min(maxMark, Math.ceil(Number(totalMark) || 0)));
   if (roundedTotal === 0) return { a: 0, b: 0, c: 0, d: 0, total: 0 };
   const hash = hashString(`${seedKey}-${roundedTotal}`);
   const targetUnits = Math.round(roundedTotal * 2);
@@ -69,7 +69,7 @@ function generateBreakdown(totalMark: number, seedKey: string, maxMark = 20) {
   const b = units[1] / 2;
   const c = units[2] / 2;
   const d = units[3] / 2;
-  const sum = Number((a + b + c + d).toFixed(1));
+  const sum = Math.ceil(a + b + c + d);
   return { a, b, c, d, total: sum };
 }
 
@@ -80,8 +80,8 @@ function calcStudentAverages(row: any, numP: number) {
     sum += Number(practicals[`P${i}`]) || 0;
   }
   const rawAvg10 = numP > 0 ? sum / numP : 0;
-  const avg10 = numP > 0 ? Math.ceil(rawAvg10 * 10) / 10 : 0; // ceiling to 1 decimal
-  const avg20 = Math.ceil(avg10 * 2 * 10) / 10;               // ceiling to 1 decimal
+  const avg10 = numP > 0 ? Math.ceil(rawAvg10) : 0;
+  const avg20 = numP > 0 ? Math.ceil(rawAvg10 * 2) : 0;
   return { avg10, avg20 };
 }
 
