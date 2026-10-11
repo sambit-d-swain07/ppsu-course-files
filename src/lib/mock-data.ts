@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { User, CourseFile, ChecklistItem, Notification, Subject } from './db-types';
+import { calculateCourseProgress } from './course-progress';
 
 export const SAMPLE_PDF_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQKJSDigqwKMSAwIG9iagoxIDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+CmVuZG9iago yIDAgb2JqCjw8L1R5cGUvUGFnZXMvQ291bnQgMS9LaWRzWzMgMCBSXT4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUvUGFnZS9NZWRpYUJveFswIDAgNjEyIDc5Ml0vUGFyZW50IDIgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA0IDAgUj4+Pj4vQ29udGVudHMgNSAwIFI+PgplbmRvYmoKNCAwIG9iago8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PgplbmRvYmoKNSAwIG9iago8PC9MZW5ndGggNzU+PnN0cmVhbQpCVAovRjEgMTIgVGYKNzIgNzEyIFRkCihQUDMgU2F2YW5pIFVuaXZlcnNpdHkgLSBDb3Vyc2UgRmlsZSBPZmZpY2lhbCBDb3Vyc2UgRmlsZSkgVGoKRW5kCnN0cmVhbQplbmRvYmoKdHJhaWxlcgo8PC9Sb290IDEgMCBSPj4KJSVFT0YK';
 
@@ -54,13 +55,16 @@ export async function getUserById(id: string) {
 }
 
 export async function getCourseFiles() {
-  return prisma.courseFile.findMany({
+  const rawFiles = await prisma.courseFile.findMany({
     include: {
       faculty: true,
-      subject: { include: subjectInclude }
+      checklistItems: true,
+      labSubmissions: true,
+      subject: { include: { ...subjectInclude, sharedDocuments: true } }
     },
     orderBy: { lastUpdated: 'desc' }
   });
+  return attachCourseFileProgress(rawFiles);
 }
 
 export async function getCourseFileById(id: string) {
@@ -128,7 +132,7 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
   }
 
   // Step 4: final fetch with all includes — strictly direct teaching assignments
-  return prisma.courseFile.findMany({
+  const rawFiles = await prisma.courseFile.findMany({
     where: {
       OR: [
         { facultyId },
@@ -137,10 +141,13 @@ export async function getCourseFilesByFacultyId(facultyId: string) {
     },
     include: {
       faculty: true,
-      subject: { include: subjectInclude }
+      checklistItems: true,
+      labSubmissions: true,
+      subject: { include: { ...subjectInclude, sharedDocuments: true } }
     },
     orderBy: { lastUpdated: 'desc' }
   });
+  return attachCourseFileProgress(rawFiles);
 }
 
 export async function getCourseFileStatusCountsByFaculty() {
@@ -159,7 +166,7 @@ export async function getCourseFileStatusCountsByFaculty() {
 }
 
 export async function getCourseFilesForCoordinator(coordinatorId: string) {
-  return prisma.courseFile.findMany({
+  const rawFiles = await prisma.courseFile.findMany({
     where: {
       OR: [
         { subject: { evaluatorId: coordinatorId } },
@@ -168,10 +175,13 @@ export async function getCourseFilesForCoordinator(coordinatorId: string) {
     },
     include: {
       faculty: true,
-      subject: { include: subjectInclude }
+      checklistItems: true,
+      labSubmissions: true,
+      subject: { include: { ...subjectInclude, sharedDocuments: true } }
     },
     orderBy: { lastUpdated: 'desc' }
   });
+  return attachCourseFileProgress(rawFiles);
 }
 
 export async function getAssignedFacultySummary(coordinatorId: string) {
@@ -399,10 +409,47 @@ export async function getLabSubmissions(courseFileId: string) {
 export const SHARED_COORDINATOR_ITEM_INDICES = [1, 3, 5, 6, 7, 10, 11, 12, 15, 18];
 
 export async function getSubjectSharedDocuments(subjectId: string) {
-  return prisma.subjectSharedDocument.findMany({
-    where: { subjectId },
-    orderBy: { itemIndex: 'asc' }
+  const subject = await prisma.subject.findUnique({
+    where: { id: subjectId },
+    select: { subjectCode: true, academicYear: true, semester: true }
   });
+
+  if (!subject) {
+    return prisma.subjectSharedDocument.findMany({
+      where: { subjectId },
+      orderBy: { itemIndex: 'asc' }
+    });
+  }
+
+  const siblings = await prisma.subject.findMany({
+    where: {
+      subjectCode: subject.subjectCode,
+      academicYear: subject.academicYear,
+      semester: subject.semester
+    },
+    select: { id: true }
+  });
+
+  const siblingIds = siblings.map(s => s.id);
+  if (!siblingIds.includes(subjectId)) siblingIds.push(subjectId);
+
+  const docs = await prisma.subjectSharedDocument.findMany({
+    where: { subjectId: { in: siblingIds } },
+    orderBy: [{ itemIndex: 'asc' }, { updatedAt: 'desc' }]
+  });
+
+  // Deduplicate by itemIndex: prefer the document directly belonging to subjectId, or the most recent one
+  const map = new Map<number, typeof docs[0]>();
+  for (const doc of docs) {
+    const existing = map.get(doc.itemIndex);
+    if (!existing) {
+      map.set(doc.itemIndex, doc);
+    } else if (doc.subjectId === subjectId) {
+      map.set(doc.itemIndex, doc);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.itemIndex - b.itemIndex);
 }
 
 export async function getSchoolSharedDocuments(school?: string | null) {
@@ -441,11 +488,40 @@ export async function upsertSubjectSharedDocument(
   itemIndex: number,
   updates: { status?: string; fileName?: string | null; fileUrl?: string | null; subItemsJson?: string | null }
 ) {
-  return prisma.subjectSharedDocument.upsert({
+  const primaryDoc = await prisma.subjectSharedDocument.upsert({
     where: { subjectId_itemIndex: { subjectId, itemIndex } },
     create: { subjectId, itemIndex, status: updates.status || 'EMPTY', ...updates },
     update: updates
   });
+
+  try {
+    const subject = await prisma.subject.findUnique({
+      where: { id: subjectId },
+      select: { subjectCode: true, academicYear: true, semester: true }
+    });
+    if (subject) {
+      const siblings = await prisma.subject.findMany({
+        where: {
+          subjectCode: subject.subjectCode,
+          academicYear: subject.academicYear,
+          semester: subject.semester,
+          id: { not: subjectId }
+        },
+        select: { id: true }
+      });
+      for (const sibling of siblings) {
+        await prisma.subjectSharedDocument.upsert({
+          where: { subjectId_itemIndex: { subjectId: sibling.id, itemIndex } },
+          create: { subjectId: sibling.id, itemIndex, status: updates.status || 'EMPTY', ...updates },
+          update: updates
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error syncing shared document to sibling subjects:', err);
+  }
+
+  return primaryDoc;
 }
 
 export async function getSubjectsByCoordinatorId(coordinatorId: string) {
@@ -559,7 +635,7 @@ export function mergeChecklistItemsInMemory(items: any[], submissions: any[], su
     // Merge Course Coordinator shared document if item is in SHARED_COORDINATOR_ITEM_INDICES
     // Note: Item 5 is admin-managed (handled above) and must NOT be treated as coordinator-shared.
     if (SHARED_COORDINATOR_ITEM_INDICES.includes(item.itemIndex) && item.itemIndex !== 5) {
-      const shared = (item.itemIndex === 1 || item.itemIndex === 18) ? schoolSharedMap.get(item.itemIndex) : sharedMap.get(item.itemIndex);
+      const shared = sharedMap.get(item.itemIndex) || schoolSharedMap.get(item.itemIndex);
 
       let sharedParsed: any = {};
       if (shared?.subItemsJson) {
@@ -869,6 +945,58 @@ export async function getChecklistItemsByCourseFileId(courseFileId: string) {
   return prisma.checklistItem.findMany({ where: { courseFileId }, orderBy: { itemIndex: 'asc' } });
 }
 
+export async function attachCourseFileProgress(courseFiles: any[]) {
+  if (!courseFiles || courseFiles.length === 0) return courseFiles;
+  const schoolSharedDocs = await prisma.schoolSharedDocument.findMany();
+
+  return courseFiles.map((cf: any) => {
+    const schoolCode = normalizeSchoolCode(cf.subject?.school || cf.school);
+    const subjectShared = cf.subject?.sharedDocuments || [];
+    const schoolShared = schoolSharedDocs.filter((d: any) => d.school === schoolCode);
+
+    const merged = mergeChecklistItemsInMemory(
+      cf.checklistItems || [],
+      cf.labSubmissions || [],
+      cf.subject,
+      subjectShared,
+      schoolShared
+    );
+
+    const { completed } = calculateCourseProgress(merged, cf);
+    return {
+      ...cf,
+      progress: completed
+    };
+  });
+}
+
+async function syncCourseFileProgress(tx: any, courseFileId: string) {
+  const cf = await tx.courseFile.findUnique({
+    where: { id: courseFileId },
+    include: {
+      checklistItems: true,
+      labSubmissions: true,
+      subject: { include: { ...subjectInclude, sharedDocuments: true } }
+    }
+  });
+  if (!cf) return;
+  const schoolSharedDocs = await tx.schoolSharedDocument.findMany();
+  const schoolCode = normalizeSchoolCode(cf.subject?.school || cf.school);
+  const subjectShared = cf.subject?.sharedDocuments || [];
+  const schoolShared = schoolSharedDocs.filter((d: any) => d.school === schoolCode);
+
+  const merged = mergeChecklistItemsInMemory(
+    cf.checklistItems || [],
+    cf.labSubmissions || [],
+    cf.subject,
+    subjectShared,
+    schoolShared
+  );
+
+  const { completed } = calculateCourseProgress(merged, cf);
+  await tx.courseFile.update({ where: { id: courseFileId }, data: { progress: completed } });
+}
+
 export async function updateChecklistItem(courseFileId: string, itemIndex: number, updates: Partial<Omit<ChecklistItem, 'id' | 'courseFileId' | 'itemIndex'>>) {
   return prisma.$transaction(async tx => {
     const item = await tx.checklistItem.upsert({
@@ -876,9 +1004,7 @@ export async function updateChecklistItem(courseFileId: string, itemIndex: numbe
       create: { courseFileId, itemIndex, status: updates.status ?? 'EMPTY', ...updates },
       update: updates
     });
-    const items = await tx.checklistItem.findMany({ where: { courseFileId } });
-    const progress = Math.min(20, items.filter(i => i.status === 'UPLOADED').length);
-    await tx.courseFile.update({ where: { id: courseFileId }, data: { progress } });
+    await syncCourseFileProgress(tx, courseFileId);
     return item;
   }, { timeout: 20000, maxWait: 10000 });
 }
@@ -892,10 +1018,8 @@ export async function updateChecklistItemsBatch(courseFileId: string, updatesLis
         update: updates
       });
     }
-    const items = await tx.checklistItem.findMany({ where: { courseFileId } });
-    const progress = Math.min(20, items.filter(i => i.status === 'UPLOADED').length);
-    await tx.courseFile.update({ where: { id: courseFileId }, data: { progress } });
-    return items;
+    await syncCourseFileProgress(tx, courseFileId);
+    return tx.checklistItem.findMany({ where: { courseFileId } });
   }, { timeout: 20000, maxWait: 10000 });
 }
 

@@ -843,14 +843,14 @@ export default function FacultyCourseCoordinatorPage() {
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">
-            <Table hover responsive className="mb-0 align-middle">
+            <Table hover responsive className="mb-0 align-middle" style={{ tableLayout: 'auto' }}>
               <thead className="table-light text-muted small text-uppercase">
                 <tr>
-                  <th style={{ width: 80 }} className="ps-4">Item #</th>
-                  <th>Document Name &amp; Description</th>
-                  <th style={{ width: 140 }}>Category</th>
-                  <th style={{ width: 180 }}>Status</th>
-                  <th style={{ width: 220 }} className="pe-4 text-end">Actions</th>
+                  <th style={{ width: 70 }} className="ps-4">Item #</th>
+                  <th style={{ minWidth: 280 }}>Document Name &amp; Description</th>
+                  <th style={{ width: 120 }}>Category</th>
+                  <th style={{ width: 160 }}>Status</th>
+                  <th style={{ width: 200, minWidth: 180 }} className="pe-4 text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -867,7 +867,7 @@ export default function FacultyCourseCoordinatorPage() {
                   return (
                     <tr key={item.index} className={isUploaded ? 'table-success-subtle' : ''}>
                       <td className="ps-4 fw-bold font-mono-ppsu">#{item.index}</td>
-                      <td>
+                      <td style={{ maxWidth: 500, wordBreak: 'break-word' }}>
                         <div className="fw-semibold text-dark">{item.name}</div>
                         {doc?.fileName && (
                           <div className="small text-success font-mono-ppsu mt-0.5">
@@ -879,7 +879,7 @@ export default function FacultyCourseCoordinatorPage() {
 
                         {/* Render Sub-keys list if multi-part item */}
                         {item.index === 1 ? (
-                          <div className="mt-3 p-3 bg-white border rounded shadow-sm">
+                          <div className="mt-3 p-3 bg-white border rounded shadow-sm" style={{ maxWidth: '100%', overflowX: 'auto' }}>
                             {(() => {
                               const activeItem1Mode: 'text' | 'upload' = (parsedSubs?.item1Mode === 'UPLOAD' || parsedSubs?.inputMode === 'upload') ? 'upload' : 'text';
 
@@ -1237,11 +1237,11 @@ export default function FacultyCourseCoordinatorPage() {
                           </Badge>
                         )}
                       </td>
-                      <td className="pe-4 text-end">
+                      <td className="pe-4 text-end" style={{ whiteSpace: 'nowrap', minWidth: 180 }}>
                         {isUploading ? (
                           <Spinner animation="border" size="sm" variant="primary" />
                         ) : (
-                          <div className="d-flex justify-content-end gap-2">
+                          <div className="d-flex justify-content-end align-items-center gap-2 flex-wrap">
                             {doc?.fileUrl && (
                               <Button
                                 size="sm"

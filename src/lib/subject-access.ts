@@ -7,10 +7,10 @@
  * LAB_ITEM_NAMES_STRING — human-readable list for banners, derived from LAB_ITEMS.
  */
 
-export const LAB_ITEMS = [2, 4, 8, 14];
+export const LAB_ITEMS = [2, 4, 7, 8, 20];
 export const LAB_EDITABLE_ITEMS = LAB_ITEMS;
-export const LAB_VISIBLE_ITEMS  = [2, 4, 8, 9, 14, 20]; // visible but 9 and 20 are locked
-export const LAB_ITEM_NAMES_STRING = LAB_ITEMS.join(', ');
+export const LAB_VISIBLE_ITEMS  = [2, 4, 7, 8, 20];
+export const LAB_ITEM_NAMES_STRING = '2, 4, 7, 8, 20';
 
 export interface SubjectRoles {
   userId: string;
@@ -129,8 +129,7 @@ export function canUserEditItem(userId: string | undefined | null, subject: any,
     return true;
   }
   if (roles.accessLevel === 'LAB') {
-    // Lab-only user can ONLY edit lab items: 2, 4, 8, 14
-    // Items 9 (Theory CE) and 20 (Course Teacher signature) stay locked!
+    // Lab-only user can ONLY edit lab items: 2, 4, 7, 8, 20
     return LAB_ITEMS.includes(itemIndex);
   }
 

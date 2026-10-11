@@ -205,8 +205,15 @@ export default function FacultyDashboard() {
                     <h6 className="fw-bold text-navy-900 mb-1" style={{ fontSize: '1.05rem', lineHeight: 1.3 }}>
                       {course.courseTitle}
                     </h6>
-                    <div className="text-secondary small mb-2 font-mono-ppsu">
-                      {division ? `${division} · ` : ''}{course.semester} · {course.academicYear}
+                    <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                      {division && (
+                        <span className="badge bg-light text-navy-900 border fw-bold px-2 py-0.5 font-mono-ppsu" style={{ fontSize: '0.8rem' }}>
+                          Division: {division}
+                        </span>
+                      )}
+                      <span className="text-secondary small font-mono-ppsu">
+                        {course.semester} · {course.academicYear}
+                      </span>
                     </div>
 
                     {course.lastUpdated && (

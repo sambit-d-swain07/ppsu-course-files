@@ -348,26 +348,40 @@ export default function CoordinatorSharedDocumentsPage() {
   };
 
   const handleSaveSubItemText = async (itemIndex: number, subKey: string, text: string) => {
-    if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId)) return;
+    if (itemIndex === 1 ? !selectedSchool : !selectedSubjectId) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const res = await fetch(`/api/sub-fields/${itemIndex}/save-text`, {
+      const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
+      let existingSubJson: any = {};
+      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
+
+      existingSubJson[subKey] = {
+        ...(existingSubJson[subKey] || {}),
+        textContent: text,
+        updatedAt: new Date().toISOString()
+      };
+
+      const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subKey,
-          text_content: text,
-          school: selectedSchool
+          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
+          itemIndex,
+          status: 'UPLOADED',
+          fileName: existingDoc?.fileName || null,
+          fileUrl: existingDoc?.fileUrl || null,
+          subItemsJson: JSON.stringify(existingSubJson)
         })
       });
       if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.error || 'Save failed');
       }
-      const data = await res.json();
       const label = SUB_KEY_CONFIG[subKey]?.label || ITEM1_CONFIG[subKey]?.label || subKey;
       showToast(`${label} saved successfully.`);
-      setActionSuccess(`Item 1 ${label} saved for School ${selectedSchool}.`);
+      setActionSuccess(itemIndex === 1
+        ? `Item 1 ${label} saved for School ${selectedSchool}.`
+        : `Saved text for ${label}.`);
       fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message || 'Save failed');

@@ -207,12 +207,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       return noStoreJson({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const callerUser = await getUserById(payload.userId);
-    const callerName: string | null = callerUser?.name || faculty?.name || null;
     const targetSubjectId = subject?.id || courseFile.subjectId;
     const schoolCode = normalizeSchoolCode(subject?.school || courseFile.school);
-    const subjectSharedDocs = targetSubjectId ? await getSubjectSharedDocuments(targetSubjectId) : [];
-    const schoolSharedDocs = schoolCode ? await getSchoolSharedDocuments(schoolCode) : [];
+    const [callerUser, subjectSharedDocs, schoolSharedDocs] = await Promise.all([
+      getUserById(payload.userId),
+      targetSubjectId ? getSubjectSharedDocuments(targetSubjectId) : Promise.resolve([]),
+      schoolCode ? getSchoolSharedDocuments(schoolCode) : Promise.resolve([])
+    ]);
+    const callerName: string | null = callerUser?.name || faculty?.name || null;
     const mergedChecklist = mergeChecklistItemsInMemory(
       courseFile.checklistItems || [],
       courseFile.labSubmissions || [],
@@ -238,12 +240,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     let checklist: any[];
     if (labBatch) {
       const submissions = courseFile.labSubmissions || [];
-      checklist = [2, 4, 8, 9, 14, 20].map((itemIndex) => {
-        if ([4, 8, 9].includes(itemIndex)) {
+      checklist = [2, 4, 7, 8, 20].map((itemIndex) => {
+        const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
+        if ([4, 8].includes(itemIndex)) {
           const mergedItem = mergedChecklist.find((item: any) => item.itemIndex === itemIndex);
           const filteredItem = filterItemStudentsByBatch(mergedItem, labBatch);
-          const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
-          if ([8, 9].includes(itemIndex) && submission) {
+          if (itemIndex === 8 && submission) {
             const baseParsed = parseSubItems(filteredItem);
             const submissionParsed = parseSubItems(submission);
             const criteria = Array.isArray(submissionParsed.criteria) && submissionParsed.criteria.length
@@ -262,12 +264,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
               subItemsJson: JSON.stringify({ ...baseParsed, ...submissionParsed, criteria, students, batch: labBatch, filteredByBatch: true })
             };
           }
+          if (submission) {
+            return { ...filteredItem, ...submission, itemIndex, batch: labBatch };
+          }
           return { ...filteredItem, itemIndex, batch: labBatch };
         }
-        const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
+        const baseItem = mergedChecklist.find((item: any) => item.itemIndex === itemIndex);
         return submission
-          ? { ...submission, itemIndex, batch: labBatch }
-          : { itemIndex, status: 'EMPTY', batch: labBatch, subItemsJson: JSON.stringify({ batch: labBatch }) };
+          ? { ...(baseItem || {}), ...submission, itemIndex, batch: labBatch }
+          : { ...(baseItem || {}), itemIndex, status: baseItem?.status || 'EMPTY', batch: labBatch, subItemsJson: JSON.stringify({ batch: labBatch }) };
       });
     } else {
       checklist = mergedChecklist;
@@ -328,7 +333,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           const labSubmissions = courseFile.labSubmissions || [];
           const submittedBatchesMap: Record<string, boolean> = {};
           labSubmissions.forEach((sub: any) => {
-            if (sub.status === 'SUBMITTED' || sub.status === 'UPLOADED') {
+            if (sub.status === 'SUBMITTED') {
               submittedBatchesMap[sub.batch] = true;
             }
           });

@@ -65,8 +65,10 @@ export default function FacultyMyCourses() {
       ) : (
         <Row className="g-4">
           {courses.map((course) => {
-            const completed = Math.min(20, course.progress || 0);
-            const percent = Math.min(100, Math.round((completed / 20) * 100));
+            const isLabBatch = course.access?.mode === 'LAB_BATCH';
+            const total = isLabBatch ? (course.labTotal || 5) : 20;
+            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(20, course.progress || 0);
+            const percent = Math.min(100, Math.round((completed / total) * 100));
             return (
               <Col xs={12} md={6} lg={4} key={course.id}>
                 <div className="card-custom card-custom-hover h-100 d-flex flex-column m-0 justify-content-between">
@@ -81,13 +83,22 @@ export default function FacultyMyCourses() {
                     </div>
 
                     <h6 className="fw-bold text-navy-900 mb-1">{course.courseTitle}</h6>
-                    <p className="text-muted small mb-3">{course.semester} · {course.academicYear}</p>
+                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                      {course.division && (
+                        <span className="badge bg-light text-navy-900 border fw-bold px-2 py-1 font-mono-ppsu" style={{ fontSize: '0.8rem' }}>
+                          Division: {course.division}
+                        </span>
+                      )}
+                      <span className="text-muted small font-mono-ppsu">
+                        {course.semester} · {course.academicYear}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mt-3">
                     <div className="d-flex align-items-center justify-content-between mb-1 small text-secondary">
-                      <span>Checklist Completion</span>
-                      <span className="fw-bold font-mono-ppsu">{completed}/20 ({percent}%)</span>
+                      <span>{isLabBatch ? `Checklist Completion (Batch ${course.access.batch})` : 'Checklist Completion'}</span>
+                      <span className="fw-bold font-mono-ppsu">{completed}/{total} ({percent}%)</span>
                     </div>
                     <ProgressBar 
                       now={percent} 

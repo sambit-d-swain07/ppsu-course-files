@@ -39,6 +39,25 @@ export async function GET(req: NextRequest) {
       const subject = cf.subject;
       const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
       const isSubjectCoordinator = payload.role === 'FACULTY' && subject?.courseCoordinatorId === payload.userId;
+
+      let labProgress = 0;
+      if (labBatch) {
+        const subs = cf.labSubmissions || [];
+        const is2Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 2 && (s.status === 'UPLOADED' || s.fileName));
+        const item4Students = (() => {
+          const it = (cf.checklistItems || []).find((i: any) => i.itemIndex === 4);
+          try {
+            const parsed = it?.subItemsJson ? JSON.parse(it.subItemsJson) : {};
+            return (parsed.students || []).some((st: any) => String(st.batch || '').toUpperCase() === labBatch);
+          } catch { return false; }
+        })();
+        const is4Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 4 && (s.status === 'UPLOADED' || s.fileName)) || item4Students;
+        const is7Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 7 && (s.status === 'UPLOADED' || s.fileName));
+        const is8Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 8 && (s.status === 'UPLOADED' || s.fileName));
+        const is20Done = subs.some((s: any) => s.batch === labBatch && s.status === 'SUBMITTED');
+        labProgress = [is2Done, is4Done, is7Done, is8Done, is20Done].filter(Boolean).length;
+      }
+
       return {
         id: cf.id,
         courseCode: cf.courseCode,
@@ -46,6 +65,8 @@ export async function GET(req: NextRequest) {
         semester: cf.semester,
         academicYear: cf.academicYear,
         progress: cf.progress,
+        labProgress,
+        labTotal: 5,
         status: cf.status,
         facultyId: cf.facultyId,
         facultyName: cf.facultyName,
@@ -67,7 +88,7 @@ export async function GET(req: NextRequest) {
         rating: cf.rating,
         coordinatorRemarks: cf.coordinatorRemarks,
         generatedReportPath: cf.generatedReportPath,
-        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 8, 9, 14, 20] } : { mode: 'OWNER' },
+        access: isSubjectCoordinator ? { mode: 'COURSE_COORDINATOR' } : labBatch ? { mode: 'LAB_BATCH', batch: labBatch, allowedItems: [2, 4, 7, 8, 20] } : { mode: 'OWNER' },
         faculty: faculty
           ? {
               id: faculty.id,

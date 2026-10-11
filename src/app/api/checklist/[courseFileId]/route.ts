@@ -79,7 +79,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
 
     const isSubjectCoordinator = roles.isCourseCoordinator || payload.role === 'ADMIN';
     const isSharedCoordinatorItem = [1, 3, 6, 7, 10, 11, 12, 15].includes(numItem);
-    if (isSharedCoordinatorItem && !isSubjectCoordinator) {
+    const isLabTeacherItem = roles.accessLevel === 'LAB' && [2, 4, 7, 8, 20].includes(numItem);
+    if (isSharedCoordinatorItem && !isSubjectCoordinator && !isLabTeacherItem) {
       const isTeacherSubFieldOnly = [6, 11, 12, 15].includes(numItem) && Boolean(subItemsJson);
       if (!isTeacherSubFieldOnly) {
         return noStoreJson({ error: 'This item is centrally managed by the Course Coordinator.' }, { status: 403 });
@@ -98,8 +99,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     if (score !== undefined) updates.score = score;
     if (remarks !== undefined) updates.remarks = remarks;
 
-    // Student Batch Row Ownership Enforcement for Items 4, 8, 14
-    if (roles.accessLevel === 'LAB' && [4, 8, 14].includes(numItem) && subItemsJson) {
+    // Student Batch Row Ownership Enforcement for Items 4, 7, 8
+    if (roles.accessLevel === 'LAB' && [4, 7, 8].includes(numItem) && subItemsJson) {
       try {
         const parsed = JSON.parse(subItemsJson);
         if (Array.isArray(parsed.students)) {

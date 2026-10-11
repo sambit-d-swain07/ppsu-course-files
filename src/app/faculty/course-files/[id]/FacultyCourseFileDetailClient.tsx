@@ -8,6 +8,7 @@ import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 import * as XLSX from 'xlsx';
 import { parseItem4StudentList } from '@/lib/student-parser';
 import { LAB_VISIBLE_ITEMS, LAB_EDITABLE_ITEMS } from '@/lib/subject-access';
+import { isChecklistItemComplete, SHARED_COORDINATOR_ITEMS } from '@/lib/course-progress';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
@@ -28,7 +29,8 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 17, name: 'PO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 18, name: 'Action to be taken for next year based on CO attainment',              maxScore: 10, required: true  },
-  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  }
+  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  },
+  { index: 20, name: 'Course Faculty Signature & Declaration',                               maxScore: 0,  required: true  }
 ];
 
 /** Indices of checklist items that are required — derived from CHECKLIST_ITEMS to keep in sync. */
@@ -1314,71 +1316,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const isItemComplete = (itemIndex: number) => {
     const dbItem = checklist.find((c) => c.itemIndex === itemIndex);
-    if (!dbItem) return false;
-
-    if (itemIndex === 1) {
-      const subs: any = getSubItems(1) || {};
-      const mode: string = subs.item1Mode || 'TEXT';
-      const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
-      if (mode === 'UPLOAD') {
-        const hasFile = subKeys.some(k => subs[k]?.fileUrl || subs[k]?.fileName);
-        return hasFile || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
-      }
-      // TEXT mode
-      const hasText = subKeys.every(k => subs[k]?.textContent?.trim());
-      return hasText || Boolean(dbItem.coordinatorUploaded || dbItem.fileName);
-    }
-
-    if (itemIndex === 6) {
-      const subs = getSubItems(6);
-      return Boolean(subs?.outcomeLecture?.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
-    }
-
-    // Coordinator-owned items and Admin-owned Item 5:
-    // Faculty is not responsible for uploading these items;
-    // they do not block the faculty's completion count or submission gate.
-    if (dbItem.isCoordinatorShared || itemIndex === 5) {
-      return true;
-    }
-
-    if (itemIndex === 4) {
-      const subs = getSubItems(4);
-      return Boolean(subs?.students?.length || dbItem.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
-    }
-    if (itemIndex === 8) {
-      const subs = getSubItems(8);
-      const hasAnyBatchData = Boolean(
-        subs?.batches?.some((b: any) => b.fileName || b.fileUrl || (b.students?.length && b.practicalCols?.length)) ||
-        (subs?.students?.length && subs?.criteria?.length) ||
-        dbItem.fileName ||
-        dbItem.status === 'UPLOADED' ||
-        dbItem.status === 'SUBMITTED'
-      );
-      return hasAnyBatchData;
-    }
-    if (itemIndex === 9) {
-      const subs = getSubItems(9);
-      return Boolean(subs?.students?.length && subs?.criteria?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
-    }
-    if (itemIndex === 11 || itemIndex === 12) {
-      const subs = getSubItems(itemIndex);
-      const hasSampleAnswer = Boolean(subs?.sampleAnswerSheet?.fileName);
-      const hasMarks = Boolean(getSubItems(9)?.students?.length || subs?.file?.fileName || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
-      return hasSampleAnswer || hasMarks || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
-    }
-    if (itemIndex === 13) {
-      const subs = getSubItems(13);
-      return Boolean(subs?.assignmentTopics?.length && (subs?.sampleAssignment?.fileName || subs?.marks?.length || subs?.marksFile?.fileName)) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED';
-    }
-    if (itemIndex === 15) {
-      const subs = getSubItems(15);
-      return Boolean((subs?.gradeSheet?.fileName || subs?.students?.length) || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED');
-    }
-    if (itemIndex === 19) {
-      const subs = getSubItems(19);
-      return Boolean(subs?.documents?.length || dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || dbItem.fileName);
-    }
-    return dbItem.status === 'UPLOADED' || dbItem.status === 'SUBMITTED' || Boolean(dbItem.fileName);
+    return isChecklistItemComplete(dbItem, courseFile);
   };
 
   const getStudentList = useCallback(() => {
@@ -2857,7 +2795,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleSubmit = async () => {
-    const missingRequired = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
+    const missingRequired = REQUIRED_ITEM_INDICES.filter((idx) => {
+      if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5 || idx === 20) return false;
+      return !isItemComplete(idx);
+    });
     const incompleteBatches = getIncompleteItem8Batches();
 
     if (missingRequired.length > 0 || incompleteBatches.length > 0) {
@@ -3137,7 +3078,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           <div className="mt-4">
             <div className="d-flex justify-content-between small text-secondary mb-1">
               <span>Overall Completion Progress</span>
-              <span className="fw-bold font-mono-ppsu">{completedCount}/20 Completed ({percent}%)</span>
+              <span className="fw-bold font-mono-ppsu">{completedCount}/{checklistTotal} Completed ({percent}%)</span>
             </div>
             <ProgressBar now={percent} className="progress-custom" style={{ height: 8 }} />
           </div>
@@ -4806,25 +4747,9 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   )}
 
-                  {/* Item 10: Centrally Managed Course Coordinator Lab Manuals / Tutorials */}
-                  {item.index === 10 && !isRestricted && (
-                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                      {(dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) && (
-                        <Button
-                          variant="outline-info"
-                          size="sm"
-                          style={{ fontSize: 12 }}
-                          onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || dbItem.sharedFileName || 'Lab_Manual.pdf', fileUrl: dbItem.fileUrl || dbItem.sharedFileUrl })}
-                        >
-                          👁️ View
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 10 && item.index !== 14 && item.index !== 18 && item.index !== 19 && (
-                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 14 && item.index !== 18 && item.index !== 19 && item.index !== 20 && (
+                    <div className="d-flex align-items-center gap-2 flex-wrap flex-shrink-0 ms-auto">
                       {dbItem.isCoordinatorShared ? (
                         (dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) ? (
                           <Button
@@ -6142,6 +6067,45 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   );
                 })()}
+
+                {/* Item 20: Course Faculty Signature & Declaration */}
+                {item.index === 20 && !isRestricted && (
+                  <div className="mt-3 ps-4 border-start border-2 border-success ms-2">
+                    <div className="p-3 bg-light rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                      <div>
+                        <div className="fw-bold small text-navy-900">
+                          {isLabTeacher ? `Batch ${access.batch} Lab Faculty Signature & Submission` : 'Course Faculty Signature & Declaration'}
+                        </div>
+                        <div className="small text-secondary mt-1">
+                          {isLabTeacher ? (
+                            isBatchSubmitted ? (
+                              <span className="text-success fw-bold font-mono-ppsu">
+                                ✓ Confirmed &amp; Submitted to Course Teacher for Batch {access.batch}
+                              </span>
+                            ) : (
+                              <span className="text-muted">
+                                ⏳ Pending confirmation &amp; submission via the Lab Teacher Submission Gate below.
+                              </span>
+                            )
+                          ) : (
+                            (courseFile?.facultyConfirmed || courseFile?.facultySignedAt || courseFile?.facultySignatureUrl) ? (
+                              <span className="text-success fw-bold font-mono-ppsu">
+                                ✓ Confirmed &amp; Signed by Course Faculty ({courseFile.facultySignatureName || courseFile.facultyName || 'Faculty'})
+                              </span>
+                            ) : (
+                              <span className="text-muted">
+                                ⏳ Pending final confirmation &amp; submission via the Faculty Declaration gate below.
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </div>
+                      {(courseFile?.facultyConfirmed || isBatchSubmitted) && (
+                        <Badge bg="success" className="px-3 py-2">✓ Verified &amp; Signed</Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -6176,7 +6140,10 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           item18Doc?.fileName
         );
         const isCoordinatorReady = item1Done && item18Done;
-        const missingRequiredItems = REQUIRED_ITEM_INDICES.filter((idx) => !isItemComplete(idx));
+        const missingRequiredItems = REQUIRED_ITEM_INDICES.filter((idx) => {
+          if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5 || idx === 20) return false;
+          return !isItemComplete(idx);
+        });
         // Faculty items being complete is sufficient to enable the Submit button.
         // The API will validate coordinator shared docs server-side and return a clear error.
         const isAllReady = missingRequiredItems.length === 0;
@@ -6270,7 +6237,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             {isBatchSubmitted ? (
               <div className="p-3 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div className="small text-secondary">
-                  All assigned lab items (Items 2, 8, 9, 14, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
+                  All assigned lab items (Items 2, 4, 7, 8, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
                 </div>
                 <Button variant="success" disabled size="sm" className="fw-bold px-3 py-2">
                   ✓ Submitted
