@@ -7,10 +7,10 @@
  * LAB_ITEM_NAMES_STRING — human-readable list for banners, derived from LAB_ITEMS.
  */
 
-export const LAB_ITEMS = [2, 4, 7, 8, 20];
+export const LAB_ITEMS = [2, 4, 7, 8, 19, 20];
 export const LAB_EDITABLE_ITEMS = LAB_ITEMS;
-export const LAB_VISIBLE_ITEMS  = [2, 4, 7, 8, 20];
-export const LAB_ITEM_NAMES_STRING = '2, 4, 7, 8, 20';
+export const LAB_VISIBLE_ITEMS  = [2, 4, 7, 8, 19, 20];
+export const LAB_ITEM_NAMES_STRING = '2, 4, 7, 8, 19, 20';
 
 export interface SubjectRoles {
   userId: string;

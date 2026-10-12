@@ -319,6 +319,25 @@ export default function FacultyCourseCoordinatorPage() {
     return Array.from(map.values());
   })();
 
+  // Distinct course options deduplicated by (subjectCode, semester, academicYear)
+  const distinctSubjects = (() => {
+    const seen = new Set<string>();
+    const list: any[] = [];
+    for (const s of subjects) {
+      const key = `${s.subjectCode}_${s.semester}_${s.academicYear}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(s);
+      }
+    }
+    return list;
+  })();
+
+  const activeDistinctSubject = distinctSubjects.find((ds) => {
+    const active = subjects.find((s) => s.id === selectedSubjectId);
+    return active && ds.subjectCode === active.subjectCode && ds.semester === active.semester && ds.academicYear === active.academicYear;
+  }) || distinctSubjects[0];
+
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
@@ -877,13 +896,13 @@ export default function FacultyCourseCoordinatorPage() {
             <span className="fw-bold text-dark small text-uppercase" style={{ letterSpacing: 0.5 }}>Select Subject:</span>
             <Form.Select
               size="sm"
-              style={{ width: 320, fontWeight: 600 }}
-              value={selectedSubjectId}
+              style={{ width: 380, maxWidth: '100%', fontWeight: 600 }}
+              value={activeDistinctSubject?.id || selectedSubjectId}
               onChange={(e) => setSelectedSubjectId(e.target.value)}
             >
-              {subjects.map((s) => (
+              {distinctSubjects.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.subjectCode} — {s.subjectName} ({s.semester} | Div {s.division || 'All'})
+                  {s.subjectCode} — {s.subjectName} ({s.semester})
                 </option>
               ))}
             </Form.Select>

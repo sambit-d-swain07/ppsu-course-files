@@ -6237,7 +6237,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             {isBatchSubmitted ? (
               <div className="p-3 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div className="small text-secondary">
-                  All assigned lab items (Items 2, 4, 7, 8, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
+                  All assigned lab items (Items 2, 4, 7, 8, 19, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
                 </div>
                 <Button variant="success" disabled size="sm" className="fw-bold px-3 py-2">
                   ✓ Submitted
