@@ -66,7 +66,7 @@ export default function FacultyMyCourses() {
         <Row className="g-4">
           {courses.map((course) => {
             const isLabBatch = course.access?.mode === 'LAB_BATCH';
-            const total = isLabBatch ? (course.labTotal || 5) : 20;
+            const total = isLabBatch ? (course.labTotal || 6) : 20;
             const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(20, course.progress || 0);
             const percent = Math.min(100, Math.round((completed / total) * 100));
             return (

@@ -971,11 +971,31 @@ export async function getChecklistItemsByCourseFileId(courseFileId: string) {
 
 export async function attachCourseFileProgress(courseFiles: any[]) {
   if (!courseFiles || courseFiles.length === 0) return courseFiles;
+
+  // Fetch school shared docs once (no N+1)
   const schoolSharedDocs = await prisma.schoolSharedDocument.findMany();
 
+  // Collect unique subjectIds so we can resolve sibling-aware shared docs in parallel
+  const uniqueSubjectIds = [...new Set(
+    courseFiles.map((cf: any) => cf.subjectId || cf.subject?.id).filter(Boolean)
+  )] as string[];
+
+  // Fetch sibling-aware shared docs for every subject in one parallel round-trip.
+  // getSubjectSharedDocuments already deduplicates across sibling divisions, matching
+  // the same logic used by GET /api/course-files/[id] — this is the single source of truth.
+  const sharedDocsBySubjectId = new Map<string, any[]>();
+  await Promise.all(
+    uniqueSubjectIds.map(async (subjectId) => {
+      const docs = await getSubjectSharedDocuments(subjectId);
+      sharedDocsBySubjectId.set(subjectId, docs);
+    })
+  );
+
   return courseFiles.map((cf: any) => {
+    const subjectId = cf.subjectId || cf.subject?.id;
     const schoolCode = normalizeSchoolCode(cf.subject?.school || cf.school);
-    const subjectShared = cf.subject?.sharedDocuments || [];
+    // Use sibling-aware shared docs (same as single-file detail API path)
+    const subjectShared = subjectId ? (sharedDocsBySubjectId.get(subjectId) || []) : [];
     const schoolShared = schoolSharedDocs.filter((d: any) => d.school === schoolCode);
 
     const merged = mergeChecklistItemsInMemory(

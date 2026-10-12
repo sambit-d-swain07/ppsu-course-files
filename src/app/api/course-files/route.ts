@@ -54,8 +54,9 @@ export async function GET(req: NextRequest) {
         const is4Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 4 && (s.status === 'UPLOADED' || s.fileName)) || item4Students;
         const is7Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 7 && (s.status === 'UPLOADED' || s.fileName));
         const is8Done = subs.some((s: any) => s.batch === labBatch && s.itemIndex === 8 && (s.status === 'UPLOADED' || s.fileName));
+        const is19Done = (() => { const it = (cf.checklistItems || []).find((i: any) => i.itemIndex === 19); if (!it) return false; try { const p = it.subItemsJson ? JSON.parse(it.subItemsJson) : {}; return Array.isArray(p.documents) && p.documents.length > 0; } catch { return false; } })() || Boolean((cf.checklistItems || []).find((i: any) => i.itemIndex === 19)?.fileName);
         const is20Done = subs.some((s: any) => s.batch === labBatch && s.status === 'SUBMITTED');
-        labProgress = [is2Done, is4Done, is7Done, is8Done, is20Done].filter(Boolean).length;
+        labProgress = [is2Done, is4Done, is7Done, is8Done, is19Done, is20Done].filter(Boolean).length;
       }
 
       return {
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
         academicYear: cf.academicYear,
         progress: cf.progress,
         labProgress,
-        labTotal: 5,
+        labTotal: 6,
         status: cf.status,
         facultyId: cf.facultyId,
         facultyName: cf.facultyName,
