@@ -249,6 +249,76 @@ export default function FacultyCourseCoordinatorPage() {
       .map((d: any) => [d.itemIndex, d])
   );
 
+  // Group coordinator subjects by distinct courseCode to display pending centrally-managed uploads
+  const courseCodeGroups = (() => {
+    const map = new Map<string, {
+      subjectCode: string;
+      subjectName: string;
+      semester: string;
+      school: string;
+      divisions: string[];
+      firstSubjectId: string;
+      pendingItems: any[];
+      uploadedCount: number;
+    }>();
+
+    subjects.forEach((s) => {
+      if (!map.has(s.subjectCode)) {
+        map.set(s.subjectCode, {
+          subjectCode: s.subjectCode,
+          subjectName: s.subjectName,
+          semester: s.semester,
+          school: s.school || 'SOE',
+          divisions: [s.division].filter(Boolean),
+          firstSubjectId: s.id,
+          pendingItems: [],
+          uploadedCount: 0
+        });
+      } else {
+        const entry = map.get(s.subjectCode)!;
+        if (s.division && !entry.divisions.includes(s.division)) {
+          entry.divisions.push(s.division);
+        }
+      }
+    });
+
+    map.forEach((entry) => {
+      const codeSubjects = subjects.filter((s) => s.subjectCode === entry.subjectCode);
+      const allDocs = codeSubjects.flatMap((s) => s.sharedDocuments || []);
+      const docsMap = new Map<number, any>(allDocs.map((d: any) => [d.itemIndex, d]));
+      const schoolDocsMap = new Map<number, any>(
+        schoolSharedDocs
+          .filter((d: any) => d.school === (entry.school || 'SOE'))
+          .map((d: any) => [d.itemIndex, d])
+      );
+
+      SHARED_ITEMS.forEach((item) => {
+        const doc = (item.index === 1 || item.index === 18)
+          ? (schoolDocsMap.get(item.index) || docsMap.get(item.index))
+          : docsMap.get(item.index);
+        let parsed: any = {};
+        if (doc?.subItemsJson) {
+          try { parsed = JSON.parse(doc.subItemsJson); } catch (e) {}
+        }
+        const isUploaded = Boolean(
+          doc && (
+            doc.status === 'UPLOADED' ||
+            doc.fileName ||
+            (doc.subItemsJson && Object.values(parsed).some((v: any) => v && (v.fileName || v.textContent?.trim())))
+          )
+        );
+
+        if (isUploaded) {
+          entry.uploadedCount++;
+        } else {
+          entry.pendingItems.push(item);
+        }
+      });
+    });
+
+    return Array.from(map.values());
+  })();
+
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
@@ -829,16 +899,100 @@ export default function FacultyCourseCoordinatorPage() {
 
       {/* TAB 1: Shared Documents */}
       {activeTab === 'shared' && (
+        <>
+          {/* Centrally-Managed Documents Status Grouped by Distinct Course Code */}
+          <Card className="shadow-sm border-0 mb-4">
+            <Card.Header className="bg-light py-3 border-bottom d-flex justify-content-between align-items-center">
+              <div>
+                <h6 className="fw-bold text-navy-900 mb-0">Central Documents Status by Course Code</h6>
+                <small className="text-muted">Documents uploaded for a Course Code automatically apply to all its Divisions/Sections.</small>
+              </div>
+              <Badge bg="secondary" className="px-2.5 py-1">
+                {courseCodeGroups.length} Distinct Course{courseCodeGroups.length === 1 ? '' : 's'}
+              </Badge>
+            </Card.Header>
+            <Card.Body className="p-3">
+              <div className="d-flex flex-column gap-3">
+                {courseCodeGroups.map((grp) => {
+                  const isCurrent = activeSubject?.subjectCode === grp.subjectCode;
+                  const allDone = grp.pendingItems.length === 0;
+
+                  return (
+                    <div
+                      key={grp.subjectCode}
+                      className={`p-3 rounded-3 border ${isCurrent ? 'border-primary bg-primary-subtle' : 'bg-white'}`}
+                      style={{ borderLeftWidth: '5px' }}
+                    >
+                      <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div>
+                          <span className="fw-bold font-mono-ppsu text-navy-900 me-2" style={{ fontSize: '1rem' }}>
+                            {grp.subjectCode}
+                          </span>
+                          <span className="fw-semibold text-dark">{grp.subjectName}</span>
+                          <div className="small text-muted mt-0.5 font-mono-ppsu">
+                            {grp.semester} · Divisions: {grp.divisions.length > 0 ? grp.divisions.join(', ') : 'All'}
+                          </div>
+                        </div>
+                        <div className="d-flex align-items-center gap-2">
+                          {allDone ? (
+                            <Badge bg="success" className="px-2.5 py-1.5 fw-semibold">
+                              ✓ All 9 Central Documents Uploaded (Common for All Divisions)
+                            </Badge>
+                          ) : (
+                            <Badge bg="warning" text="dark" className="px-2.5 py-1.5 fw-semibold">
+                              ⏳ {grp.pendingItems.length} Pending Central Upload{grp.pendingItems.length === 1 ? '' : 's'}
+                            </Badge>
+                          )}
+                          {!isCurrent && (
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                              onClick={() => setSelectedSubjectId(grp.firstSubjectId)}
+                            >
+                              Manage Documents ↗
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {!allDone && (
+                        <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2 pt-2 border-top">
+                          <small className="text-secondary fw-semibold me-1">Missing for {grp.subjectCode}:</small>
+                          {grp.pendingItems.map((p: any) => (
+                            <Badge key={p.index} bg="light" text="dark" className="border fw-normal small px-2 py-1">
+                              #{p.index} {p.name.replace(/^Item \d+ — /, '')}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card.Body>
+          </Card>
+
         <Card className="shadow-sm border-0 mb-4">
           <Card.Header className="bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <div>
-              <h5 className="fw-bold text-navy-900 mb-0">Central Shared Documents</h5>
-              <small className="text-muted">Uploaded files appear read-only / locked in every faculty member's checklist for this subject.</small>
+              <h5 className="fw-bold text-navy-900 mb-0">Central Shared Documents — {activeSubject?.subjectCode} ({activeSubject?.subjectName})</h5>
+              <small className="text-muted">Uploaded files appear read-only / locked in every faculty member's checklist for this subject across all divisions.</small>
             </div>
             <Badge bg="info" className="px-3 py-2 text-dark">
               {SHARED_ITEMS.filter((item) => {
-                  const doc = sharedMap.get(item.index);
-                  return doc && doc.status === 'UPLOADED';
+                  const doc = (item.index === 1 || item.index === 18)
+                    ? (schoolSharedMap.get(item.index) || sharedMap.get(item.index))
+                    : sharedMap.get(item.index);
+                  let parsed: any = {};
+                  if (doc?.subItemsJson) {
+                    try { parsed = JSON.parse(doc.subItemsJson); } catch (e) {}
+                  }
+                  return doc && (
+                    doc.status === 'UPLOADED' ||
+                    doc.fileName ||
+                    (doc.subItemsJson && Object.values(parsed).some((v: any) => v && (v.fileName || v.textContent?.trim())))
+                  );
                 }).length} / {SHARED_ITEMS.length} Uploaded
             </Badge>
           </Card.Header>
@@ -855,14 +1009,23 @@ export default function FacultyCourseCoordinatorPage() {
               </thead>
               <tbody>
                 {SHARED_ITEMS.map((item) => {
-                  const doc = sharedMap.get(item.index);
-                  const isUploaded = doc && doc.status === 'UPLOADED';
+                  const doc = (item.index === 1 || item.index === 18)
+                    ? (schoolSharedMap.get(item.index) || sharedMap.get(item.index))
+                    : sharedMap.get(item.index);
                   const isUploading = uploadingItem === item.index;
 
                   let parsedSubs: any = {};
                   if (doc?.subItemsJson) {
                     try { parsedSubs = JSON.parse(doc.subItemsJson); } catch (e) {}
                   }
+
+                  const isUploaded = Boolean(
+                    doc && (
+                      doc.status === 'UPLOADED' ||
+                      doc.fileName ||
+                      (doc.subItemsJson && Object.values(parsedSubs).some((v: any) => v && (v.fileName || v.textContent?.trim())))
+                    )
+                  );
 
                   return (
                     <tr key={item.index} className={isUploaded ? 'table-success-subtle' : ''}>
@@ -1288,6 +1451,7 @@ export default function FacultyCourseCoordinatorPage() {
             </Table>
           </Card.Body>
         </Card>
+        </>
       )}
 
       {/* TAB 2: Assigned Faculty & Document Access */}

@@ -460,6 +460,51 @@ export default function CoordinatorSharedDocumentsPage() {
     return Math.round((uploadedCount / SHARED_ITEMS.length) * 100);
   };
 
+  const groupedSubjects = (() => {
+    const map = new Map<string, {
+      subjectCode: string;
+      subjectName: string;
+      semester: string;
+      academicYear: string;
+      school: string;
+      department: string;
+      divisions: string[];
+      ids: string[];
+      sharedDocuments: any[];
+    }>();
+
+    subjects.forEach((s) => {
+      if (!map.has(s.subjectCode)) {
+        map.set(s.subjectCode, {
+          subjectCode: s.subjectCode,
+          subjectName: s.subjectName,
+          semester: s.semester,
+          academicYear: s.academicYear,
+          school: s.school,
+          department: s.department,
+          divisions: [s.division].filter(Boolean),
+          ids: [s.id],
+          sharedDocuments: [...(s.sharedDocuments || [])]
+        });
+      } else {
+        const existing = map.get(s.subjectCode)!;
+        if (s.division && !existing.divisions.includes(s.division)) {
+          existing.divisions.push(s.division);
+        }
+        if (!existing.ids.includes(s.id)) {
+          existing.ids.push(s.id);
+        }
+        (s.sharedDocuments || []).forEach((d: any) => {
+          if (!existing.sharedDocuments.some((ex: any) => ex.itemIndex === d.itemIndex)) {
+            existing.sharedDocuments.push(d);
+          }
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  })();
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center py-5">
@@ -506,18 +551,18 @@ export default function CoordinatorSharedDocumentsPage() {
           <Col xs={12} lg={4}>
             <Card className="shadow-sm border-0 rounded-3 mb-4">
               <Card.Header className="bg-white fw-bold py-3 border-bottom text-navy-900 d-flex justify-content-between align-items-center">
-                <span>Select Subject</span>
-                <Badge bg="secondary" pill>{subjects.length} Assigned</Badge>
+                <span>Select Course Code</span>
+                <Badge bg="secondary" pill>{groupedSubjects.length} Course{groupedSubjects.length === 1 ? '' : 's'}</Badge>
               </Card.Header>
               <Card.Body className="p-2">
                 <div className="d-flex flex-column gap-2">
-                  {subjects.map((sub) => {
-                    const isSelected = sub.id === selectedSubjectId;
+                  {groupedSubjects.map((sub) => {
+                    const isSelected = sub.ids.includes(selectedSubjectId);
                     const percent = calculateSubjectProgress(sub);
                     return (
                       <button
-                        key={sub.id}
-                        onClick={() => setSelectedSubjectId(sub.id)}
+                        key={sub.subjectCode}
+                        onClick={() => setSelectedSubjectId(sub.ids[0])}
                         className={`btn text-start p-3 rounded-3 transition-all border-0 ${
                           isSelected ? 'bg-primary text-white shadow-sm' : 'bg-light text-dark hover-bg-gray'
                         }`}
@@ -536,7 +581,7 @@ export default function CoordinatorSharedDocumentsPage() {
                         </div>
                         <div className="fw-semibold small text-truncate mb-1">{sub.subjectName}</div>
                         <div className="small opacity-75" style={{ fontSize: '0.75rem' }}>
-                          {sub.division ? `${sub.division} · ` : ''}{sub.semester} · {sub.academicYear}
+                          {sub.divisions.length > 0 ? `Div ${sub.divisions.join(', ')} · ` : ''}{sub.semester} · {sub.academicYear}
                         </div>
                         <ProgressBar
                           now={percent}

@@ -184,8 +184,10 @@ export default function FacultyDashboard() {
       ) : (
         <Row className="g-3">
           {courses.map((course) => {
-            const completed = Math.min(20, course.progress || 0);
-            const percent = Math.min(100, Math.round((completed / 20) * 100));
+            const isLabBatch = course.access?.mode === 'LAB_BATCH';
+            const total = isLabBatch ? (course.labTotal || 5) : 20;
+            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(20, course.progress || 0);
+            const percent = Math.min(100, Math.round((completed / total) * 100));
             const division = course.division || course.subject?.division;
 
             return (
@@ -231,8 +233,8 @@ export default function FacultyDashboard() {
 
                   <div className="mt-3 pt-3 border-top">
                     <div className="d-flex align-items-center justify-content-between mb-1.5 small text-secondary">
-                      <span className="fw-semibold">Checklist Progress</span>
-                      <span className="fw-bold font-mono-ppsu text-navy-900">{completed}/20 ({percent}%)</span>
+                      <span className="fw-semibold">{isLabBatch ? `Checklist Progress (Batch ${course.access.batch})` : 'Checklist Progress'}</span>
+                      <span className="fw-bold font-mono-ppsu text-navy-900">{completed}/{total} ({percent}%)</span>
                     </div>
                     <ProgressBar
                       now={percent}

@@ -525,13 +525,37 @@ export async function upsertSubjectSharedDocument(
 }
 
 export async function getSubjectsByCoordinatorId(coordinatorId: string) {
-  return prisma.subject.findMany({
+  const list = await prisma.subject.findMany({
     where: { courseCoordinatorId: coordinatorId },
     include: {
       ...subjectInclude,
       sharedDocuments: { orderBy: { itemIndex: 'asc' } }
     },
     orderBy: { createdAt: 'desc' }
+  });
+
+  // Group by (subjectCode, academicYear, semester) so shared docs uploaded once appear across all divisions
+  const sharedDocsByGroup = new Map<string, Map<number, any>>();
+  for (const s of list) {
+    const key = `${s.subjectCode}_${s.academicYear}_${s.semester}`;
+    if (!sharedDocsByGroup.has(key)) sharedDocsByGroup.set(key, new Map());
+    const groupMap = sharedDocsByGroup.get(key)!;
+    for (const doc of s.sharedDocuments || []) {
+      if (!groupMap.has(doc.itemIndex) || doc.status === 'UPLOADED') {
+        groupMap.set(doc.itemIndex, doc);
+      }
+    }
+  }
+
+  return list.map((s) => {
+    const key = `${s.subjectCode}_${s.academicYear}_${s.semester}`;
+    const groupMap = sharedDocsByGroup.get(key);
+    if (!groupMap) return s;
+    const mergedDocs = Array.from(groupMap.values()).sort((a, b) => a.itemIndex - b.itemIndex);
+    return {
+      ...s,
+      sharedDocuments: mergedDocs
+    };
   });
 }
 
