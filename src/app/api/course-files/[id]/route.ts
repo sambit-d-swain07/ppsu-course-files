@@ -20,7 +20,7 @@ import {
 } from '@/lib/mock-data';
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
-import { getSubjectRoles, getBatchOwnerInfo, getLockBannerText, LAB_ITEMS } from '@/lib/subject-access';
+import { getSubjectRoles, getBatchOwnerInfo, getLockBannerText, LAB_ITEMS, LAB_VISIBLE_ITEMS } from '@/lib/subject-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -240,7 +240,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     let checklist: any[];
     if (labBatch) {
       const submissions = courseFile.labSubmissions || [];
-      checklist = [2, 4, 7, 8, 20].map((itemIndex) => {
+      checklist = LAB_VISIBLE_ITEMS.map((itemIndex) => {
         const submission = submissions.find((s: any) => s.batch === labBatch && s.itemIndex === itemIndex);
         if ([4, 8].includes(itemIndex)) {
           const mergedItem = mergedChecklist.find((item: any) => item.itemIndex === itemIndex);

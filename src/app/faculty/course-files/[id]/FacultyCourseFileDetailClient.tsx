@@ -6261,7 +6261,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 </div>
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
                   <div className="small text-secondary">
-                    <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/5</span> assigned lab items completed.
+                    <span className="fw-bold text-dark font-mono-ppsu">{completedCount}/{checklistTotal}</span> assigned lab items completed.
                   </div>
                   <Button
                     id="btn-submit-lab-batch-bottom"
