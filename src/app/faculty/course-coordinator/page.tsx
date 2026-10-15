@@ -6,7 +6,7 @@ import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, Table, Nav,
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const SHARED_ITEMS = [
-  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] },
+  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional' },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
@@ -18,72 +18,12 @@ const SHARED_ITEMS = [
 ];
 
 const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
-  vision: { label: 'Institute Vision', required: true },
-  mission: { label: 'Institute Mission', required: true },
-  deptVision: { label: 'Department Vision', required: true },
-  deptMission: { label: 'Department Mission', required: true },
-
-  peo: { label: 'PEO', required: true },
-  pso: { label: 'PSO', required: true },
-  po: { label: 'PO', required: true },
   lessonPlanLecture: { label: '(a) Lesson Plan — Lecture', required: true },
   lessonPlanLab: { label: '(b) Lesson Plan — Lab', required: false },
   lessonPlanTutorial: { label: '(c) Lesson Plan — Tutorial', required: false },
   timetable: { label: 'Timetable', required: true },
   questionPaper: { label: 'Question Paper', required: true },
   sampleAnswerSheet: { label: 'Sample Answer Sheet', required: true },
-};
-
-const ITEM1_CONFIG: Record<string, { label: string; col1Header: string; col2Header: string; prefix: string; placeholder: string }> = {
-  vision: {
-    label: 'Institute Vision',
-    col1Header: 'Sr. No.',
-    col2Header: 'INSTITUTE VISION',
-    prefix: '',
-    placeholder: 'Enter Institute Vision statement...'
-  },
-  mission: {
-    label: 'Institute Mission',
-    col1Header: 'Sr. No.',
-    col2Header: 'INSTITUTE MISSION',
-    prefix: '',
-    placeholder: 'Enter Institute Mission statement...'
-  },
-  deptVision: {
-    label: 'Department Vision',
-    col1Header: 'Sr. No.',
-    col2Header: 'DEPARTMENT VISION',
-    prefix: '',
-    placeholder: 'Enter Department Vision statement...'
-  },
-  deptMission: {
-    label: 'Department Mission',
-    col1Header: 'Sr. No.',
-    col2Header: 'DEPARTMENT MISSION',
-    prefix: '',
-    placeholder: 'Enter Department Mission statement...'
-  },
-  peo: {
-    label: 'Programme Educational Objectives (PEO)',
-    col1Header: 'PEO No',
-    col2Header: 'PROGRAMME EDUCATIONAL OBJECTIVES',
-    prefix: 'PEO ',
-    placeholder: 'Enter PEO objective details...'
-  },
-  pso: {
-    label: 'Programme Specific Outcomes (PSO)',
-    col1Header: 'PSO No',
-    col2Header: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
-    prefix: 'PSO ',
-    placeholder: 'Enter PSO outcome details...'
-  },
-  po: {
-    label: 'Programme Outcomes (PO)',
-    col1Header: 'PO No',
-    col2Header: 'PROGRAMME OUTCOMES',
-    prefix: 'PO ',
-    placeholder: 'Enter PO outcome details...'
-  }
 };
 
 const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -181,16 +121,7 @@ export default function FacultyCourseCoordinatorPage() {
   const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('shared');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Item 1 Text Entry & Custom Section State
-  const [item1TextDrafts, setItem1TextDrafts] = useState<Record<string, string>>({});
-  const [item1RowDrafts, setItem1RowDrafts] = useState<Record<string, string[]>>({});
-  const [item1RowsState, setItem1RowsState] = useState<Record<string, string[]>>({});
-  const [switchModal, setSwitchModal] = useState<{ open: boolean; targetMode: 'text' | 'upload' } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showAddCustomModal, setShowAddCustomModal] = useState(false);
-  const [newCustomTitle, setNewCustomTitle] = useState('');
-  const [newCustomText, setNewCustomText] = useState('');
-  const [newCustomFile, setNewCustomFile] = useState<File | null>(null);
 
   const fetchData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -207,18 +138,6 @@ export default function FacultyCourseCoordinatorPage() {
       setSubjects(list);
       const schoolDocs = Array.isArray(subjData.schoolSharedDocuments) ? subjData.schoolSharedDocuments : [];
       setSchoolSharedDocs(schoolDocs);
-
-      const doc1 = schoolDocs.find((d: any) => d.itemIndex === 1);
-      if (doc1?.subItemsJson) {
-        try {
-          const p = JSON.parse(doc1.subItemsJson);
-          const drafts: Record<string, string> = {};
-          ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'].forEach((key) => {
-            if (p[key]?.textContent) drafts[key] = p[key].textContent;
-          });
-          setItem1TextDrafts(drafts);
-        } catch (e) {}
-      }
 
       if (list.length > 0 && !selectedSubjectId) {
         setSelectedSubjectId(list[0].id);
@@ -512,318 +431,7 @@ export default function FacultyCourseCoordinatorPage() {
     }
   };
 
-  const handleSaveTextSubItem = async (itemIndex: number, subKey: string, textValue: string) => {
-    if (!selectedSubjectId) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = sharedMap.get(itemIndex);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
-      existingSubJson[subKey] = {
-        ...(existingSubJson[subKey] || {}),
-        textContent: textValue.trim(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || 'Text Statements Entry',
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Saving text failed');
-      }
-      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
-      setActionSuccess(`Saved text for ${label}.`);
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message);
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const parseTextToRows = (text?: string): string[] => {
-    if (!text || !text.trim()) return [''];
-    const clean = text.replace(/<[^>]*>/g, '');
-    const lines = clean
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return [''];
-    return lines.map((l) =>
-      l
-        .replace(/^(PEO|PSO|PO|\d+)\s*[\d\.\:\-]*\s*/i, '')
-        .replace(/^[•\-\*]\s*/, '')
-        .trim()
-    );
-  };
-
-  const getRowsForSubKey = (subKey: string, subDoc?: any): string[] => {
-    if (item1RowsState[subKey] !== undefined) {
-      return item1RowsState[subKey];
-    }
-    return parseTextToRows(subDoc?.textContent);
-  };
-
-  const updateRowText = (subKey: string, idx: number, val: string, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current[idx] = val;
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-  };
-
-  const addRow = (subKey: string, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current.push('');
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-  };
-
-  const removeRow = (subKey: string, idx: number, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current.splice(idx, 1);
-    if (current.length === 0) current.push('');
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
-    handleSaveTextSubItem(1, subKey, combined);
-  };
-
-  const handleSaveSection = (subKey: string, subDoc?: any) => {
-    const current = getRowsForSubKey(subKey, subDoc);
-    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
-    handleSaveTextSubItem(1, subKey, combined);
-  };
-
-  const handleSaveCustomSectionText = async (secId: string, text: string) => {
-    if (!selectedSubjectId) return;
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = sharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      if (Array.isArray(existingSubJson.customSections)) {
-        const target = existingSubJson.customSections.find((s: any) => s.id === secId);
-        if (target) {
-          target.textContent = text.trim();
-          target.updatedAt = new Date().toISOString();
-        }
-      }
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex: 1,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || 'Custom Sections',
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) throw new Error('Saving text failed');
-      setActionSuccess('Saved custom section text.');
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message);
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const handleToggleItem1Mode = async (targetMode: 'text' | 'upload') => {
-    if (!selectedSubjectId) return;
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = sharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      existingSubJson.item1Mode = targetMode === 'text' ? 'TEXT' : 'UPLOAD';
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex: 1,
-          status: existingDoc?.status || 'UPLOADED',
-          fileName: existingDoc?.fileName || null,
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to switch mode');
-      }
-      setActionSuccess(`Switched Item 1 mode to ${targetMode === 'text' ? 'Enter Text Mode' : 'Upload PDF Mode'}. Content in both modes is preserved.`);
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message || 'Mode switch failed');
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const onModeBtnClick = (targetMode: 'text' | 'upload', activeItem1Mode: 'text' | 'upload') => {
-    if (targetMode === activeItem1Mode) return;
-
-    const doc = sharedMap.get(1);
-    let subParsed: any = {};
-    try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
-
-    const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
-    const hasTextData = subKeys.some((k) => !!subParsed[k]?.textContent?.trim());
-    const hasFileData = subKeys.some((k) => !!subParsed[k]?.fileName);
-
-    const currentHasData = activeItem1Mode === 'text' ? hasTextData : hasFileData;
-
-    if (currentHasData) {
-      setSwitchModal({ open: true, targetMode });
-    } else {
-      handleToggleItem1Mode(targetMode);
-    }
-  };
-
-  const handleAddCustomSection = async () => {
-    if (!selectedSubjectId || !newCustomTitle.trim()) return;
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = sharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      const customSections = Array.isArray(existingSubJson.customSections) ? existingSubJson.customSections : [];
-      let fileData: any = {};
-      if (newCustomFile) {
-        const dataUrl = await readFileAsDataUrl(newCustomFile);
-        fileData = { fileName: newCustomFile.name, fileUrl: dataUrl };
-      }
-
-      customSections.push({
-        id: 'sec_' + Date.now(),
-        title: newCustomTitle.trim(),
-        textContent: newCustomText.trim(),
-        ...fileData,
-        updatedAt: new Date().toISOString()
-      });
-      existingSubJson.customSections = customSections;
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex: 1,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || 'Custom Sections',
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to add custom section');
-      }
-      setActionSuccess(`Added custom section "${newCustomTitle}".`);
-      setShowAddCustomModal(false);
-      setNewCustomTitle('');
-      setNewCustomText('');
-      setNewCustomFile(null);
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message);
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const handleUploadCustomSectionFile = async (secId: string, file: File) => {
-    if (!selectedSubjectId || !file) return;
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const existingDoc = sharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      if (Array.isArray(existingSubJson.customSections)) {
-        const target = existingSubJson.customSections.find((s: any) => s.id === secId);
-        if (target) {
-          target.fileName = file.name;
-          target.fileUrl = dataUrl;
-          target.updatedAt = new Date().toISOString();
-        }
-      }
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex: 1,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || file.name,
-          fileUrl: existingDoc?.fileUrl || dataUrl,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      setActionSuccess('Custom section file uploaded.');
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message);
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const handleDeleteCustomSection = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this custom section?')) return;
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = sharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      if (Array.isArray(existingSubJson.customSections)) {
-        existingSubJson.customSections = existingSubJson.customSections.filter((s: any) => s.id !== id);
-      }
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          itemIndex: 1,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || null,
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to delete section');
-      }
-      setActionSuccess('Removed custom section.');
-      fetchData(false);
-    } catch (err: any) {
-      setActionError(err.message);
-    } finally {
-      setUploadingItem(null);
-    }
-  };
 
 
   if (loading) {
@@ -891,11 +499,12 @@ export default function FacultyCourseCoordinatorPage() {
 
       {/* Subject Selection Bar */}
       <Card className="shadow-sm border-0 mb-4">
-        <Card.Body className="py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-3 bg-light rounded">
-          <div className="d-flex align-items-center gap-3">
+        <Card.Body className="py-3 px-3 px-md-4 d-flex align-items-center justify-content-between flex-wrap gap-3 bg-light rounded">
+          <div className="d-flex align-items-center gap-2 flex-wrap w-100 w-md-auto" style={{ maxWidth: '100%' }}>
             <span className="fw-bold text-dark small text-uppercase" style={{ letterSpacing: 0.5 }}>Select Subject:</span>
             <Form.Select
               size="sm"
+              className="w-100 w-md-auto"
               style={{ width: 380, maxWidth: '100%', fontWeight: 600 }}
               value={activeDistinctSubject?.id || selectedSubjectId}
               onChange={(e) => setSelectedSubjectId(e.target.value)}
@@ -908,7 +517,7 @@ export default function FacultyCourseCoordinatorPage() {
             </Form.Select>
           </div>
           {activeSubject && (
-            <div className="d-flex gap-3 small text-secondary">
+            <div className="d-flex gap-3 small text-secondary flex-wrap">
               <span>Department: <strong>{activeSubject.department}</strong></span>
               <span>Academic Year: <strong>{activeSubject.academicYear}</strong></span>
             </div>
@@ -1016,7 +625,9 @@ export default function FacultyCourseCoordinatorPage() {
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">
-            <Table hover responsive className="mb-0 align-middle" style={{ tableLayout: 'auto' }}>
+            {/* Desktop Table View */}
+            <div className="d-none d-md-block">
+              <Table hover responsive className="mb-0 align-middle" style={{ tableLayout: 'auto' }}>
               <thead className="table-light text-muted small text-uppercase">
                 <tr>
                   <th style={{ width: 70 }} className="ps-4">Item #</th>
@@ -1038,10 +649,18 @@ export default function FacultyCourseCoordinatorPage() {
                     try { parsedSubs = JSON.parse(doc.subItemsJson); } catch (e) {}
                   }
 
+                  const hasLegacyText = Boolean(
+                    item.index === 1 &&
+                    !doc?.fileName &&
+                    doc?.subItemsJson &&
+                    Object.values(parsedSubs).some((v: any) => v && (v.fileName || v.textContent?.trim()))
+                  );
+
                   const isUploaded = Boolean(
                     doc && (
                       doc.status === 'UPLOADED' ||
                       doc.fileName ||
+                      hasLegacyText ||
                       (doc.subItemsJson && Object.values(parsedSubs).some((v: any) => v && (v.fileName || v.textContent?.trim())))
                     )
                   );
@@ -1059,308 +678,13 @@ export default function FacultyCourseCoordinatorPage() {
 
 
 
-                        {/* Render Sub-keys list if multi-part item */}
-                        {item.index === 1 ? (
-                          <div className="mt-3 p-3 bg-white border rounded shadow-sm" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                            {(() => {
-                              const activeItem1Mode: 'text' | 'upload' = (parsedSubs?.item1Mode === 'UPLOAD' || parsedSubs?.inputMode === 'upload') ? 'upload' : 'text';
-
-                              return (
-                                <>
-                                  {/* Top Controls: Mode Toggle & Add Custom Section */}
-                                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 p-3 bg-light rounded border">
-                                    {/* Mode Switch Toggle Button Group */}
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="small text-muted fw-bold">Item 1 Mode:</span>
-                                      <div className="d-flex rounded-3 overflow-hidden border shadow-sm" style={{ backgroundColor: '#fff' }}>
-                                        <button
-                                          type="button"
-                                          className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all`}
-                                          style={{
-                                            backgroundColor: activeItem1Mode === 'text' ? '#1E3A8A' : '#ffffff',
-                                            color: activeItem1Mode === 'text' ? '#ffffff' : '#475569',
-                                            fontSize: '0.8rem'
-                                          }}
-                                          onClick={() => onModeBtnClick('text', activeItem1Mode)}
-                                        >
-                                          ✏️ Enter Text Mode
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all`}
-                                          style={{
-                                            backgroundColor: activeItem1Mode === 'upload' ? '#1E3A8A' : '#ffffff',
-                                            color: activeItem1Mode === 'upload' ? '#ffffff' : '#475569',
-                                            fontSize: '0.8rem'
-                                          }}
-                                          onClick={() => onModeBtnClick('upload', activeItem1Mode)}
-                                        >
-                                          📎 Upload PDF Mode
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {/* Add Custom Section Button */}
-                                    <Button
-                                      variant="outline-primary"
-                                      size="sm"
-                                      className="fw-bold"
-                                      style={{ fontSize: 12 }}
-                                      onClick={() => setShowAddCustomModal(true)}
-                                    >
-                                      ➕ Add Custom Section
-                                    </Button>
-                                  </div>
-
-                                  {/* ITEM 1 SECTIONS */}
-                                  {activeItem1Mode === 'upload' ? (
-                                    /* UPLOAD MODE */
-                                    <div className="d-flex flex-column gap-3 mb-4">
-                                      {item.subKeys?.map((sk) => {
-                                        const skData = parsedSubs[sk] || {};
-                                        const config = SUB_KEY_CONFIG[sk] || { label: sk };
-
-                                        return (
-                                          <div key={sk} className="p-3 border rounded bg-light">
-                                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                              <div>
-                                                <span className="fw-bold text-navy-900 small" style={{ fontSize: 13 }}>
-                                                  {config.label} {config.required && <span className="text-danger">*</span>}
-                                                </span>
-                                                {skData.fileName && (
-                                                  <div className="small text-success font-mono-ppsu mt-1">
-                                                    ✓ {skData.fileName}
-                                                  </div>
-                                                )}
-                                              </div>
-
-                                              <div className="d-flex align-items-center gap-2">
-                                                <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                                  {skData.fileName ? 'Replace File' : 'Upload File (PDF)'}
-                                                  <input
-                                                    type="file"
-                                                    accept=".pdf"
-                                                    className="d-none"
-                                                    onChange={(e) => {
-                                                      const f = e.target.files?.[0];
-                                                      if (f) handleUploadSubItem(1, sk, f);
-                                                      e.currentTarget.value = '';
-                                                    }}
-                                                  />
-                                                </label>
-                                                {skData.fileUrl && (
-                                                  <>
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline-info"
-                                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${config.label}`, fileName: skData.fileName, fileUrl: skData.fileUrl })}
-                                                    >
-                                                      View File
-                                                    </Button>
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline-danger"
-                                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                                      onClick={() => handleRemoveSubItem(1, sk)}
-                                                    >
-                                                      Remove
-                                                    </Button>
-                                                  </>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    /* TEXT MODE */
-                                    <div className="d-flex flex-column gap-4 mb-4">
-                                      {item.subKeys?.map((sk) => {
-                                        const subDoc = parsedSubs[sk] || {};
-                                        const hasSubText = !!subDoc?.textContent?.trim();
-                                        const config = SUB_KEY_CONFIG[sk] || { label: sk };
-                                        const item1Cfg = ITEM1_CONFIG[sk] || {
-                                          label: config.label,
-                                          col1Header: 'Sr. No.',
-                                          col2Header: config.label.toUpperCase(),
-                                          prefix: '',
-                                          placeholder: `Enter ${config.label} details...`
-                                        };
-                                        const rows = getRowsForSubKey(sk, subDoc);
-
-                                        return (
-                                          <div key={sk} className="border rounded-3 overflow-hidden shadow-sm bg-white">
-                                            {/* Section Header */}
-                                            <div className="d-flex align-items-center justify-content-between p-3 border-bottom" style={{ backgroundColor: '#f8fafc' }}>
-                                              <div className="d-flex align-items-center gap-2">
-                                                <span className="fw-bold text-navy-900" style={{ fontSize: '0.95rem', color: '#1E3A8A' }}>
-                                                  {item1Cfg.label}
-                                                </span>
-                                                {hasSubText ? (
-                                                  <Badge bg="success" style={{ fontSize: '0.75rem' }}>✓ Saved</Badge>
-                                                ) : (
-                                                  <Badge bg="warning" text="dark" style={{ fontSize: '0.75rem' }}>Pending Text</Badge>
-                                                )}
-                                              </div>
-                                              <Button
-                                                variant="success"
-                                                size="sm"
-                                                className="fw-bold d-flex align-items-center gap-1"
-                                                disabled={uploadingItem === 1}
-                                                onClick={() => handleSaveSection(sk, subDoc)}
-                                              >
-                                                💾 Save Section
-                                              </Button>
-                                            </div>
-
-                                            {/* Table Input */}
-                                            <div className="p-3">
-                                              <Table bordered hover responsive className="mb-2" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-                                                <thead>
-                                                  <tr style={{ background: '#d9ead3', borderBottom: '2px solid #000' }}>
-                                                    <th style={{ width: '100px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                      {item1Cfg.col1Header}
-                                                    </th>
-                                                    <th style={{ textAlign: 'left', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                      {item1Cfg.col2Header}
-                                                    </th>
-                                                    <th style={{ width: '60px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                      Action
-                                                    </th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {rows.map((rowText, rIdx) => {
-                                                    const rowLabel = item1Cfg.prefix ? `${item1Cfg.prefix}${rIdx + 1}` : `${rIdx + 1}.`;
-                                                    return (
-                                                      <tr key={rIdx} style={{ verticalAlign: 'top' }}>
-                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', paddingTop: '12px', color: '#000' }}>
-                                                          {rowLabel}
-                                                        </td>
-                                                        <td>
-                                                          <Form.Control
-                                                            as="textarea"
-                                                            rows={2}
-                                                            style={{ fontSize: '13px', fontFamily: "'Times New Roman', Times, serif" }}
-                                                            placeholder={item1Cfg.placeholder}
-                                                            value={rowText}
-                                                            onChange={(e) => updateRowText(sk, rIdx, e.target.value, subDoc)}
-                                                          />
-                                                        </td>
-                                                        <td style={{ textAlign: 'center', paddingTop: '10px' }}>
-                                                          <Button
-                                                            variant="outline-danger"
-                                                            size="sm"
-                                                            style={{ fontSize: '11px', padding: '2px 6px' }}
-                                                            onClick={() => removeRow(sk, rIdx, subDoc)}
-                                                            title="Remove line"
-                                                          >
-                                                            ×
-                                                          </Button>
-                                                        </td>
-                                                      </tr>
-                                                    );
-                                                  })}
-                                                </tbody>
-                                              </Table>
-                                              <div className="d-flex justify-content-start">
-                                                <Button
-                                                  variant="outline-secondary"
-                                                  size="sm"
-                                                  style={{ fontSize: '12px' }}
-                                                  onClick={() => addRow(sk, subDoc)}
-                                                >
-                                                  ➕ Add Line
-                                                </Button>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-
-                                  {/* CUSTOM SECTIONS */}
-                                  {Array.isArray(parsedSubs.customSections) && parsedSubs.customSections.length > 0 && (
-                                    <div className="mt-4 pt-3 border-top">
-                                      <h6 className="fw-bold text-navy-900 mb-3 small text-uppercase" style={{ letterSpacing: 0.5 }}>Custom Sections</h6>
-                                      <div className="d-flex flex-column gap-3">
-                                        {parsedSubs.customSections.map((sec: any) => (
-                                          <div key={sec.id} className="p-3 border rounded bg-white shadow-sm">
-                                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                                              <div className="fw-bold text-navy-900">{sec.title}</div>
-                                              <Button size="sm" variant="outline-danger" style={{ fontSize: 11 }} onClick={() => handleDeleteCustomSection(sec.id)}>
-                                                🗑️ Delete Section
-                                              </Button>
-                                            </div>
-
-                                            {activeItem1Mode === 'text' ? (
-                                              /* Custom Section Text Mode */
-                                              <div>
-                                                <Form.Control
-                                                  as="textarea"
-                                                  rows={3}
-                                                  className="mb-2"
-                                                  style={{ fontSize: 13 }}
-                                                  placeholder={`Enter details for ${sec.title}...`}
-                                                  defaultValue={sec.textContent || ''}
-                                                  onBlur={(e) => handleSaveCustomSectionText(sec.id, e.target.value)}
-                                                />
-                                                <div className="d-flex justify-content-between align-items-center">
-                                                  <small className="text-muted" style={{ fontSize: 11 }}>Text saves automatically on blur when clicking outside.</small>
-                                                  <Button size="sm" variant="success" style={{ fontSize: 11 }} onClick={(e) => {
-                                                    const textarea = e.currentTarget.parentElement?.parentElement?.querySelector('textarea');
-                                                    if (textarea) handleSaveCustomSectionText(sec.id, textarea.value);
-                                                  }}>
-                                                    💾 Save Text
-                                                  </Button>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              /* Custom Section Upload Mode */
-                                              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                                <div>
-                                                  {sec.fileName ? (
-                                                    <div className="small text-success font-mono-ppsu">✓ {sec.fileName}</div>
-                                                  ) : (
-                                                    <div className="small text-muted">No PDF uploaded</div>
-                                                  )}
-                                                </div>
-                                                <div className="d-flex align-items-center gap-2">
-                                                  <label className="btn btn-outline-primary btn-sm m-0 fw-semibold" style={{ fontSize: 11, cursor: 'pointer' }}>
-                                                    {sec.fileName ? 'Replace File' : 'Upload File (PDF)'}
-                                                    <input
-                                                      type="file"
-                                                      accept=".pdf"
-                                                      className="d-none"
-                                                      onChange={(e) => {
-                                                        const f = e.target.files?.[0];
-                                                        if (f) handleUploadCustomSectionFile(sec.id, f);
-                                                        e.currentTarget.value = '';
-                                                      }}
-                                                    />
-                                                  </label>
-                                                  {sec.fileUrl && (
-                                                    <Button size="sm" variant="outline-info" style={{ fontSize: 11, padding: '2px 8px' }}
-                                                      onClick={() => setViewingDoc({ title: `Item 1 — ${sec.title}`, fileName: sec.fileName, fileUrl: sec.fileUrl })}>
-                                                      View
-                                                    </Button>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
+                        {hasLegacyText && (
+                          <div className="small text-info font-mono-ppsu mt-1">
+                            ℹ️ Legacy Text Entry preserved — Upload combined PDF to replace
                           </div>
-                        ) : item.subKeys ? (
+                        )}
+
+                        {item.subKeys ? (
                           <div className="mt-2 d-flex flex-wrap gap-2">
                             {item.subKeys.map((sk) => {
                               const skData = parsedSubs[sk];
@@ -1468,6 +792,210 @@ export default function FacultyCourseCoordinatorPage() {
                 })}
               </tbody>
             </Table>
+            </div>
+
+            {/* Mobile Stacked Card View */}
+            <div className="d-block d-md-none p-3">
+              <div className="d-flex flex-column gap-3">
+                {SHARED_ITEMS.map((item) => {
+                  const doc = (item.index === 1 || item.index === 18)
+                    ? (schoolSharedMap.get(item.index) || sharedMap.get(item.index))
+                    : sharedMap.get(item.index);
+                  const isUploading = uploadingItem === item.index;
+
+                  let parsedSubs: any = {};
+                  if (doc?.subItemsJson) {
+                    try { parsedSubs = JSON.parse(doc.subItemsJson); } catch (e) {}
+                  }
+
+                  const hasLegacyText = Boolean(
+                    item.index === 1 &&
+                    !doc?.fileName &&
+                    doc?.subItemsJson &&
+                    Object.values(parsedSubs).some((v: any) => v && (v.fileName || v.textContent?.trim()))
+                  );
+
+                  const isUploaded = Boolean(
+                    doc && (
+                      doc.status === 'UPLOADED' ||
+                      doc.fileName ||
+                      hasLegacyText ||
+                      (doc.subItemsJson && Object.values(parsedSubs).some((v: any) => v && (v.fileName || v.textContent?.trim())))
+                    )
+                  );
+
+                  return (
+                    <div
+                      key={item.index}
+                      className={`p-3 rounded-3 border ${isUploaded ? 'border-success-subtle bg-light' : 'bg-white'}`}
+                      style={{ borderLeft: isUploaded ? '4px solid #198754' : '4px solid #dee2e6' }}
+                    >
+                      <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <span className="badge bg-light text-dark border font-mono-ppsu">
+                          #{item.index}
+                        </span>
+                        <span className="badge bg-secondary-subtle text-secondary" style={{ fontSize: 11 }}>
+                          {item.category}
+                        </span>
+                      </div>
+
+                      <div className="fw-bold text-dark mb-1" style={{ fontSize: '0.95rem' }}>
+                        {item.name}
+                      </div>
+
+                      <div className="mb-2">
+                        {isUploaded ? (
+                          <span className="badge bg-success-subtle text-success border border-success-subtle">
+                            ✓ Ready (Visible to Faculty)
+                          </span>
+                        ) : (
+                          <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                            ⏳ Pending Upload
+                          </span>
+                        )}
+                      </div>
+
+                      {doc?.fileName && (
+                        <div className="small text-success font-mono-ppsu mb-2 p-2 bg-white rounded border">
+                          📄 {doc.fileName}
+                        </div>
+                      )}
+
+                      {hasLegacyText && (
+                        <div className="small text-info font-mono-ppsu mb-2 p-2 bg-info-subtle rounded border border-info-subtle">
+                          ℹ️ Legacy Text Entry preserved — Upload combined PDF to replace
+                        </div>
+                      )}
+
+                      {item.subKeys ? (
+                        <div className="mt-2 d-flex flex-column gap-2">
+                          <small className="text-muted fw-semibold">Sub-items:</small>
+                          {item.subKeys.map((sk) => {
+                            const skData = parsedSubs[sk];
+                            const config = SUB_KEY_CONFIG[sk] || { label: sk };
+                            const isSubUploaded = Boolean(skData?.fileName);
+                            const isSubUploading = uploadingItem === item.index;
+
+                            return (
+                              <div key={sk} className="p-2 border rounded bg-white small">
+                                <div className="d-flex justify-content-between align-items-center mb-1">
+                                  <span className="fw-semibold text-navy-900" style={{ fontSize: 12 }}>
+                                    {config.label}
+                                    {config.required ? <span className="text-danger ms-1">*</span> : <span className="text-muted ms-1" style={{ fontSize: 10 }}>(optional)</span>}
+                                  </span>
+                                  {isSubUploaded ? (
+                                    <span className="badge bg-success-subtle text-success" style={{ fontSize: 10 }}>Uploaded</span>
+                                  ) : (
+                                    <span className="badge bg-light text-muted border" style={{ fontSize: 10 }}>Missing</span>
+                                  )}
+                                </div>
+                                {skData?.fileName && (
+                                  <div className="text-success font-mono-ppsu mb-2 text-truncate" style={{ fontSize: 11 }}>
+                                    ✓ {skData.fileName}
+                                  </div>
+                                )}
+                                <div className="d-flex gap-2 flex-wrap">
+                                  {isSubUploading ? (
+                                    <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                                  ) : (
+                                    <>
+                                      {skData?.fileUrl && (
+                                        <a
+                                          href={skData.fileUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="btn btn-outline-primary btn-sm flex-grow-1"
+                                          style={{ minHeight: 38, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                        >
+                                          View File ↗
+                                        </a>
+                                      )}
+                                      <label
+                                        className={`btn ${skData?.fileName ? 'btn-outline-secondary' : 'btn-primary'} btn-sm flex-grow-1 mb-0 cursor-pointer`}
+                                        style={{ minHeight: 38, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                      >
+                                        {skData?.fileName ? 'Replace File' : 'Upload File'}
+                                        <input
+                                          type="file"
+                                          hidden
+                                          accept=".pdf,.doc,.docx"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleUploadSubItem(item.index, sk, file);
+                                          }}
+                                        />
+                                      </label>
+                                      {isSubUploaded && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline-danger"
+                                          style={{ minHeight: 38 }}
+                                          onClick={() => handleRemoveSubItem(item.index, sk)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-2 pt-2 border-top d-flex gap-2 flex-wrap">
+                          {isUploading ? (
+                            <div className="d-flex align-items-center gap-2 text-primary py-2">
+                              <div className="spinner-border spinner-border-sm" role="status" />
+                              <span className="small">Uploading...</span>
+                            </div>
+                          ) : (
+                            <>
+                              {doc?.fileUrl && (
+                                <a
+                                  href={doc.fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn btn-outline-primary btn-sm flex-grow-1"
+                                  style={{ minHeight: 38, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                  View File ↗
+                                </a>
+                              )}
+                              <label
+                                className={`btn ${isUploaded ? 'btn-outline-secondary' : 'btn-primary'} btn-sm flex-grow-1 mb-0 cursor-pointer`}
+                                style={{ minHeight: 38, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                {isUploaded ? 'Replace File' : 'Upload File'}
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept=".pdf,.doc,.docx"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleUploadSingle(item.index, file);
+                                  }}
+                                />
+                              </label>
+                              {isUploaded && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  style={{ minHeight: 38 }}
+                                  onClick={() => handleRemoveSingle(item.index)}
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </Card.Body>
         </Card>
         </>
@@ -1503,104 +1031,185 @@ export default function FacultyCourseCoordinatorPage() {
                 <p className="small text-secondary mb-0">No teachers or lab instructors are currently assigned under your coordinated subject(s).</p>
               </div>
             ) : (
-              <Table hover responsive className="mb-0 align-middle">
-                <thead className="table-light text-muted small text-uppercase">
-                  <tr>
-                    <th className="ps-4">Course Faculty / Lab Faculty</th>
-                    <th>Employee ID</th>
-                    <th>Department</th>
-                    <th>Role on Subject</th>
-                    <th>Subject / Course</th>
-                    <th>Course File Status</th>
-                    <th className="pe-4 text-end">Document Access & Review</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facultyUnderMe.flatMap((fac) => {
-                    const assignments = fac.assignments || (fac.courseFiles ? fac.courseFiles.map((cf: any) => ({
-                      subjectId: cf.id,
-                      subjectCode: cf.courseCode,
-                      subjectName: cf.courseTitle,
-                      semester: cf.semester,
-                      roleOnSubject: 'Course Faculty',
-                      courseFileStatus: cf.status,
-                      courseFileId: cf.id
-                    })) : []);
+              <>
+                <div className="d-none d-md-block">
+                  <Table hover responsive className="mb-0 align-middle">
+                    <thead className="table-light text-muted small text-uppercase">
+                      <tr>
+                        <th className="ps-4">Course Faculty / Lab Faculty</th>
+                        <th>Employee ID</th>
+                        <th>Department</th>
+                        <th>Role on Subject</th>
+                        <th>Subject / Course</th>
+                        <th>Course File Status</th>
+                        <th className="pe-4 text-end">Document Access & Review</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {facultyUnderMe.flatMap((fac) => {
+                        const assignments = fac.assignments || (fac.courseFiles ? fac.courseFiles.map((cf: any) => ({
+                          subjectId: cf.id,
+                          subjectCode: cf.courseCode,
+                          subjectName: cf.courseTitle,
+                          semester: cf.semester,
+                          roleOnSubject: 'Course Faculty',
+                          courseFileStatus: cf.status,
+                          courseFileId: cf.id
+                        })) : []);
 
-                    const filteredAssignments = assignments.filter((asgn: any) => {
-                      if (!searchQuery) return true;
-                      const q = searchQuery.toLowerCase();
-                      return fac.name?.toLowerCase().includes(q) ||
-                             fac.employeeId?.toLowerCase().includes(q) ||
-                             asgn.subjectCode?.toLowerCase().includes(q) ||
-                             asgn.subjectName?.toLowerCase().includes(q);
-                    });
+                        const filteredAssignments = assignments.filter((asgn: any) => {
+                          if (!searchQuery) return true;
+                          const q = searchQuery.toLowerCase();
+                          return fac.name?.toLowerCase().includes(q) ||
+                                 fac.employeeId?.toLowerCase().includes(q) ||
+                                 asgn.subjectCode?.toLowerCase().includes(q) ||
+                                 asgn.subjectName?.toLowerCase().includes(q);
+                        });
 
-                    return filteredAssignments.map((asgn: any, aIdx: number) => {
-                      const isCourseFac = asgn.roleOnSubject === 'Course Teacher' || asgn.roleOnSubject === 'Course Faculty';
-                      const targetFileId = asgn.courseFileId;
+                        return filteredAssignments.map((asgn: any, aIdx: number) => {
+                          const isCourseFac = asgn.roleOnSubject === 'Course Teacher' || asgn.roleOnSubject === 'Course Faculty';
+                          const targetFileId = asgn.courseFileId;
 
-                      return (
-                        <tr key={`${fac.id}-${asgn.subjectId || aIdx}-${aIdx}`}>
-                          {aIdx === 0 && (
-                            <td rowSpan={filteredAssignments.length} className="ps-4 fw-bold text-dark">
-                              <div className="d-flex align-items-center gap-2">
-                                <span className="fs-5">👨‍🏫</span>
-                                <div>
-                                  <div className="text-navy-900">{fac.name}</div>
-                                  <small className="text-muted fw-normal">{fac.designation || 'Faculty Member'}</small>
-                                </div>
+                          return (
+                            <tr key={`${fac.id}-${asgn.subjectId || aIdx}-${aIdx}`}>
+                              {aIdx === 0 && (
+                                <td rowSpan={filteredAssignments.length} className="ps-4 fw-bold text-dark">
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="fs-5">👨‍🏫</span>
+                                    <div>
+                                      <div className="text-navy-900">{fac.name}</div>
+                                      <small className="text-muted fw-normal">{fac.designation || 'Faculty Member'}</small>
+                                    </div>
+                                  </div>
+                                </td>
+                              )}
+                              {aIdx === 0 && (
+                                <td rowSpan={filteredAssignments.length} className="font-mono-ppsu text-secondary">
+                                  {fac.employeeId || '—'}
+                                </td>
+                              )}
+                              {aIdx === 0 && (
+                                <td rowSpan={filteredAssignments.length} className="text-secondary">
+                                  {fac.department || '—'}
+                                </td>
+                              )}
+                              <td>
+                                <Badge
+                                  bg={isCourseFac ? 'primary' : 'info'}
+                                  text={isCourseFac ? 'white' : 'dark'}
+                                  className="px-2.5 py-1.5 fw-semibold"
+                                >
+                                  {isCourseFac ? 'Course Faculty' : asgn.roleOnSubject}
+                                </Badge>
+                              </td>
+                              <td>
+                                <span className="fw-bold font-mono-ppsu text-navy-900">{asgn.subjectCode}</span>
+                                <div className="small text-muted">{asgn.subjectName}</div>
+                              </td>
+                              <td>
+                                <span className={`badge px-3 py-1.5 rounded-pill ${statusBadgeClass(asgn.courseFileStatus)}`}>
+                                  {statusLabel(asgn.courseFileStatus)}
+                                </span>
+                              </td>
+                              <td className="pe-4 text-end">
+                                {targetFileId && !['DRAFT', 'NOT_SUBMITTED'].includes(asgn.courseFileStatus) ? (
+                                  <Link
+                                    href={`/coordinator/review/${targetFileId}`}
+                                    className="btn btn-sm btn-primary fw-bold px-3 py-1.5 d-inline-flex align-items-center gap-1 shadow-sm"
+                                  >
+                                    👁️ View Uploaded Documents
+                                  </Link>
+                                ) : (
+                                  <span className="badge bg-secondary-subtle text-secondary border px-3 py-1.5" style={{ fontSize: 11 }}>
+                                    🔒 Pending Faculty Submission
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+
+                {/* Mobile Faculty Stacked Cards */}
+                <div className="d-block d-md-none p-3">
+                  <div className="d-flex flex-column gap-3">
+                    {facultyUnderMe.flatMap((fac) => {
+                      const assignments = fac.assignments || (fac.courseFiles ? fac.courseFiles.map((cf: any) => ({
+                        subjectId: cf.id,
+                        subjectCode: cf.courseCode,
+                        subjectName: cf.courseTitle,
+                        semester: cf.semester,
+                        roleOnSubject: 'Course Faculty',
+                        courseFileStatus: cf.status,
+                        courseFileId: cf.id
+                      })) : []);
+
+                      const filteredAssignments = assignments.filter((asgn: any) => {
+                        if (!searchQuery) return true;
+                        const q = searchQuery.toLowerCase();
+                        return fac.name?.toLowerCase().includes(q) ||
+                               fac.employeeId?.toLowerCase().includes(q) ||
+                               asgn.subjectCode?.toLowerCase().includes(q) ||
+                               asgn.subjectName?.toLowerCase().includes(q);
+                      });
+
+                      return filteredAssignments.map((asgn: any, aIdx: number) => {
+                        const isCourseFac = asgn.roleOnSubject === 'Course Teacher' || asgn.roleOnSubject === 'Course Faculty';
+                        const targetFileId = asgn.courseFileId;
+
+                        return (
+                          <div key={`m-${fac.id}-${asgn.subjectId || aIdx}-${aIdx}`} className="p-3 border rounded-3 bg-white shadow-sm">
+                            <div className="d-flex align-items-center gap-2 mb-2">
+                              <span className="fs-4">👨‍🏫</span>
+                              <div>
+                                <div className="fw-bold text-navy-900">{fac.name}</div>
+                                <div className="small text-muted">{fac.designation || 'Faculty Member'} · {fac.employeeId || 'No ID'}</div>
                               </div>
-                            </td>
-                          )}
-                          {aIdx === 0 && (
-                            <td rowSpan={filteredAssignments.length} className="font-mono-ppsu text-secondary">
-                              {fac.employeeId || '—'}
-                            </td>
-                          )}
-                          {aIdx === 0 && (
-                            <td rowSpan={filteredAssignments.length} className="text-secondary">
-                              {fac.department || '—'}
-                            </td>
-                          )}
-                          <td>
-                            <Badge
-                              bg={isCourseFac ? 'primary' : 'info'}
-                              text={isCourseFac ? 'white' : 'dark'}
-                              className="px-2.5 py-1.5 fw-semibold"
-                            >
-                              {isCourseFac ? 'Course Faculty' : asgn.roleOnSubject}
-                            </Badge>
-                          </td>
-                          <td>
-                            <span className="fw-bold font-mono-ppsu text-navy-900">{asgn.subjectCode}</span>
-                            <div className="small text-muted">{asgn.subjectName}</div>
-                          </td>
-                          <td>
-                            <span className={`badge px-3 py-1.5 rounded-pill ${statusBadgeClass(asgn.courseFileStatus)}`}>
-                              {statusLabel(asgn.courseFileStatus)}
-                            </span>
-                          </td>
-                          <td className="pe-4 text-end">
-                            {targetFileId && !['DRAFT', 'NOT_SUBMITTED'].includes(asgn.courseFileStatus) ? (
-                              <Link
-                                href={`/coordinator/review/${targetFileId}`}
-                                className="btn btn-sm btn-primary fw-bold px-3 py-1.5 d-inline-flex align-items-center gap-1 shadow-sm"
+                            </div>
+                            <div className="small text-muted mb-2">
+                              Department: <strong>{fac.department || '—'}</strong>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+                              <div>
+                                <span className="fw-bold font-mono-ppsu text-navy-900">{asgn.subjectCode}</span>
+                                <div className="small text-muted">{asgn.subjectName}</div>
+                              </div>
+                              <Badge
+                                bg={isCourseFac ? 'primary' : 'info'}
+                                text={isCourseFac ? 'white' : 'dark'}
+                                className="px-2 py-1"
                               >
-                                👁️ View Uploaded Documents
-                              </Link>
-                            ) : (
-                              <span className="badge bg-secondary-subtle text-secondary border px-3 py-1.5" style={{ fontSize: 11 }}>
-                                🔒 Pending Faculty Submission
+                                {isCourseFac ? 'Course Faculty' : asgn.roleOnSubject}
+                              </Badge>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-center pt-2 border-top flex-wrap gap-2">
+                              <span className={`badge px-2.5 py-1.5 rounded-pill ${statusBadgeClass(asgn.courseFileStatus)}`}>
+                                {statusLabel(asgn.courseFileStatus)}
                               </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })}
-                </tbody>
-              </Table>
+                              {targetFileId && !['DRAFT', 'NOT_SUBMITTED'].includes(asgn.courseFileStatus) ? (
+                                <Link
+                                  href={`/coordinator/review/${targetFileId}`}
+                                  className="btn btn-sm btn-primary fw-bold px-3 py-2 d-inline-flex align-items-center gap-1 shadow-sm"
+                                  style={{ minHeight: 38 }}
+                                >
+                                  👁️ View Uploaded Documents
+                                </Link>
+                              ) : (
+                                <span className="badge bg-secondary-subtle text-secondary border px-3 py-1.5" style={{ fontSize: 11 }}>
+                                  🔒 Pending Faculty Submission
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })}
+                  </div>
+                </div>
+              </>
             )}
           </Card.Body>
         </Card>
@@ -1626,90 +1235,6 @@ export default function FacultyCourseCoordinatorPage() {
           </Modal.Footer>
         </Modal>
       )}
-
-      {/* Modal for adding custom section / box */}
-      <Modal show={showAddCustomModal} onHide={() => { setShowAddCustomModal(false); setNewCustomFile(null); }} centered>
-        <Modal.Header closeButton className="bg-light border-bottom">
-          <Modal.Title className="h6 fw-bold mb-0 text-navy-900">
-            ➕ Add Custom Section / Box
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-4">
-          <Form.Group className="mb-3">
-            <Form.Label className="fw-semibold small">Section Title Label <span className="text-danger">*</span></Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="e.g. Department Vision, Department Mission..."
-              value={newCustomTitle}
-              onChange={(e) => setNewCustomTitle(e.target.value)}
-            />
-          </Form.Group>
-          <Form.Group className="mb-3">
-            <Form.Label className="fw-semibold small">Text Content (Statement)</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={4}
-              placeholder="Type or paste statement text here..."
-              value={newCustomText}
-              onChange={(e) => setNewCustomText(e.target.value)}
-            />
-          </Form.Group>
-          <Form.Group className="mb-3">
-            <Form.Label className="fw-semibold small">Optional PDF File (for Upload Mode)</Form.Label>
-            <Form.Control
-              type="file"
-              accept=".pdf"
-              onChange={(e) => setNewCustomFile((e.target as HTMLInputElement).files?.[0] || null)}
-            />
-          </Form.Group>
-        </Modal.Body>
-        <Modal.Footer className="bg-light border-top">
-          <Button variant="secondary" size="sm" onClick={() => { setShowAddCustomModal(false); setNewCustomFile(null); }}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            className="fw-semibold"
-            onClick={handleAddCustomSection}
-            disabled={!newCustomTitle.trim()}
-          >
-            Add Custom Section
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Mode Switch Confirmation Modal */}
-      <Modal show={!!switchModal?.open} onHide={() => setSwitchModal(null)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title className="h6 fw-bold">Switch Input Mode?</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="small">
-          <p className="mb-2">
-            You are switching to <strong>{switchModal?.targetMode === 'text' ? 'Enter Text Mode' : 'Upload PDF Mode'}</strong> for Item 1.
-          </p>
-          <Alert variant="info" className="p-2 mb-0" style={{ fontSize: 12 }}>
-            ℹ️ Your existing content in both modes will be preserved. You can switch back at any time.
-          </Alert>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" size="sm" onClick={() => setSwitchModal(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              if (switchModal?.targetMode) {
-                handleToggleItem1Mode(switchModal.targetMode);
-              }
-              setSwitchModal(null);
-            }}
-          >
-            Confirm Switch
-          </Button>
-        </Modal.Footer>
-      </Modal>
 
     </div>
   );

@@ -3210,254 +3210,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                     </div>
                   </div>
 
-                  {/* Item 1: Institute Vision, Mission & PEO, PSO & PO */}
-                  {isItem1 && !isRestricted && (() => {
-                    const subs = getSubItems(1) || {};
-                    const subKeys = [
-                      { key: 'vision', label: '1. Institute Vision' },
-                      { key: 'mission', label: '2. Institute Mission' },
-                      { key: 'deptVision', label: '3. Department Vision' },
-                      { key: 'deptMission', label: '4. Department Mission' },
-                      { key: 'peo', label: '5. Program Educational Objectives (PEO)' },
-                      { key: 'pso', label: '6. Program Specific Outcomes (PSO)' },
-                      { key: 'po', label: '7. Program Outcomes (PO)' }
-                    ];
-
-                    const handleCopyText = (text: string, title: string) => {
-                      if (navigator?.clipboard?.writeText) {
-                        navigator.clipboard.writeText(text);
-                      } else {
-                        const el = document.createElement('textarea');
-                        el.value = text;
-                        document.body.appendChild(el);
-                        el.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(el);
-                      }
-                      setActionSuccess(`Copied ${title} to clipboard!`);
-                      setTimeout(() => setActionSuccess(''), 2500);
-                    };
-
-                    const handlePdfExport = (title: string, text: string) => {
-                      const win = window.open('', '_blank');
-                      if (win) {
-                        win.document.write(`
-                          <!DOCTYPE html>
-                          <html>
-                            <head>
-                              <title>${title} — PPSU Course Files</title>
-                              <style>
-                                body { font-family: sans-serif; padding: 40px; color: #0F172A; }
-                                .header { border-bottom: 3px solid #1B2A6B; padding-bottom: 12px; margin-bottom: 24px; }
-                                h2 { color: #1B2A6B; margin: 0 0 4px 0; }
-                                .badge { background: #ECFDF5; color: #047857; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-block; margin-top: 6px; }
-                                .content { font-size: 14px; line-height: 1.7; background: #F8FAFC; padding: 24px; border-radius: 8px; border: 1px solid #CBD5E1; white-space: pre-wrap; }
-                              </style>
-                            </head>
-                            <body>
-                              <div class="header">
-                                <h2>${title}</h2>
-                                <div class="badge">✓ Submitted & Locked — PPSU Official Entry</div>
-                              </div>
-                              <div class="content">${text}</div>
-                              <script>window.onload = function() { window.print(); };</script>
-                            </body>
-                          </html>
-                        `);
-                        win.document.close();
-                      }
-                    };
-
-                    return (
-                      <div className="mt-3 ps-3 border-start border-3 border-primary ms-2 w-100">
-                        <div className="alert alert-info py-2 px-3 small mb-3">
-                          ℹ️ Item 1 documents and texts are managed centrally by the <strong>Course Coordinator</strong> for your school ({headerEdit.school || 'School'}). Below are the active documents/texts provided by your Coordinator.
-                        </div>
-                        <Row className="g-3">
-                          {subKeys.map(({ key, label }) => {
-                            const subData = subs[key];
-                            const hasFile = Boolean(subData?.fileName && subData?.fileUrl);
-                            const hasText = Boolean(subData?.textContent?.trim());
-                            const isFilled = hasFile || hasText;
-
-                            return (
-                              <Col xs={12} md={6} key={key}>
-                                <div className="p-3 bg-light rounded border h-100 d-flex flex-column justify-content-between">
-                                  <div>
-                                    <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <span className="fw-bold small text-navy-900">{label}</span>
-                                      {hasText ? (
-                                        <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Submitted &amp; Locked</Badge>
-                                      ) : hasFile ? (
-                                        <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Uploaded &amp; Locked</Badge>
-                                      ) : (
-                                        <Badge bg="secondary" style={{ fontSize: 10 }}>PENDING</Badge>
-                                      )}
-                                    </div>
-
-                                    {hasFile && (
-                                      <div className="text-success small fw-bold font-mono-ppsu mb-2 text-truncate">
-                                        📄 {subData.fileName}
-                                      </div>
-                                    )}
-
-                                    {hasText && (() => {
-                                      const text = subData.textContent || '';
-                                      const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-                                      const isPeo = key === 'peo';
-                                      const isPso = key === 'pso';
-                                      const isPo = key === 'po';
-                                      const isMission = key === 'mission';
-
-                                      let col1Header = '';
-                                      let col2Header = '';
-                                      let prefix = '';
-
-                                      if (isPeo) {
-                                        col1Header = 'PEO No';
-                                        col2Header = 'PROGRAMME EDUCATIONAL OBJECTIVES';
-                                        prefix = 'PEO ';
-                                      } else if (isPso) {
-                                        col1Header = 'PSO No';
-                                        col2Header = 'PROGRAMME SPECIFIC OUTCOMES (PSO)';
-                                        prefix = 'PSO ';
-                                      } else if (isPo) {
-                                        col1Header = 'PO No';
-                                        col2Header = 'PROGRAMME OUTCOMES';
-                                        prefix = 'PO ';
-                                      } else if (isMission) {
-                                        col1Header = '';
-                                        col2Header = 'INSTITUTE MISSION';
-                                      } else {
-                                        col1Header = '';
-                                        col2Header = `INSTITUTE ${label.toUpperCase()}`;
-                                      }
-
-                                      if (isPeo || isPso || isPo) {
-                                        return (
-                                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '8px', fontSize: 11, background: '#fff' }}>
-                                            <thead>
-                                              <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                                                <th style={{ width: '70px', padding: '4px 6px', fontWeight: 'bold', fontSize: 11, textAlign: 'center', borderRight: '1px solid #000', color: '#000' }}>
-                                                  {col1Header}
-                                                </th>
-                                                <th style={{ padding: '4px 8px', fontWeight: 'bold', fontSize: 11, textAlign: 'left', color: '#000' }}>
-                                                  {col2Header}
-                                                </th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {lines.map((line: string, idx: number) => {
-                                                const cleanText = line.replace(/^(PEO|PSO|PO|\d+)[\s\d\.\:]*/i, '').trim() || line;
-                                                return (
-                                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                    <td style={{ width: '70px', padding: '4px 6px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: 11, verticalAlign: 'top', color: '#000' }}>
-                                                      {prefix}{idx + 1}
-                                                    </td>
-                                                    <td style={{ padding: '4px 8px', fontSize: 11, lineHeight: 1.4, color: '#000' }}>
-                                                      {cleanText}
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        );
-                                      }
-
-                                      if (isMission || lines.length > 1) {
-                                        return (
-                                          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '8px', fontSize: 11, background: '#fff' }}>
-                                            <thead>
-                                              <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                                                <th colSpan={2} style={{ padding: '4px 8px', fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', textAlign: 'center', color: '#000' }}>
-                                                  {col2Header}
-                                                </th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {lines.map((line: string, idx: number) => {
-                                                const cleanText = line.replace(/^\d+[\.\)]\s*/, '').trim() || line;
-                                                return (
-                                                  <tr key={idx} style={{ borderBottom: idx < lines.length - 1 ? '1px solid #000' : 'none' }}>
-                                                    <td style={{ width: 28, padding: '4px 6px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000', fontSize: 11, verticalAlign: 'top', color: '#000' }}>
-                                                      {idx + 1}.
-                                                    </td>
-                                                    <td style={{ padding: '4px 8px', fontSize: 11, lineHeight: 1.4, color: '#000' }}>
-                                                      {cleanText}
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        );
-                                      }
-
-                                      return (
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '8px', fontSize: 11, background: '#fff' }}>
-                                          <thead>
-                                            <tr style={{ background: '#d9ead3', borderBottom: '1px solid #000' }}>
-                                              <th style={{ padding: '4px 8px', fontWeight: 'bold', textTransform: 'uppercase', fontSize: 11, textAlign: 'center', color: '#000' }}>{col2Header}</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            <tr>
-                                              <td style={{ padding: '8px', whiteSpace: 'pre-wrap', lineHeight: 1.5, color: '#000' }}>{text}</td>
-                                            </tr>
-                                          </tbody>
-                                        </table>
-                                      );
-                                    })()}
-
-                                    {!isFilled && (
-                                      <div className="text-muted small italic mb-2" style={{ fontSize: 11 }}>
-                                        Not provided yet by Course Coordinator
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className="d-flex align-items-center gap-1.5 mt-2 flex-wrap">
-                                    {hasFile && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline-primary"
-                                        style={{ fontSize: 11 }}
-                                        onClick={() => setViewingDoc({ title: `Item 1 — ${label}`, fileName: subData.fileName, fileUrl: subData.fileUrl })}
-                                      >
-                                        👁️ View
-                                      </Button>
-                                    )}
-
-                                    {hasText && (
-                                      <>
-                                        <Button
-                                          size="sm"
-                                          variant="outline-secondary"
-                                          style={{ fontSize: 11 }}
-                                          onClick={() => handleCopyText(subData.textContent, label)}
-                                        >
-                                          📋 Copy
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline-danger"
-                                          style={{ fontSize: 11 }}
-                                          onClick={() => handlePdfExport(label, subData.textContent)}
-                                        >
-                                          📄 Export as PDF
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </Col>
-                            );
-                          })}
-                        </Row>
-                      </div>
-                    );
-                  })()}
 
                   {/* SECTION 33: Item 8 Laboratory Rubrics Batch-wise Sub-sections */}
                   {false && isItem8 && !isLockedByStudentList && (
@@ -4822,17 +4574,18 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                 {/* SECTION 1: Item 1 Read-Only Formatted Display for Faculty Course File */}
                 {isItem1 && !isRestricted && (() => {
+                  const singleFileName = dbItem.fileName || dbItem.sharedFileName;
+                  const singleFileUrl = dbItem.fileUrl || dbItem.sharedFileUrl;
                   const subs: any = getSubItems(1) || {};
-                  const item1Mode: string = subs.item1Mode || 'TEXT';
                   const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
-                  const hasAnyContent = item1Mode === 'UPLOAD'
-                    ? subKeys.some((sk) => subs[sk]?.fileUrl || subs[sk]?.fileName)
-                    : subKeys.some((sk) => subs[sk]?.textContent?.trim());
+                  const hasSubFiles = subKeys.some((sk) => subs[sk]?.fileUrl || subs[sk]?.fileName);
+                  const hasLegacyText = subKeys.some((sk) => subs[sk]?.textContent?.trim());
+                  const hasAnyContent = Boolean(singleFileName || hasSubFiles || hasLegacyText);
 
                   return (
                     <div className="mt-3 ps-3 border-start border-2 border-info ms-1">
                       <div className="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <span>ℹ️ <strong>Item 1 (Vision, Mission, PEO, PSO & PO)</strong> is managed by the Course Coordinator.</span>
+                        <span>ℹ️ <strong>Item 1 (Vision, Mission, PEO, PSO & PO)</strong> is managed centrally by the Course Coordinator as a combined document.</span>
                         <a href="/faculty/course-coordinator" className="btn btn-sm btn-outline-info py-0 px-2 style-11" style={{ fontSize: 11 }}>
                           Open Course Coordinator Hub ↗
                         </a>
@@ -4840,9 +4593,32 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
                       {!hasAnyContent ? (
                         <div className="p-4 bg-light rounded border text-center text-muted small">
-                          — No Vision, Mission, PEO, PSO, or PO content entered by Course Coordinator yet —
+                          — No Vision, Mission, PEO, PSO, or PO document uploaded by Course Coordinator yet —
                         </div>
-                      ) : item1Mode === 'UPLOAD' ? (
+                      ) : singleFileName ? (
+                        <div className="p-3 bg-white border rounded shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-3">
+                          <div className="d-flex align-items-center gap-2">
+                            <span className="fs-4">📄</span>
+                            <div>
+                              <div className="fw-bold font-mono-ppsu text-navy-900 small">{singleFileName}</div>
+                              <small className="text-muted">Combined Institute &amp; Dept Vision, Mission &amp; PEO, PSO, PO</small>
+                            </div>
+                          </div>
+                          {singleFileUrl && (
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              onClick={() => setViewingDoc({
+                                title: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO',
+                                fileName: singleFileName,
+                                fileUrl: singleFileUrl
+                              })}
+                            >
+                              👁️ View Document
+                            </Button>
+                          )}
+                        </div>
+                      ) : hasSubFiles ? (
                         <div className="p-3 bg-white border rounded shadow-sm">
                           {subKeys.map((sk) => {
                             const fileUrl = subs[sk]?.fileUrl;

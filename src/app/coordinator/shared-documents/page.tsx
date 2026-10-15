@@ -5,7 +5,7 @@ import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, ProgressBar
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
 
 const SHARED_ITEMS = [
-  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional', subKeys: ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] },
+  { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional' },
   { index: 3,  name: 'Item 3 — Course Information Sheet (Syllabus)', category: 'Curriculum' },
   { index: 6,  name: 'Item 6 — Course Delivery Details (Lesson Plan)', category: 'Teaching', subKeys: ['lessonPlanLecture', 'lessonPlanLab', 'lessonPlanTutorial'] },
   { index: 7,  name: 'Item 7 — List of Laboratory Experiments', category: 'Practical' },
@@ -36,58 +36,6 @@ const SCHOOL_LABELS: Record<string, string> = {
   SOE: 'SOE (School of Engineering)',
   IDS: 'IDS',
   ICA: 'ICA'
-};
-
-const ITEM1_CONFIG: Record<string, { label: string; col1Header: string; col2Header: string; prefix: string; placeholder: string }> = {
-  vision: {
-    label: 'Institute Vision',
-    col1Header: 'Sr. No.',
-    col2Header: 'INSTITUTE VISION',
-    prefix: '',
-    placeholder: 'Enter Institute Vision statement...'
-  },
-  mission: {
-    label: 'Institute Mission',
-    col1Header: 'Sr. No.',
-    col2Header: 'INSTITUTE MISSION',
-    prefix: '',
-    placeholder: 'Enter Institute Mission statement...'
-  },
-  deptVision: {
-    label: 'Department Vision',
-    col1Header: 'Sr. No.',
-    col2Header: 'DEPARTMENT VISION',
-    prefix: '',
-    placeholder: 'Enter Department Vision statement...'
-  },
-  deptMission: {
-    label: 'Department Mission',
-    col1Header: 'Sr. No.',
-    col2Header: 'DEPARTMENT MISSION',
-    prefix: '',
-    placeholder: 'Enter Department Mission statement...'
-  },
-  peo: {
-    label: 'Programme Educational Objectives (PEO)',
-    col1Header: 'PEO No',
-    col2Header: 'PROGRAMME EDUCATIONAL OBJECTIVES',
-    prefix: 'PEO ',
-    placeholder: 'Enter PEO objective details...'
-  },
-  pso: {
-    label: 'Programme Specific Outcomes (PSO)',
-    col1Header: 'PSO No',
-    col2Header: 'PROGRAMME SPECIFIC OUTCOMES (PSO)',
-    prefix: 'PSO ',
-    placeholder: 'Enter PSO outcome details...'
-  },
-  po: {
-    label: 'Programme Outcomes (PO)',
-    col1Header: 'PO No',
-    col2Header: 'PROGRAMME OUTCOMES',
-    prefix: 'PO ',
-    placeholder: 'Enter PO outcome details...'
-  }
 };
 
 const uploadFileToServer = async (file: File): Promise<string> => {
@@ -126,116 +74,11 @@ export default function CoordinatorSharedDocumentsPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
-  const [item1RowsState, setItem1RowsState] = useState<Record<string, string[]>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [switchModal, setSwitchModal] = useState<{ open: boolean; targetMode: 'text' | 'upload' } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const handleToggleItem1Mode = async (targetMode: 'text' | 'upload') => {
-    setUploadingItem(1); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = schoolSharedMap.get(1);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      existingSubJson.item1Mode = targetMode === 'text' ? 'TEXT' : 'UPLOAD';
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          school: selectedSchool,
-          itemIndex: 1,
-          status: existingDoc?.status || 'UPLOADED',
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to switch mode');
-      }
-      showToast(`Switched Item 1 mode to ${targetMode === 'text' ? 'Enter Text' : 'Upload PDF'}.`);
-      setActionSuccess(`Item 1 mode set to ${targetMode === 'text' ? 'Enter Text' : 'Upload PDF'} for School ${selectedSchool}.`);
-      fetchSubjects(false);
-    } catch (err: any) {
-      setActionError(err.message || 'Mode switch failed');
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
-  const onModeBtnClick = (targetMode: 'text' | 'upload', activeItem1Mode: 'text' | 'upload') => {
-    if (targetMode === activeItem1Mode) return;
-
-    const doc = schoolSharedMap.get(1);
-    let subParsed: any = {};
-    try { if (doc?.subItemsJson) subParsed = JSON.parse(doc.subItemsJson); } catch (e) {}
-
-    const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
-    const hasTextData = subKeys.some((k) => !!subParsed[k]?.textContent?.trim());
-    const hasFileData = subKeys.some((k) => !!subParsed[k]?.fileName);
-
-    const currentHasData = activeItem1Mode === 'text' ? hasTextData : hasFileData;
-
-    if (currentHasData) {
-      setSwitchModal({ open: true, targetMode });
-    } else {
-      handleToggleItem1Mode(targetMode);
-    }
-  };
-
-  const parseTextToRows = (text?: string): string[] => {
-    if (!text || !text.trim()) return [''];
-    const clean = text.replace(/<[^>]*>/g, '');
-    const lines = clean
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return [''];
-    return lines.map((l) =>
-      l
-        .replace(/^(PEO|PSO|PO|\d+)\s*[\d\.\:\-]*\s*/i, '')
-        .replace(/^[•\-\*]\s*/, '')
-        .trim()
-    );
-  };
-
-  const getRowsForSubKey = (subKey: string, subDoc?: any): string[] => {
-    if (item1RowsState[subKey] !== undefined) {
-      return item1RowsState[subKey];
-    }
-    return parseTextToRows(subDoc?.textContent);
-  };
-
-  const updateRowText = (subKey: string, idx: number, val: string, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current[idx] = val;
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-  };
-
-  const addRow = (subKey: string, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current.push('');
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-  };
-
-  const removeRow = (subKey: string, idx: number, subDoc?: any) => {
-    const current = [...getRowsForSubKey(subKey, subDoc)];
-    current.splice(idx, 1);
-    if (current.length === 0) current.push('');
-    setItem1RowsState((prev) => ({ ...prev, [subKey]: current }));
-    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
-    handleSaveSubItemText(1, subKey, combined);
-  };
-
-  const handleSaveSection = (subKey: string, subDoc?: any) => {
-    const current = getRowsForSubKey(subKey, subDoc);
-    const combined = current.map((r) => r.trim()).filter(Boolean).join('\n');
-    handleSaveSubItemText(1, subKey, combined);
   };
 
   const fetchSubjects = async (showSpinner = true) => {
@@ -276,7 +119,7 @@ export default function CoordinatorSharedDocumentsPage() {
   );
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
-    if ((itemIndex === 18 ? !selectedSchool : !selectedSubjectId) || !file) return;
+    if (!selectedSubjectId || !file) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await uploadFileToServer(file);
@@ -284,7 +127,8 @@ export default function CoordinatorSharedDocumentsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(itemIndex === 18 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
+          subjectId: selectedSubjectId,
+          school: selectedSchool,
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
@@ -295,7 +139,9 @@ export default function CoordinatorSharedDocumentsPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      setActionSuccess(itemIndex === 18
+      setActionSuccess(itemIndex === 1
+        ? 'Shared Item #1 combined document uploaded and locked for all faculty across all divisions.'
+        : itemIndex === 18
         ? `Shared Action Plan document for School ${selectedSchool} (Item #18) uploaded and locked for all faculty.`
         : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
       fetchSubjects(false);
@@ -347,59 +193,16 @@ export default function CoordinatorSharedDocumentsPage() {
     }
   };
 
-  const handleSaveSubItemText = async (itemIndex: number, subKey: string, text: string) => {
-    if (itemIndex === 1 ? !selectedSchool : !selectedSubjectId) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
-    try {
-      const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
-      let existingSubJson: any = {};
-      try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
-
-      existingSubJson[subKey] = {
-        ...(existingSubJson[subKey] || {}),
-        textContent: text,
-        updatedAt: new Date().toISOString()
-      };
-
-      const res = await fetch('/api/coordinator/shared-documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(itemIndex === 1 ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
-          itemIndex,
-          status: 'UPLOADED',
-          fileName: existingDoc?.fileName || null,
-          fileUrl: existingDoc?.fileUrl || null,
-          subItemsJson: JSON.stringify(existingSubJson)
-        })
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Save failed');
-      }
-      const label = SUB_KEY_CONFIG[subKey]?.label || ITEM1_CONFIG[subKey]?.label || subKey;
-      showToast(`${label} saved successfully.`);
-      setActionSuccess(itemIndex === 1
-        ? `Item 1 ${label} saved for School ${selectedSchool}.`
-        : `Saved text for ${label}.`);
-      fetchSubjects(false);
-    } catch (err: any) {
-      setActionError(err.message || 'Save failed');
-      showToast(err.message || 'Save failed');
-    } finally {
-      setUploadingItem(null);
-    }
-  };
-
   const handleClearDoc = async (itemIndex: number) => {
-    if (([1, 18].includes(itemIndex)) ? !selectedSchool : !selectedSubjectId) return;
+    if (!selectedSubjectId && !selectedSchool) return;
     setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...([1, 18].includes(itemIndex) ? { school: selectedSchool } : { subjectId: selectedSubjectId }),
+          subjectId: selectedSubjectId,
+          school: selectedSchool,
           itemIndex,
           status: 'EMPTY',
           fileName: null,
@@ -408,7 +211,7 @@ export default function CoordinatorSharedDocumentsPage() {
         })
       });
       if (!res.ok) throw new Error('Failed to remove shared document');
-      setActionSuccess([1, 18].includes(itemIndex) ? `Shared Item #${itemIndex} document for ${selectedSchool} removed.` : `Shared document for Item #${itemIndex} removed.`);
+      setActionSuccess(`Shared document for Item #${itemIndex} removed.`);
       fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
@@ -677,62 +480,6 @@ export default function CoordinatorSharedDocumentsPage() {
                           </Card.Header>
 
                           <Card.Body className="p-3">
-                            {item.index === 1 && (() => {
-                              const activeItem1Mode: 'text' | 'upload' = (subParsed?.item1Mode === 'UPLOAD' || subParsed?.inputMode === 'upload') ? 'upload' : 'text';
-                              return (
-                                <div className="mb-4 p-3 bg-light rounded-3 border d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                  <div className="d-flex align-items-center gap-3">
-                                    <span className="fw-bold small text-navy-900">Select School / Institute:</span>
-                                    <Form.Select
-                                      size="sm"
-                                      style={{ maxWidth: 220, fontSize: 12, fontWeight: 600 }}
-                                      value={subParsed.school || 'SOE'}
-                                      onChange={(e) => handleSchoolChange(item.index, e.target.value)}
-                                    >
-                                      <option value="SOE">SOE (School of Engineering)</option>
-                                      <option value="IDS">IDS</option>
-                                      <option value="ICA">ICA</option>
-                                    </Form.Select>
-                                  </div>
-
-                                  {/* Item 1 Mode Toggle Group */}
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="small text-muted me-1 fw-bold">Item 1 Mode:</span>
-                                    <div className="d-flex rounded-3 overflow-hidden border shadow-sm" style={{ backgroundColor: '#fff' }}>
-                                      <button
-                                        type="button"
-                                        className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all ${
-                                          activeItem1Mode === 'text' ? 'btn-primary' : 'btn-light text-secondary'
-                                        }`}
-                                        style={{
-                                          backgroundColor: activeItem1Mode === 'text' ? '#1E3A8A' : '#ffffff',
-                                          color: activeItem1Mode === 'text' ? '#ffffff' : '#475569',
-                                          fontSize: '0.8rem'
-                                        }}
-                                        onClick={() => onModeBtnClick('text', activeItem1Mode)}
-                                      >
-                                        ✏️ Enter Text Mode
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={`btn btn-sm px-3 py-1.5 border-0 fw-bold transition-all ${
-                                          activeItem1Mode === 'upload' ? 'btn-primary' : 'btn-light text-secondary'
-                                        }`}
-                                        style={{
-                                          backgroundColor: activeItem1Mode === 'upload' ? '#1E3A8A' : '#ffffff',
-                                          color: activeItem1Mode === 'upload' ? '#ffffff' : '#475569',
-                                          fontSize: '0.8rem'
-                                        }}
-                                        onClick={() => onModeBtnClick('upload', activeItem1Mode)}
-                                      >
-                                        📎 Upload PDF Mode
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
                             {/* Render Sub-keys for multi-part shared items */}
                             {item.subKeys ? (
                               <div className="d-flex flex-column gap-4">
@@ -744,161 +491,6 @@ export default function CoordinatorSharedDocumentsPage() {
                                   const config = SUB_KEY_CONFIG[subKey] || { label: subKey };
                                   const isItem1 = item.index === 1;
                                   const activeItem1Mode: 'text' | 'upload' = (subParsed?.item1Mode === 'UPLOAD' || subParsed?.inputMode === 'upload') ? 'upload' : 'text';
-
-                                  // ITEM 1: Dynamic Multi-Row Table Editor in Text mode, File Uploader in Upload mode
-                                  if (isItem1) {
-                                    if (activeItem1Mode === 'upload') {
-                                      return (
-                                        <div key={subKey} className="rounded-2 border bg-light p-3">
-                                          <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-                                            <span className="fw-bold small text-navy-900">
-                                              {config.label}
-                                              {config.required ? <span className="text-danger ms-1">*</span> : <span className="text-muted ms-1" style={{ fontSize: 11 }}>(optional)</span>}
-                                            </span>
-                                            {hasSubFile ? (
-                                              <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>
-                                                ✓ File: {subDoc.fileName}
-                                              </span>
-                                            ) : (
-                                              <span className="badge bg-warning text-dark" style={{ fontSize: '0.7rem' }}>Pending Upload</span>
-                                            )}
-                                          </div>
-
-                                          <div className="d-flex align-items-center gap-2 flex-wrap mt-2">
-                                            {hasSubFile && (
-                                              <Button
-                                                variant="outline-primary"
-                                                size="sm"
-                                                onClick={() => setViewingDoc({
-                                                  title: `${item.name} — ${config.label}`,
-                                                  fileName: subDoc.fileName,
-                                                  fileUrl: subDoc.fileUrl || SAMPLE_PDF_DATA_URL
-                                                })}
-                                              >
-                                                👁️ View Document
-                                              </Button>
-                                            )}
-                                            <Form.Control
-                                              type="file"
-                                              size="sm"
-                                              style={{ width: '220px' }}
-                                              disabled={uploadingItem === item.index}
-                                              onChange={(e: any) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) handleUploadSubItem(item.index, subKey, file);
-                                                e.target.value = '';
-                                              }}
-                                            />
-                                            {uploadingItem === item.index && <span className="spinner-border spinner-border-sm text-primary" />}
-                                          </div>
-                                        </div>
-                                      );
-                                    }
-
-                                    const item1Cfg = ITEM1_CONFIG[subKey] || {
-                                      label: config.label,
-                                      col1Header: 'Sr. No.',
-                                      col2Header: config.label.toUpperCase(),
-                                      prefix: '',
-                                      placeholder: `Enter ${config.label} details...`
-                                    };
-                                    const rows = getRowsForSubKey(subKey, subDoc);
-
-                                    return (
-                                      <div key={subKey} className="border rounded-3 overflow-hidden shadow-sm bg-white">
-                                        {/* Header Bar */}
-                                        <div className="d-flex align-items-center justify-content-between p-3 border-bottom" style={{ backgroundColor: '#f8fafc' }}>
-                                          <div className="d-flex align-items-center gap-2">
-                                            <span className="fw-bold text-navy-900" style={{ fontSize: '0.95rem', color: '#1E3A8A' }}>
-                                              {item1Cfg.label}
-                                            </span>
-                                            {hasSubText ? (
-                                              <Badge bg="success" style={{ fontSize: '0.75rem' }}>✓ Saved ({subDoc.textDate || 'Recent'})</Badge>
-                                            ) : (
-                                              <Badge bg="warning" text="dark" style={{ fontSize: '0.75rem' }}>Pending</Badge>
-                                            )}
-                                          </div>
-                                          <Button
-                                            variant="success"
-                                            size="sm"
-                                            className="fw-bold d-flex align-items-center gap-1"
-                                            disabled={uploadingItem === 1}
-                                            onClick={() => handleSaveSection(subKey, subDoc)}
-                                          >
-                                            💾 Save Section
-                                          </Button>
-                                        </div>
-
-                                        {/* Styled Table matching print / PDF output (Light green header #d9ead3, clean dark borders) */}
-                                        <div className="p-3">
-                                          <Table bordered hover responsive className="mb-2" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-                                            <thead>
-                                              <tr style={{ background: '#d9ead3', borderBottom: '2px solid #000' }}>
-                                                <th style={{ width: '100px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                  {item1Cfg.col1Header}
-                                                </th>
-                                                <th style={{ textAlign: 'left', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                  {item1Cfg.col2Header}
-                                                </th>
-                                                <th style={{ width: '60px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
-                                                  Action
-                                                </th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {rows.map((rowText, rIdx) => {
-                                                const rowLabel = item1Cfg.prefix ? `${item1Cfg.prefix}${rIdx + 1}` : `${rIdx + 1}.`;
-                                                return (
-                                                  <tr key={rIdx} style={{ verticalAlign: 'top' }}>
-                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', paddingTop: '12px', color: '#000' }}>
-                                                      {rowLabel}
-                                                    </td>
-                                                    <td>
-                                                      <Form.Control
-                                                        as="textarea"
-                                                        rows={2}
-                                                        value={rowText}
-                                                        placeholder={item1Cfg.placeholder}
-                                                        onChange={(e) => updateRowText(subKey, rIdx, e.target.value, subDoc)}
-                                                        style={{ fontSize: '13px', fontFamily: 'inherit' }}
-                                                      />
-                                                    </td>
-                                                    <td style={{ textAlign: 'center', paddingTop: '10px' }}>
-                                                      <Button
-                                                        variant="outline-danger"
-                                                        size="sm"
-                                                        title="Delete Row"
-                                                        onClick={() => removeRow(subKey, rIdx, subDoc)}
-                                                        style={{ padding: '2px 8px', fontSize: '12px' }}
-                                                      >
-                                                        🗑️
-                                                      </Button>
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </Table>
-
-                                          <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                                            <Button
-                                              variant="outline-primary"
-                                              size="sm"
-                                              className="fw-semibold"
-                                              onClick={() => addRow(subKey, subDoc)}
-                                            >
-                                              ➕ Add Row ({item1Cfg.prefix ? `${item1Cfg.prefix}${rows.length + 1}` : `${rows.length + 1}.`})
-                                            </Button>
-                                            {subDoc?.lastSavedBy && subDoc?.lastSavedAt && (
-                                              <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
-                                                Last saved by <strong>{subDoc.lastSavedBy}</strong> on {new Date(subDoc.lastSavedAt).toLocaleDateString('en-IN')}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  }
 
                                   {/* Standard Sub-item Upload layout for other items (Item 6, 11, 12, 15) */}
                                   return (
@@ -952,7 +544,7 @@ export default function CoordinatorSharedDocumentsPage() {
                               /* Standard Single Document Upload */
                               <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
                                 <div>
-                                  {isUploaded && doc.fileName ? (
+                                  {isUploaded && doc?.fileName ? (
                                     <div className="d-flex align-items-center gap-2">
                                       <span className="fs-5">📄</span>
                                       <div>
@@ -963,25 +555,34 @@ export default function CoordinatorSharedDocumentsPage() {
                                   ) : (
                                     <span className="text-secondary small">Select PDF or Document file to upload centrally for this subject.</span>
                                   )}
+                                  {item.index === 1 && !doc?.fileName && doc?.subItemsJson && (
+                                    <div className="small text-info font-mono-ppsu mt-1">
+                                      ℹ️ Legacy Text Entry preserved — Upload combined PDF to replace
+                                    </div>
+                                  )}
                                 </div>
 
-                                <div className="d-flex align-items-center gap-2">
+                                <div className="d-flex align-items-center gap-2 flex-wrap">
                                   {isUploaded && (
                                     <>
-                                      <Button
-                                        variant="outline-primary"
-                                        size="sm"
-                                        onClick={() => setViewingDoc({
-                                          title: item.name,
-                                          fileName: doc.fileName || 'document.pdf',
-                                          fileUrl: doc.fileUrl || SAMPLE_PDF_DATA_URL
-                                        })}
-                                      >
-                                        View Document
-                                      </Button>
+                                      {doc?.fileUrl && (
+                                        <Button
+                                          variant="outline-primary"
+                                          size="sm"
+                                          style={{ minHeight: 38 }}
+                                          onClick={() => setViewingDoc({
+                                            title: item.name,
+                                            fileName: doc.fileName || 'document.pdf',
+                                            fileUrl: doc.fileUrl || SAMPLE_PDF_DATA_URL
+                                          })}
+                                        >
+                                          View Document
+                                        </Button>
+                                      )}
                                       <Button
                                         variant="outline-danger"
                                         size="sm"
+                                        style={{ minHeight: 38 }}
                                         disabled={uploadingItem === item.index}
                                         onClick={() => handleClearDoc(item.index)}
                                       >
@@ -990,11 +591,12 @@ export default function CoordinatorSharedDocumentsPage() {
                                     </>
                                   )}
 
-                                  <Form.Group controlId={`file-upload-${item.index}`}>
+                                  <Form.Group controlId={`file-upload-${item.index}`} className="mb-0">
                                     <Form.Control
                                       type="file"
                                       size="sm"
-                                      style={{ width: '230px' }}
+                                      style={{ width: '230px', minHeight: 38 }}
+                                      accept=".pdf,.doc,.docx"
                                       disabled={uploadingItem === item.index}
                                       onChange={(e: any) => {
                                         const file = e.target.files?.[0];
@@ -1040,34 +642,6 @@ export default function CoordinatorSharedDocumentsPage() {
           <span>✓</span> {toastMessage}
         </div>
       )}
-
-      {/* Mode Switch Confirmation Modal */}
-      <Modal show={Boolean(switchModal?.open)} onHide={() => setSwitchModal(null)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title className="h6 fw-bold">Switch Item 1 Input Mode?</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="small">
-          Item 1 currently has {switchModal?.targetMode === 'upload' ? 'saved text entries' : 'uploaded PDF files'}. Switching to {switchModal?.targetMode === 'upload' ? 'Upload PDF Mode' : 'Text Entry Mode'} will hide the current entries, but your data will be preserved without deleting anything. Continue?
-        </Modal.Body>
-        <Modal.Footer className="py-2">
-          <Button variant="secondary" size="sm" onClick={() => setSwitchModal(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="warning"
-            size="sm"
-            className="fw-bold"
-            onClick={() => {
-              if (switchModal) {
-                handleToggleItem1Mode(switchModal.targetMode);
-                setSwitchModal(null);
-              }
-            }}
-          >
-            Yes, Switch Mode
-          </Button>
-        </Modal.Footer>
-      </Modal>
 
       {/* Document View Modal */}
       <Modal show={!!viewingDoc} onHide={() => setViewingDoc(null)} size="lg" centered>

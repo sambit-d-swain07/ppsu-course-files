@@ -827,6 +827,16 @@ export default function MergedCourseFilePreviewPage({ params }: { params: Promis
           );
 
           if (item.index === 1) {
+            // 1. Single combined document uploaded for Item 1
+            if (uploadedFiles.length > 0) {
+              return (
+                <div key={item.index}>
+                  {dividerPage}
+                  <UploadedFileEmbeds files={uploadedFiles} />
+                </div>
+              );
+            }
+
             const customSecs = Array.isArray(sb?.customSections) ? sb.customSections : [];
             const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'] as const;
             const item1Mode: string = sb?.item1Mode || 'TEXT';

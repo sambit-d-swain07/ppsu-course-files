@@ -1365,10 +1365,15 @@ export function renderCleanCourseFileHtml(cf: any, checklist: any[], subject?: a
 
   const sectionPagesHtml = CHECKLIST_ITEMS.map((item) => {
     let itemContentHtml = '';
+    const db = dbi(item.index);
     if (item.index === 1) {
-      itemContentHtml = item1Html || `<div style="text-align: center; color: #777; padding: 40px 0;">— Content Pending —</div>`;
+      itemContentHtml = db?.fileName
+        ? `<div style="border: 1px solid #000; padding: 20px; text-align: center; border-radius: 4px; margin-top: 16px;">
+            <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">📄 ${db.fileName}</div>
+            <div style="font-size: 12px; color: #555;">Uploaded Document Attachment</div>
+           </div>`
+        : (item1Html || `<div style="text-align: center; color: #777; padding: 40px 0;">— Content Pending —</div>`);
     } else {
-      const db = dbi(item.index);
       itemContentHtml = db?.fileName
         ? `<div style="border: 1px solid #000; padding: 20px; text-align: center; border-radius: 4px; margin-top: 16px;">
             <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">📄 ${db.fileName}</div>

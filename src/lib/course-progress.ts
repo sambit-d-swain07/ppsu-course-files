@@ -13,6 +13,9 @@ export function isChecklistItemComplete(dbItem: any, courseFile?: any): boolean 
 
   // Item 1: Institute Vision, Mission & PEO, PSO & PO
   if (itemIndex === 1) {
+    if (dbItem.fileName || dbItem.fileUrl || dbItem.sharedFileName || dbItem.coordinatorUploaded || dbItem.status === 'UPLOADED') {
+      return true;
+    }
     let subs: any = {};
     try {
       if (typeof dbItem.subItemsJson === 'string') {
@@ -21,15 +24,10 @@ export function isChecklistItemComplete(dbItem: any, courseFile?: any): boolean 
         subs = dbItem.subItemsJson;
       }
     } catch {}
-    const mode = subs.item1Mode || 'TEXT';
     const subKeys = ['vision', 'mission', 'deptVision', 'deptMission', 'peo', 'pso', 'po'];
-    if (mode === 'UPLOAD') {
-      const hasFile = subKeys.some((k: string) => subs[k]?.fileUrl || subs[k]?.fileName);
-      return Boolean(hasFile || dbItem.coordinatorUploaded || dbItem.fileName || dbItem.fileUrl || dbItem.sharedFileName);
-    }
-    // TEXT mode
-    const hasText = subKeys.every((k: string) => subs[k]?.textContent?.trim());
-    return Boolean(hasText || dbItem.coordinatorUploaded || dbItem.fileName || dbItem.fileUrl || dbItem.sharedFileName);
+    const hasFile = subKeys.some((k: string) => subs[k]?.fileUrl || subs[k]?.fileName);
+    const hasText = subKeys.some((k: string) => subs[k]?.textContent?.trim());
+    return Boolean(hasFile || hasText);
   }
 
   // Item 5: Department Academic Calendar (Admin-published)
