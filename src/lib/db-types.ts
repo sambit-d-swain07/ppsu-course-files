@@ -18,7 +18,7 @@ export interface CourseFile {
   courseTitle: string;
   semester: string;
   academicYear: string;
-  progress: number; // completed checklist items (0-20)
+  progress: number; // completed checklist items (0-19)
   status: 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'NEEDS_REVISION' | 'APPROVED';
   facultyId: string;
   facultyName?: string;
@@ -76,7 +76,7 @@ export interface Subject {
 export interface ChecklistItem {
   id: string;
   courseFileId: string;
-  itemIndex: number; // 1 to 20
+  itemIndex: number; // 1 to 19
   status: 'EMPTY' | 'UPLOADED';
   fileName?: string;
   fileUrl?: string;

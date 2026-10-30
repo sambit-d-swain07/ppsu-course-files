@@ -242,7 +242,6 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
     }
   };
 
-  const item20Sig = checklist.find((c) => c.itemIndex === 20);
 
   return (
     <div>
@@ -322,7 +321,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
       {/* SECTION 3 & 23: Checklist Scoring Table (Layout Containment & Clean View Controls) */}
       <div className="card-custom p-0 overflow-hidden mb-4">
         <div className="px-4 py-3" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
-          <span className="fw-bold">Evaluate Checklist Particulars (Items 1 – 20)</span>
+          <span className="fw-bold">Evaluate Checklist Particulars (Items 1 – 19)</span>
         </div>
 
         <div className="p-0">

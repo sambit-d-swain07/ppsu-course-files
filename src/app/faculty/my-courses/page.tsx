@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Row, Col, Card, ProgressBar, Spinner } from 'react-bootstrap';
+import { TOTAL_CHECKLIST_ITEMS } from '@/lib/course-progress';
 
 export default function FacultyMyCourses() {
   const [courses, setCourses] = useState<any[]>([]);
@@ -66,8 +67,8 @@ export default function FacultyMyCourses() {
         <Row className="g-4">
           {courses.map((course) => {
             const isLabBatch = course.access?.mode === 'LAB_BATCH';
-            const total = isLabBatch ? (course.labTotal || 6) : 20;
-            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(20, course.progress || 0);
+            const total = isLabBatch ? (course.labTotal || 5) : TOTAL_CHECKLIST_ITEMS;
+            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(TOTAL_CHECKLIST_ITEMS, course.progress || 0);
             const percent = Math.min(100, Math.round((completed / total) * 100));
             return (
               <Col xs={12} md={6} lg={4} key={course.id}>

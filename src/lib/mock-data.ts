@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { User, CourseFile, ChecklistItem, Notification, Subject } from './db-types';
-import { calculateCourseProgress } from './course-progress';
+import { calculateCourseProgress, TOTAL_CHECKLIST_ITEMS } from './course-progress';
 
 export const SAMPLE_PDF_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQKJSDigqwKMSAwIG9iagoxIDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+CmVuZG9iago yIDAgb2JqCjw8L1R5cGUvUGFnZXMvQ291bnQgMS9LaWRzWzMgMCBSXT4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUvUGFnZS9NZWRpYUJveFswIDAgNjEyIDc5Ml0vUGFyZW50IDIgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA0IDAgUj4+Pj4vQ29udGVudHMgNSAwIFI+PgplbmRvYmoKNCAwIG9iago8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PgplbmRvYmoKNSAwIG9iago8PC9MZW5ndGggNzU+PnN0cmVhbQpCVAovRjEgMTIgVGYKNzIgNzEyIFRkCihQUDMgU2F2YW5pIFVuaXZlcnNpdHkgLSBDb3Vyc2UgRmlsZSBPZmZpY2lhbCBDb3Vyc2UgRmlsZSkgVGoKRW5kCnN0cmVhbQplbmRvYmoKdHJhaWxlcgo8PC9Sb290IDEgMCBSPj4KJSVFT0YK';
 
@@ -323,7 +323,7 @@ export async function createCourseFile(data: {
       ...data, facultyName: data.facultyName || faculty?.name, department: data.department || faculty?.department,
     school: data.school || faculty?.school, progress: 0, status: 'DRAFT'
     } });
-    await tx.checklistItem.createMany({ data: Array.from({ length: 20 }, (_, index) => ({
+    await tx.checklistItem.createMany({ data: Array.from({ length: TOTAL_CHECKLIST_ITEMS }, (_, index) => ({
       courseFileId: created.id, itemIndex: index + 1, status: 'EMPTY', subItemsJson: subItems(index + 1)
     })) });
     return created;
@@ -345,7 +345,7 @@ async function createSubjectCourseFile(tx: any, subject: any, teacher: any) {
     department: subject.department, school: subject.school, division: subject.division,
     subjectId: subject.id, progress: 0, status: 'DRAFT'
   } });
-  await tx.checklistItem.createMany({ data: Array.from({ length: 20 }, (_, index) => ({
+  await tx.checklistItem.createMany({ data: Array.from({ length: TOTAL_CHECKLIST_ITEMS }, (_, index) => ({
     courseFileId: created.id, itemIndex: index + 1, status: 'EMPTY', subItemsJson: checklistSubItems(index + 1)
   })) });
   return created;
@@ -922,7 +922,7 @@ export async function createSubject(data: {
   const teacher = await prisma.user.findUnique({ where: { id: data.courseTeacherId } });
   if (!teacher) throw new Error('Course Teacher not found');
 
-  // Transaction only performs the atomic writes: subject + courseFile + 20 checklist rows.
+  // Transaction only performs the atomic writes: subject + courseFile + 19 checklist rows.
   const subject = await prisma.$transaction(async tx => {
     const created = await tx.subject.create({ data: { ...data, labTeacherAId: data.labTeacherAId || null, labTeacherBId: data.labTeacherBId || null, labTeacherCId: data.labTeacherCId || null } });
     await createSubjectCourseFile(tx, created, teacher);

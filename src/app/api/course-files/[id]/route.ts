@@ -21,6 +21,7 @@ import {
 import { verifyToken } from '@/lib/jwt';
 import { noStoreJson } from '@/lib/api-response';
 import { getSubjectRoles, getBatchOwnerInfo, getLockBannerText, LAB_ITEMS, LAB_VISIBLE_ITEMS } from '@/lib/subject-access';
+import { COURSE_TEACHER_ITEM_INDICES } from '@/lib/course-progress';
 
 export const dynamic = 'force-dynamic';
 
@@ -347,8 +348,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             rolesSummary: roles.rolesSummary,
             batch: primaryBatch,
             ownedBatches: roles.ownedBatches,
-            allowedItems: roles.accessLevel === 'LAB' ? LAB_ITEMS : Array.from({ length: 20 }, (_, i) => i + 1),
-            editableItems: roles.accessLevel === 'LAB' ? (isUserBatchSubmitted ? [] : LAB_ITEMS) : Array.from({ length: 20 }, (_, i) => i + 1),
+            allowedItems: roles.accessLevel === 'LAB' ? LAB_ITEMS : COURSE_TEACHER_ITEM_INDICES,
+            editableItems: roles.accessLevel === 'LAB' ? (isUserBatchSubmitted ? [] : LAB_ITEMS) : COURSE_TEACHER_ITEM_INDICES,
             isSubmitted: isUserBatchSubmitted,
             lockBannerText: (roles.accessLevel === 'LAB' && isUserBatchSubmitted) ? getLockBannerText(primaryBatch) : null,
             submittedBatchesMap,

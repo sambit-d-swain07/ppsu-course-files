@@ -5,6 +5,8 @@
  * Ensures the My Courses dashboard cards and the checklist detail page always show identical numbers.
  */
 
+export const TOTAL_CHECKLIST_ITEMS = 19;
+export const COURSE_TEACHER_ITEM_INDICES = Array.from({ length: TOTAL_CHECKLIST_ITEMS }, (_, i) => i + 1);
 export const SHARED_COORDINATOR_ITEMS = [1, 3, 6, 7, 10, 11, 12, 15, 18];
 
 export function isChecklistItemComplete(dbItem: any, courseFile?: any): boolean {
@@ -41,17 +43,6 @@ export function isChecklistItemComplete(dbItem: any, courseFile?: any): boolean 
     );
   }
 
-  // Item 20: Course Faculty Signature & Declaration
-  if (itemIndex === 20) {
-    return Boolean(
-      courseFile?.facultyConfirmed ||
-      courseFile?.facultySignedAt ||
-      courseFile?.facultySignatureUrl ||
-      dbItem.status === 'UPLOADED' ||
-      dbItem.status === 'SUBMITTED' ||
-      dbItem.fileName
-    );
-  }
 
   // Coordinator-shared items: 3, 6, 7, 10, 11, 12, 15, 18
   if (dbItem.isCoordinatorShared) {
@@ -149,7 +140,7 @@ export function calculateCourseProgress(
 ): { completed: number; total: number; percent: number } {
   const indices = allowedItemIndices && allowedItemIndices.length > 0
     ? allowedItemIndices
-    : Array.from({ length: 20 }, (_, i) => i + 1);
+    : COURSE_TEACHER_ITEM_INDICES;
 
   const total = indices.length;
   const completed = indices.filter((idx) => {

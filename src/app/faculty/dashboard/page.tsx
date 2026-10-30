@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Row, Col, ProgressBar } from 'react-bootstrap';
+import { TOTAL_CHECKLIST_ITEMS } from '@/lib/course-progress';
 
 function getStatusBadgeClass(status: string) {
   switch (status) {
@@ -185,8 +186,8 @@ export default function FacultyDashboard() {
         <Row className="g-3">
           {courses.map((course) => {
             const isLabBatch = course.access?.mode === 'LAB_BATCH';
-            const total = isLabBatch ? (course.labTotal || 6) : 20;
-            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(20, course.progress || 0);
+            const total = isLabBatch ? (course.labTotal || 5) : TOTAL_CHECKLIST_ITEMS;
+            const completed = isLabBatch ? Math.min(total, course.labProgress ?? 0) : Math.min(TOTAL_CHECKLIST_ITEMS, course.progress || 0);
             const percent = Math.min(100, Math.round((completed / total) * 100));
             const division = course.division || course.subject?.division;
 

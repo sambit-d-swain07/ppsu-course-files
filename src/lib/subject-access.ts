@@ -2,15 +2,15 @@
  * Shared Subject Access Control & Batch Ownership Module
  *
  * LAB_ITEMS         — the items a lab teacher can READ and WRITE to.
- * LAB_VISIBLE_ITEMS  — all items shown to a lab teacher (LAB_ITEMS + locked 9 + locked 20).
+ * LAB_VISIBLE_ITEMS  — all items shown to a lab teacher (LAB_ITEMS).
  * LAB_EDITABLE_ITEMS — alias for LAB_ITEMS (editable subset).
  * LAB_ITEM_NAMES_STRING — human-readable list for banners, derived from LAB_ITEMS.
  */
 
-export const LAB_ITEMS = [2, 4, 7, 8, 19, 20];
+export const LAB_ITEMS = [2, 4, 7, 8, 19];
 export const LAB_EDITABLE_ITEMS = LAB_ITEMS;
-export const LAB_VISIBLE_ITEMS  = [2, 4, 7, 8, 19, 20];
-export const LAB_ITEM_NAMES_STRING = '2, 4, 7, 8, 19, 20';
+export const LAB_VISIBLE_ITEMS  = [2, 4, 7, 8, 19];
+export const LAB_ITEM_NAMES_STRING = '2, 4, 7, 8, 19';
 
 export interface SubjectRoles {
   userId: string;
@@ -129,7 +129,7 @@ export function canUserEditItem(userId: string | undefined | null, subject: any,
     return true;
   }
   if (roles.accessLevel === 'LAB') {
-    // Lab-only user can ONLY edit lab items: 2, 4, 7, 8, 20
+    // Lab-only user can ONLY edit lab items: 2, 4, 7, 8, 19
     return LAB_ITEMS.includes(itemIndex);
   }
 

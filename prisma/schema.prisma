@@ -142,7 +142,7 @@ model ChecklistItem {
   id           String     @id @default(uuid())
   courseFileId String
   courseFile   CourseFile @relation(fields: [courseFileId], references: [id], onDelete: Cascade)
-  itemIndex    Int // 1 to 20
+  itemIndex    Int // 1 to 19
   status       String // "EMPTY", "UPLOADED"
 
   // Uploaded file info

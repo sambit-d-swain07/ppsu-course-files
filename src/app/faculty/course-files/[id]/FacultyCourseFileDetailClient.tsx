@@ -29,8 +29,7 @@ const CHECKLIST_ITEMS = [
   { index: 16, name: 'CO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 17, name: 'PO Attainment output sheet',                                           maxScore: 10, required: false },
   { index: 18, name: 'Action to be taken for next year based on CO attainment',              maxScore: 10, required: true  },
-  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  },
-  { index: 20, name: 'Course Faculty Signature & Declaration',                               maxScore: 0,  required: true  }
+  { index: 19, name: 'Lecture notes',                                                        maxScore: 20, required: true  }
 ];
 
 /** Indices of checklist items that are required — derived from CHECKLIST_ITEMS to keep in sync. */
@@ -48,9 +47,8 @@ const PREDEFINED_THEORY_CRITERIA = [
   { id: 'predef-faculty-eval', label: 'Faculty Evaluation' },
 ];
 
-// Lab-teacher visible and editable item indices — sourced from shared config to stay in sync.
-const LAB_TEACHER_ITEM_INDICES     = LAB_VISIBLE_ITEMS;   // shown to lab teacher (9, 20 visible but locked)
-const LAB_TEACHER_EDITABLE_ITEM_INDICES = LAB_EDITABLE_ITEMS; // actually writable [2, 4, 8, 14]
+const LAB_TEACHER_ITEM_INDICES     = LAB_VISIBLE_ITEMS;   // shown to lab teacher
+const LAB_TEACHER_EDITABLE_ITEM_INDICES = LAB_EDITABLE_ITEMS; // actually writable [2, 4, 7, 8, 19]
 
 // Title-case helper for criterion labels
 const toTitleCase = (s: string) => s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
@@ -2796,7 +2794,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleSubmit = async () => {
     const missingRequired = REQUIRED_ITEM_INDICES.filter((idx) => {
-      if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5 || idx === 20) return false;
+      if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5) return false;
       return !isItemComplete(idx);
     });
     const incompleteBatches = getIncompleteItem8Batches();
@@ -2930,7 +2928,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                 <p className="small text-secondary mb-0">
                   {isBatchSubmitted
                     ? (access.lockBannerText || `Your Batch ${access.batch} lab data (Items ${LAB_EDITABLE_ITEMS.join(', ')}) has been submitted to the Course Teacher and is locked.`)
-                    : `Manage your assigned lab items (Items ${LAB_EDITABLE_ITEMS.join(', ')}). Items 9 and 20 are view-only for lab teachers. Submitting will send your data directly to the Course Teacher.`}
+                    : `Manage your assigned lab items (Items ${LAB_EDITABLE_ITEMS.join(', ')}). Submitting will send your data directly to the Course Teacher.`}
                 </p>
               </div>
               <Button
@@ -4500,7 +4498,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   )}
 
                   {/* SECTION 16: Right-side controls for Standard Items (View, Replace, Remove) */}
-                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 14 && item.index !== 18 && item.index !== 19 && item.index !== 20 && (
+                  {!isItem1 && !isItem6 && !isItem8 && !isIA && !isUniv && !isLockedByStudentList && !isRestricted && item.index !== 4 && item.index !== 5 && item.index !== 9 && item.index !== 14 && item.index !== 18 && item.index !== 19 && (
                     <div className="d-flex align-items-center gap-2 flex-wrap flex-shrink-0 ms-auto">
                       {dbItem.isCoordinatorShared ? (
                         (dbItem.fileName || dbItem.sharedFileName || dbItem.coordinatorUploaded) ? (
@@ -5844,44 +5842,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   );
                 })()}
 
-                {/* Item 20: Course Faculty Signature & Declaration */}
-                {item.index === 20 && !isRestricted && (
-                  <div className="mt-3 ps-4 border-start border-2 border-success ms-2">
-                    <div className="p-3 bg-light rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
-                      <div>
-                        <div className="fw-bold small text-navy-900">
-                          {isLabTeacher ? `Batch ${access.batch} Lab Faculty Signature & Submission` : 'Course Faculty Signature & Declaration'}
-                        </div>
-                        <div className="small text-secondary mt-1">
-                          {isLabTeacher ? (
-                            isBatchSubmitted ? (
-                              <span className="text-success fw-bold font-mono-ppsu">
-                                ✓ Confirmed &amp; Submitted to Course Teacher for Batch {access.batch}
-                              </span>
-                            ) : (
-                              <span className="text-muted">
-                                ⏳ Pending confirmation &amp; submission via the Lab Teacher Submission Gate below.
-                              </span>
-                            )
-                          ) : (
-                            (courseFile?.facultyConfirmed || courseFile?.facultySignedAt || courseFile?.facultySignatureUrl) ? (
-                              <span className="text-success fw-bold font-mono-ppsu">
-                                ✓ Confirmed &amp; Signed by Course Faculty ({courseFile.facultySignatureName || courseFile.facultyName || 'Faculty'})
-                              </span>
-                            ) : (
-                              <span className="text-muted">
-                                ⏳ Pending final confirmation &amp; submission via the Faculty Declaration gate below.
-                              </span>
-                            )
-                          )}
-                        </div>
-                      </div>
-                      {(courseFile?.facultyConfirmed || isBatchSubmitted) && (
-                        <Badge bg="success" className="px-3 py-2">✓ Verified &amp; Signed</Badge>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -5917,7 +5877,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
         );
         const isCoordinatorReady = item1Done && item18Done;
         const missingRequiredItems = REQUIRED_ITEM_INDICES.filter((idx) => {
-          if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5 || idx === 20) return false;
+          if (SHARED_COORDINATOR_ITEMS.includes(idx) || idx === 5) return false;
           return !isItemComplete(idx);
         });
         // Faculty items being complete is sufficient to enable the Submit button.
@@ -6013,7 +5973,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             {isBatchSubmitted ? (
               <div className="p-3 bg-white rounded border d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div className="small text-secondary">
-                  All assigned lab items (Items 2, 4, 7, 8, 19, 20) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
+                  All assigned lab items (Items 2, 4, 7, 8, 19) are complete and locked for Batch {access.batch}. Your lab data has been submitted to the Course Teacher.
                 </div>
                 <Button variant="success" disabled size="sm" className="fw-bold px-3 py-2">
                   ✓ Submitted
