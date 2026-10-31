@@ -33,7 +33,12 @@ export async function proxy(request: NextRequest) {
     if (!payload) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    if (payload.role !== 'FACULTY' && payload.role !== 'ADMIN') {
+    // Allow Merged Course File Preview for all reviewer roles (Faculty, Coordinator, Evaluator, Admin)
+    if (pathname.includes('/preview')) {
+      if (payload.role !== 'FACULTY' && payload.role !== 'COORDINATOR' && payload.role !== 'EVALUATOR' && payload.role !== 'ADMIN') {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+    } else if (payload.role !== 'FACULTY' && payload.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/coordinator/dashboard', request.url));
     }
   }
@@ -42,7 +47,12 @@ export async function proxy(request: NextRequest) {
     if (!payload) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    if (payload.role !== 'COORDINATOR' && payload.role !== 'EVALUATOR' && payload.role !== 'ADMIN') {
+    // Allow evaluation review route for Coordinators, Evaluators, Admins, and Course Coordinator Faculty
+    if (pathname.includes('/review/')) {
+      if (payload.role !== 'COORDINATOR' && payload.role !== 'EVALUATOR' && payload.role !== 'ADMIN' && payload.role !== 'FACULTY') {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+    } else if (payload.role !== 'COORDINATOR' && payload.role !== 'EVALUATOR' && payload.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/faculty/dashboard', request.url));
     }
   }

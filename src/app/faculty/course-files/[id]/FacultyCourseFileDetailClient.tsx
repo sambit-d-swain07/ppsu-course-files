@@ -2869,6 +2869,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
             👁️ Preview Merged Course File
           </Link>
+          {courseFile.status !== 'DRAFT' && (
+            <Link
+              href={`/coordinator/review/${courseFileId}`}
+              className="btn btn-primary btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm"
+            >
+              📝 Evaluation & Scoring Sheet
+            </Link>
+          )}
           <span className={`badge-custom ${statusBadgeClass(courseFile.status)}`}>
             {statusLabel(courseFile.status)}
           </span>
@@ -5943,6 +5951,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                   >
                     👁️ Preview Merged Course File
                   </Link>
+                  {courseFile?.status !== 'DRAFT' && (
+                    <Link
+                      href={`/coordinator/review/${courseFileId}`}
+                      className="btn btn-outline-primary px-3 py-2 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                    >
+                      📝 Evaluation & Scoring Sheet
+                    </Link>
+                  )}
                   <Button
                     id="btn-submit-checklist"
                     className="btn-ppsu-accent px-4 py-2"

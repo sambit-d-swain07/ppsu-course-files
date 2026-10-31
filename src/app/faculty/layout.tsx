@@ -10,6 +10,12 @@ const TAB_STORAGE_KEY = 'ppsu_active_role_tab';
 export default function FacultyLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Standalone preview pages must render full-bleed without AppShell or faculty sidebar
+  if (pathname.includes('/preview')) {
+    return <>{children}</>;
+  }
+
   const [user, setUser] = useState<any>(null);
   const [isAlsoCoordinator, setIsAlsoCoordinator] = useState(false);
   const [isCoordinatorAssigned, setIsCoordinatorAssigned] = useState(false);

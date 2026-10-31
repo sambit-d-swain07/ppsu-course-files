@@ -260,6 +260,9 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
           <Link href={`/faculty/course-files/${courseFileId}/preview`} target="_blank" className="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
             👁️ Preview Merged Course File
           </Link>
+          <a href="#evaluation-scoring-sheet" className="btn btn-primary btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm">
+            📝 Evaluation & Scoring Sheet
+          </a>
           <span className={`badge-custom ${statusBadgeClass(courseFile.status)}`}>
             {statusLabel(courseFile.status)}
           </span>
@@ -319,7 +322,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
       </div>
 
       {/* SECTION 3 & 23: Checklist Scoring Table (Layout Containment & Clean View Controls) */}
-      <div className="card-custom p-0 overflow-hidden mb-4">
+      <div id="evaluation-scoring-sheet" className="card-custom p-0 overflow-hidden mb-4">
         <div className="px-4 py-3" style={{ background: 'var(--ppsu-primary)', color: '#fff' }}>
           <span className="fw-bold">Evaluate Checklist Particulars (Items 1 – 19)</span>
         </div>
@@ -483,23 +486,44 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                                   </Button>
                                 )}
                               </div>
-                            ) : (dbItem.batchSubmissions || subItems?.batches)?.length ? (
-                              (dbItem.batchSubmissions || subItems?.batches).map((batch: any, bIdx: number) => (
-                                <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
-                                  <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
-                                  {batch?.fileName || batch?.subItemsJson ? (
-                                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                      <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                      <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name || batch.batch}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>
-                                        👁️ View
-                                      </Button>
+                            ) : (() => {
+                                const bList = Array.isArray(dbItem.batchSubmissions) ? dbItem.batchSubmissions : Array.isArray(subItems?.batches) ? subItems.batches : [];
+                                if (bList.length === 0) return null;
+                                return bList.map((batch: any, bIdx: number) => (
+                                  <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                    <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
+                                    {batch?.fileName || batch?.subItemsJson ? (
+                                      <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                        <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                        <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name || batch.batch}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>
+                                          👁️ View
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                    )}
+                                  </div>
+                                ));
+                              })() ? (
+                                (() => {
+                                  const bList = Array.isArray(dbItem.batchSubmissions) ? dbItem.batchSubmissions : Array.isArray(subItems?.batches) ? subItems.batches : [];
+                                  return bList.map((batch: any, bIdx: number) => (
+                                    <div key={batch.id || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
+                                      <span className="fw-semibold text-truncate">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : batch.name ? `— ${batch.name}` : ''}</span>
+                                      {batch?.fileName || batch?.subItemsJson ? (
+                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                          <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                          <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: `Laboratory Rubrics — ${batch.name || batch.batch}`, fileName: batch.fileName, fileUrl: batch.fileUrl })}>
+                                            👁️ View
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
+                                      )}
                                     </div>
-                                  ) : (
-                                    <span className="text-muted" style={{ fontSize: 11 }}>✗ Not uploaded yet</span>
-                                  )}
-                                </div>
-                              ))
-                            ) : uploaded ? (
+                                  ));
+                                })()
+                              ) : uploaded ? (
                               <div className="d-flex align-items-center gap-2 mt-1">
                                 <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
                                 <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
@@ -538,8 +562,23 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                           </div>
                         ) : item.index === 2 || item.index === 7 ? (
                           <div className="mt-2 small text-secondary">
-                            {(dbItem.batchSubmissions || []).length > 0 ? (
-                              (dbItem.batchSubmissions || []).map((batch: any, bIdx: number) => (
+                            {(() => {
+                              const bList = Array.isArray(dbItem.batchSubmissions) ? dbItem.batchSubmissions : [];
+                              if (bList.length === 0) {
+                                return uploaded ? (
+                                  <div className="d-flex align-items-center gap-2 mt-1">
+                                    <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
+                                    <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
+                                      👁️ View
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                    ✗ Not uploaded yet
+                                  </div>
+                                );
+                              }
+                              return bList.map((batch: any, bIdx: number) => (
                                 <div key={batch.batch || bIdx} className="d-flex align-items-center justify-content-between mb-1 py-1 px-2 bg-light rounded border">
                                   <span className="fw-semibold">Batch {batch.batch || String.fromCharCode(65 + bIdx)} {batch.facultyName ? `— ${batch.facultyName}` : ''}</span>
                                   {batch.status === 'PENDING' ? (
@@ -548,31 +587,20 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                                     <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Submitted</span>
                                   )}
                                 </div>
-                              ))
-                            ) : uploaded ? (
-                              <div className="d-flex align-items-center gap-2 mt-1">
-                                <span className="text-success fw-bold" style={{ fontSize: 11 }}>✓ Uploaded</span>
-                                <Button size="sm" variant="outline-info" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setViewingDoc({ title: item.name, fileName: dbItem.fileName || 'document.pdf', fileUrl: dbItem.fileUrl })}>
-                                  👁️ View
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                ✗ Not uploaded yet
-                              </div>
-                            )}
+                              ));
+                            })()}
                           </div>
                         ) : item.index === 11 || item.index === 12 ? (<>{(() => {
                           // Pull Item 9 (Theory Continuous Evaluation Rubrics) data for (d) Mark Statement
                           const item9Db = checklist.find((c) => c?.itemIndex === 9);
                           const item9Subs = item9Db?.subItemsJson ? (() => { try { return JSON.parse(item9Db.subItemsJson); } catch { return {}; } })() : {};
-                          const criteria: any[] = Array.isArray(item9Subs.criteria) ? item9Subs.criteria : [];
-                          const rawStudents: any[] = Array.isArray(item9Subs.students) ? item9Subs.students : [];
+                          const criteria: any[] = Array.isArray(item9Subs?.criteria) ? item9Subs.criteria : [];
+                          const rawStudents: any[] = Array.isArray(item9Subs?.students) ? item9Subs.students : [];
                           // Compute per-student total marks from Item 9
                           const studentRows = rawStudents.map((s: any) => ({
-                            name: s.name || s.studentName || '',
-                            enrolmentNumber: s.enrolmentNumber || s.id || '',
-                            total: criteria.reduce((sum: number, c: any) => sum + (Number(s.marks?.[c.id]) || 0), 0)
+                            name: s?.name || s?.studentName || '',
+                            enrolmentNumber: s?.enrolmentNumber || s?.id || '',
+                            total: criteria.reduce((sum: number, c: any) => sum + (Number(s?.marks?.[c?.id]) || 0), 0)
                           }));
                           // Marks-band chart data (out of 30)
                           const markBands = ['below 12', '13–15', '16–18', '19–21', '22–24', '25–27', '28–30'];
@@ -793,7 +821,14 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
                                   fileName: dbItem.fileName,
                                   fileUrl: dbItem.fileUrl,
                                   fileType: dbItem.fileName.split('.').pop()?.toUpperCase() || 'PDF',
-                                  uploadDate: dbItem.updatedAt ? new Date(dbItem.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                                  uploadDate: (() => {
+                                    try {
+                                      const d = dbItem.updatedAt ? new Date(dbItem.updatedAt) : new Date();
+                                      return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
+                                    } catch {
+                                      return new Date().toISOString().split('T')[0];
+                                    }
+                                  })()
                                 }];
                               }
                               return docs.map((doc: any) => (

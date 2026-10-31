@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
     const subject = await getSubjectForCourseFile(courseFileId);
     const labBatch = payload.role === 'FACULTY' ? getLabBatchForUser(subject, payload.userId) : null;
 
-    if (payload.role === 'COORDINATOR' && courseFile.status === 'APPROVED') {
+    if ((payload.role === 'COORDINATOR' || payload.role === 'EVALUATOR') && courseFile.status === 'APPROVED') {
       return noStoreJson({ error: 'This course file has already been approved and is locked.' }, { status: 409 });
     }
 
@@ -30,8 +30,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
 
     // Batch items processing for Coordinator Evaluation scoring
     if (Array.isArray(body.items)) {
-      const isCoordinator = payload.role === 'COORDINATOR' || payload.role === 'ADMIN';
-      if (!isCoordinator) {
+      const isReviewer =
+        payload.role === 'COORDINATOR' ||
+        payload.role === 'EVALUATOR' ||
+        payload.role === 'ADMIN' ||
+        subject?.evaluatorId === payload.userId ||
+        subject?.courseCoordinatorId === payload.userId;
+      if (!isReviewer) {
         return noStoreJson({ error: 'Forbidden' }, { status: 403 });
       }
       const batchList = body.items.map((it: any) => ({
@@ -47,7 +52,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ courseFi
 
     const { itemIndex, status, fileName, fileUrl, subItemsJson, score, remarks } = body;
 
-    if (itemIndex === undefined || itemIndex < 1 || itemIndex > 20) {
+    if (itemIndex === undefined || itemIndex < 1 || itemIndex > 19) {
       return noStoreJson({ error: 'Invalid item index' }, { status: 400 });
     }
 
