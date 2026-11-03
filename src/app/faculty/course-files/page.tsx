@@ -83,6 +83,7 @@ export default function FacultyCourseFiles() {
                 <tr>
                   <th>Course Code</th>
                   <th>Course Title</th>
+                  <th>Division</th>
                   <th>Status</th>
                   <th>Last Updated</th>
                   <th className="text-center">Action</th>
@@ -95,6 +96,18 @@ export default function FacultyCourseFiles() {
                       <span className="font-mono-ppsu fw-bold text-secondary">{cf.courseCode}</span>
                     </td>
                     <td className="fw-semibold text-navy-900">{cf.courseTitle}</td>
+                    <td>
+                      {cf.division ? (
+                        <span
+                          className="badge fw-semibold font-mono-ppsu"
+                          style={{ backgroundColor: 'var(--ppsu-navy-900, #1E293B)', color: '#fff', fontSize: '0.78rem', letterSpacing: '0.03em' }}
+                        >
+                          {cf.division}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`badge-custom ${getStatusBadgeClass(cf.status)}`}>
                         {getStatusLabel(cf.status)}
