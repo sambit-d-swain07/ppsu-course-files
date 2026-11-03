@@ -3672,76 +3672,63 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 );
                               })()}
                             </div>
-                            <Row className="g-3">
-                              <Col md={5}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 20)</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>Student</th>
-                                        <th style={{ width: '110px' }}>Internal Viva (20)</th>
+                            <div className="table-responsive border rounded bg-white shadow-sm">
+                              <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                <thead className="bg-light">
+                                  <tr>
+                                    <th colSpan={2} className="text-secondary fw-semibold border-end border-2" style={{ background: '#f8fafc', padding: '7px 10px' }}>
+                                      Direct Mark Entry (Max 20)
+                                    </th>
+                                    <th colSpan={5} className="text-secondary fw-semibold" style={{ background: '#f1f5f9', padding: '7px 10px' }}>
+                                      Auto-Generated 4-Criteria Breakdown
+                                    </th>
+                                  </tr>
+                                  <tr className="bg-light text-muted">
+                                    <th className="text-start" style={{ minWidth: '180px', padding: '6px 10px' }}>Student</th>
+                                    <th className="border-end border-2" style={{ width: '130px', padding: '6px 10px' }}>Internal Viva (20)</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>A</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>B</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>C</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>D</th>
+                                    <th className="bg-warning-subtle fw-bold" style={{ width: '80px', padding: '6px 8px' }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row: any) => {
+                                    const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                    const currentVal = row.internalViva ?? 0;
+                                    const bd = generateBreakdown(currentVal, `${row.studentId}-ce-iv`, 20);
+                                    return (
+                                      <tr key={`iv-${row.studentId}`}>
+                                        <td className="text-start text-truncate fw-semibold" style={{ maxWidth: '240px' }} title={row.name}>
+                                          {row.name}
+                                        </td>
+                                        <td className="border-end border-2">
+                                          <Form.Control
+                                            type="number"
+                                            min={0}
+                                            max={20}
+                                            step={0.5}
+                                            size="sm"
+                                            className="text-center font-mono-ppsu px-1"
+                                            value={currentVal}
+                                            disabled={!isRowEditable}
+                                            onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                            onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'internalViva', 0); } }}
+                                            onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="font-mono-ppsu">{bd.a}</td>
+                                        <td className="font-mono-ppsu">{bd.b}</td>
+                                        <td className="font-mono-ppsu">{bd.c}</td>
+                                        <td className="font-mono-ppsu">{bd.d}</td>
+                                        <td className="fw-bold text-primary font-mono-ppsu bg-warning-subtle bg-opacity-25">{bd.total}</td>
                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
-                                        return (
-                                          <tr key={`iv-in-${row.studentId}`}>
-                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                            <td>
-                                              <Form.Control
-                                                type="number"
-                                                min={0}
-                                                max={20}
-                                                step={0.5}
-                                                size="sm"
-                                                className="text-center font-mono-ppsu px-1"
-                                                value={row.internalViva ?? 0}
-                                                disabled={!isRowEditable}
-                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
-                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'internalViva', 0); } }}
-                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'internalViva', e.target.value)}
-                                              />
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                              <Col md={7}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>A</th>
-                                        <th>B</th>
-                                        <th>C</th>
-                                        <th>D</th>
-                                        <th className="bg-warning-subtle">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.internalViva ?? 0, `${row.studentId}-ce-iv`);
-                                        return (
-                                          <tr key={`iv-bd-${row.studentId}`}>
-                                            <td className="font-mono-ppsu">{bd.a}</td>
-                                            <td className="font-mono-ppsu">{bd.b}</td>
-                                            <td className="font-mono-ppsu">{bd.c}</td>
-                                            <td className="font-mono-ppsu">{bd.d}</td>
-                                            <td className="fw-bold text-primary font-mono-ppsu">{bd.total}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                            </Row>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </div>
                           </div>
                         </div>
 
@@ -3805,76 +3792,63 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 );
                               })()}
                             </div>
-                            <Row className="g-3">
-                              <Col md={5}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 30)</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>Student</th>
-                                        <th style={{ width: '130px' }}>Perf / Quiz (30)</th>
+                            <div className="table-responsive border rounded bg-white shadow-sm">
+                              <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                <thead className="bg-light">
+                                  <tr>
+                                    <th colSpan={2} className="text-secondary fw-semibold border-end border-2" style={{ background: '#f8fafc', padding: '7px 10px' }}>
+                                      Direct Mark Entry (Max 30)
+                                    </th>
+                                    <th colSpan={5} className="text-secondary fw-semibold" style={{ background: '#f1f5f9', padding: '7px 10px' }}>
+                                      Auto-Generated 4-Criteria Breakdown
+                                    </th>
+                                  </tr>
+                                  <tr className="bg-light text-muted">
+                                    <th className="text-start" style={{ minWidth: '180px', padding: '6px 10px' }}>Student</th>
+                                    <th className="border-end border-2" style={{ width: '130px', padding: '6px 10px' }}>Perf / Quiz (30)</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>A</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>B</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>C</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>D</th>
+                                    <th className="bg-warning-subtle fw-bold" style={{ width: '80px', padding: '6px 8px' }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row: any) => {
+                                    const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                    const currentVal = row.esePerformance ?? 0;
+                                    const bd = generateBreakdown(currentVal, `${row.studentId}-ese-pq`, 30);
+                                    return (
+                                      <tr key={`pq-${row.studentId}`}>
+                                        <td className="text-start text-truncate fw-semibold" style={{ maxWidth: '240px' }} title={row.name}>
+                                          {row.name}
+                                        </td>
+                                        <td className="border-end border-2">
+                                          <Form.Control
+                                            type="number"
+                                            min={0}
+                                            max={30}
+                                            step={0.5}
+                                            size="sm"
+                                            className="text-center font-mono-ppsu px-1"
+                                            value={currentVal}
+                                            disabled={!isRowEditable}
+                                            onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                            onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'esePerformance', 0); } }}
+                                            onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="font-mono-ppsu">{bd.a}</td>
+                                        <td className="font-mono-ppsu">{bd.b}</td>
+                                        <td className="font-mono-ppsu">{bd.c}</td>
+                                        <td className="font-mono-ppsu">{bd.d}</td>
+                                        <td className="fw-bold text-success font-mono-ppsu bg-warning-subtle bg-opacity-25">{bd.total}</td>
                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
-                                        return (
-                                          <tr key={`pq-in-${row.studentId}`}>
-                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                            <td>
-                                              <Form.Control
-                                                type="number"
-                                                min={0}
-                                                max={30}
-                                                step={0.5}
-                                                size="sm"
-                                                className="text-center font-mono-ppsu px-1"
-                                                value={row.esePerformance ?? 0}
-                                                disabled={!isRowEditable}
-                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
-                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'esePerformance', 0); } }}
-                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'esePerformance', e.target.value)}
-                                              />
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                              <Col md={7}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>A</th>
-                                        <th>B</th>
-                                        <th>C</th>
-                                        <th>D</th>
-                                        <th className="bg-warning-subtle">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.esePerformance ?? 0, `${row.studentId}-ese-pq`, 30);
-                                        return (
-                                          <tr key={`pq-bd-${row.studentId}`}>
-                                            <td className="font-mono-ppsu">{bd.a}</td>
-                                            <td className="font-mono-ppsu">{bd.b}</td>
-                                            <td className="font-mono-ppsu">{bd.c}</td>
-                                            <td className="font-mono-ppsu">{bd.d}</td>
-                                            <td className="fw-bold text-success font-mono-ppsu">{bd.total}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                            </Row>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </div>
                           </div>
 
                           {/* 3.2 External Viva Evaluation & Breakdown */}
@@ -3928,76 +3902,63 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 );
                               })()}
                             </div>
-                            <Row className="g-3">
-                              <Col md={5}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Direct Mark Entry (Max 30)</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>Student</th>
-                                        <th style={{ width: '130px' }}>Ext Viva (30)</th>
+                            <div className="table-responsive border rounded bg-white shadow-sm">
+                              <Table bordered size="sm" className="small align-middle text-center mb-0">
+                                <thead className="bg-light">
+                                  <tr>
+                                    <th colSpan={2} className="text-secondary fw-semibold border-end border-2" style={{ background: '#f8fafc', padding: '7px 10px' }}>
+                                      Direct Mark Entry (Max 30)
+                                    </th>
+                                    <th colSpan={5} className="text-secondary fw-semibold" style={{ background: '#f1f5f9', padding: '7px 10px' }}>
+                                      Auto-Generated 4-Criteria Breakdown
+                                    </th>
+                                  </tr>
+                                  <tr className="bg-light text-muted">
+                                    <th className="text-start" style={{ minWidth: '180px', padding: '6px 10px' }}>Student</th>
+                                    <th className="border-end border-2" style={{ width: '130px', padding: '6px 10px' }}>Ext Viva (30)</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>A</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>B</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>C</th>
+                                    <th style={{ width: '65px', padding: '6px 8px' }}>D</th>
+                                    <th className="bg-warning-subtle fw-bold" style={{ width: '80px', padding: '6px 8px' }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row: any) => {
+                                    const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
+                                    const currentVal = row.eseExternalViva ?? 0;
+                                    const bd = generateBreakdown(currentVal, `${row.studentId}-ese-ev`, 30);
+                                    return (
+                                      <tr key={`ev-${row.studentId}`}>
+                                        <td className="text-start text-truncate fw-semibold" style={{ maxWidth: '240px' }} title={row.name}>
+                                          {row.name}
+                                        </td>
+                                        <td className="border-end border-2">
+                                          <Form.Control
+                                            type="number"
+                                            min={0}
+                                            max={30}
+                                            step={0.5}
+                                            size="sm"
+                                            className="text-center font-mono-ppsu px-1"
+                                            value={currentVal}
+                                            disabled={!isRowEditable}
+                                            onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
+                                            onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'eseExternalViva', 0); } }}
+                                            onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="font-mono-ppsu">{bd.a}</td>
+                                        <td className="font-mono-ppsu">{bd.b}</td>
+                                        <td className="font-mono-ppsu">{bd.c}</td>
+                                        <td className="font-mono-ppsu">{bd.d}</td>
+                                        <td className="fw-bold text-success font-mono-ppsu bg-warning-subtle bg-opacity-25">{bd.total}</td>
                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const isRowEditable = isRowEditableByCurrentFaculty(row.batch);
-                                        return (
-                                          <tr key={`ev-in-${row.studentId}`}>
-                                            <td className="text-start text-truncate" style={{ maxWidth: '150px' }}>{row.name}</td>
-                                            <td>
-                                              <Form.Control
-                                                type="number"
-                                                min={0}
-                                                max={30}
-                                                step={0.5}
-                                                size="sm"
-                                                className="text-center font-mono-ppsu px-1"
-                                                value={row.eseExternalViva ?? 0}
-                                                disabled={!isRowEditable}
-                                                onFocus={(e) => { if (Number(e.target.value) === 0) e.target.value = ''; }}
-                                                onBlur={(e) => { if (e.target.value === '') { e.target.value = '0'; handleItem8StudentChange(row.studentId, 'eseExternalViva', 0); } }}
-                                                onChange={(e) => handleItem8StudentChange(row.studentId, 'eseExternalViva', e.target.value)}
-                                              />
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                              <Col md={7}>
-                                <div className="border rounded bg-white p-2">
-                                  <div className="fw-semibold text-secondary small mb-2">Auto-Generated 4-Criteria Breakdown</div>
-                                  <Table bordered size="sm" className="small align-middle text-center mb-0">
-                                    <thead className="bg-light">
-                                      <tr>
-                                        <th>A</th>
-                                        <th>B</th>
-                                        <th>C</th>
-                                        <th>D</th>
-                                        <th className="bg-warning-subtle">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row: any) => {
-                                        const bd = generateBreakdown(row.eseExternalViva ?? 0, `${row.studentId}-ese-ev`, 30);
-                                        return (
-                                          <tr key={`ev-bd-${row.studentId}`}>
-                                            <td className="font-mono-ppsu">{bd.a}</td>
-                                            <td className="font-mono-ppsu">{bd.b}</td>
-                                            <td className="font-mono-ppsu">{bd.c}</td>
-                                            <td className="font-mono-ppsu">{bd.d}</td>
-                                            <td className="fw-bold text-success font-mono-ppsu">{bd.total}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-                              </Col>
-                            </Row>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </div>
                           </div>
                         </div>
 
