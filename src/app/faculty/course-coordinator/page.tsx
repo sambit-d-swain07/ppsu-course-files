@@ -116,7 +116,8 @@ export default function FacultyCourseCoordinatorPage() {
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
-  const [uploadingItem, setUploadingItem] = useState<number | null>(null);
+  const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
+  const [removingItem, setRemovingItem] = useState<number | string | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('shared');
   const [searchQuery, setSearchQuery] = useState('');
@@ -289,7 +290,8 @@ export default function FacultyCourseCoordinatorPage() {
 
   const handleUploadSubItem = async (itemIndex: number, subKey: string, file: File) => {
     if (!selectedSubjectId || !file) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    const uploadKey = `${itemIndex}-${subKey}`;
+    setUploadingItem(uploadKey); setActionError(''); setActionSuccess('');
     try {
       const dataUrl = await uploadFileToServer(file);
       const existingDoc = sharedMap.get(itemIndex);
@@ -332,7 +334,7 @@ export default function FacultyCourseCoordinatorPage() {
   const handleRemoveSingle = async (itemIndex: number) => {
     if (!selectedSubjectId) return;
     if (!confirm('Are you sure you want to remove this shared document? It will revert to pending for all faculty.')) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    setRemovingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
@@ -355,7 +357,7 @@ export default function FacultyCourseCoordinatorPage() {
     } catch (err: any) {
       setActionError(err.message);
     } finally {
-      setUploadingItem(null);
+      setRemovingItem(null);
     }
   };
 
@@ -363,7 +365,8 @@ export default function FacultyCourseCoordinatorPage() {
     if (!selectedSubjectId) return;
     const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
     if (!confirm(`Are you sure you want to remove sub-item (${label})?`)) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    const removeKey = `${itemIndex}-${subKey}`;
+    setRemovingItem(removeKey); setActionError(''); setActionSuccess('');
     try {
       const existingDoc = sharedMap.get(itemIndex);
       let existingSubJson: any = {};
@@ -393,7 +396,7 @@ export default function FacultyCourseCoordinatorPage() {
     } catch (err: any) {
       setActionError(err.message);
     } finally {
-      setUploadingItem(null);
+      setRemovingItem(null);
     }
   };
 
@@ -643,6 +646,7 @@ export default function FacultyCourseCoordinatorPage() {
                     ? (schoolSharedMap.get(item.index) || sharedMap.get(item.index))
                     : sharedMap.get(item.index);
                   const isUploading = uploadingItem === item.index;
+                  const isRemoving = removingItem === item.index;
 
                   let parsedSubs: any = {};
                   if (doc?.subItemsJson) {
@@ -676,8 +680,6 @@ export default function FacultyCourseCoordinatorPage() {
                           </div>
                         )}
 
-
-
                         {hasLegacyText && (
                           <div className="small text-info font-mono-ppsu mt-1">
                             ℹ️ Legacy Text Entry preserved — Upload combined PDF to replace
@@ -689,6 +691,9 @@ export default function FacultyCourseCoordinatorPage() {
                             {item.subKeys.map((sk) => {
                               const skData = parsedSubs[sk];
                               const config = SUB_KEY_CONFIG[sk] || { label: sk };
+                              const isSubUploading = uploadingItem === `${item.index}-${sk}`;
+                              const isSubRemoving = removingItem === `${item.index}-${sk}`;
+                              const isSubBusy = isSubUploading || isSubRemoving;
                               return (
                                 <div key={sk} className="p-2 border rounded bg-white small d-flex align-items-center gap-2" style={{ minWidth: 240 }}>
                                   <div className="flex-grow-1 text-truncate">
@@ -712,13 +717,40 @@ export default function FacultyCourseCoordinatorPage() {
                                         View
                                       </Button>
                                     )}
-                                    <label className="btn btn-outline-primary btn-sm py-0 px-2 m-0" style={{ fontSize: 10, cursor: 'pointer' }}>
-                                      {skData?.fileName ? 'Replace' : 'Upload'}
-                                      <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadSubItem(item.index, sk, f); e.currentTarget.value = ''; }} />
+                                    <label
+                                      className={`btn btn-outline-primary btn-sm py-0 px-2 m-0 ${isSubBusy ? 'disabled' : ''}`}
+                                      style={{
+                                        fontSize: 10,
+                                        cursor: isSubBusy ? 'not-allowed' : 'pointer',
+                                        pointerEvents: isSubBusy ? 'none' : 'auto'
+                                      }}
+                                    >
+                                      {isSubUploading ? (
+                                        <>
+                                          <Spinner animation="border" size="sm" className="me-1" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                          Uploading...
+                                        </>
+                                      ) : skData?.fileName ? 'Replace' : 'Upload'}
+                                      <input
+                                        type="file"
+                                        className="d-none"
+                                        disabled={isSubBusy}
+                                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadSubItem(item.index, sk, f); e.currentTarget.value = ''; }}
+                                      />
                                     </label>
                                     {skData?.fileName && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 5px' }} onClick={() => handleRemoveSubItem(item.index, sk)}>
-                                        ×
+                                      <Button
+                                        size="sm"
+                                        variant="outline-danger"
+                                        style={{ fontSize: 10, padding: '1px 5px' }}
+                                        disabled={isSubBusy}
+                                        onClick={() => handleRemoveSubItem(item.index, sk)}
+                                      >
+                                        {isSubRemoving ? (
+                                          <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                        ) : (
+                                          '×'
+                                        )}
                                       </Button>
                                     )}
                                   </div>
@@ -745,7 +777,15 @@ export default function FacultyCourseCoordinatorPage() {
                       </td>
                       <td className="pe-4 text-end" style={{ whiteSpace: 'nowrap', minWidth: 180 }}>
                         {isUploading ? (
-                          <Spinner animation="border" size="sm" variant="primary" />
+                          <div className="d-flex align-items-center justify-content-end gap-2 text-primary py-1">
+                            <Spinner animation="border" size="sm" variant="primary" />
+                            <span className="small">Uploading...</span>
+                          </div>
+                        ) : isRemoving ? (
+                          <div className="d-flex align-items-center justify-content-end gap-2 text-danger py-1">
+                            <Spinner animation="border" size="sm" variant="danger" />
+                            <span className="small">Removing...</span>
+                          </div>
                         ) : (
                           <div className="d-flex justify-content-end align-items-center gap-2 flex-wrap">
                             {doc?.fileUrl && (
@@ -761,11 +801,19 @@ export default function FacultyCourseCoordinatorPage() {
 
                             {!item.subKeys && (
                               <>
-                                <label className="btn btn-sm btn-outline-primary m-0" style={{ fontSize: 12, cursor: 'pointer' }}>
+                                <label
+                                  className={`btn btn-sm btn-outline-primary m-0 ${isUploading || isRemoving ? 'disabled' : ''}`}
+                                  style={{
+                                    fontSize: 12,
+                                    cursor: isUploading || isRemoving ? 'not-allowed' : 'pointer',
+                                    pointerEvents: isUploading || isRemoving ? 'none' : 'auto'
+                                  }}
+                                >
                                   {isUploaded ? 'Replace' : 'Upload'}
                                   <input
                                     type="file"
                                     className="d-none"
+                                    disabled={isUploading || isRemoving}
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) handleUploadSingle(item.index, file);
@@ -777,6 +825,7 @@ export default function FacultyCourseCoordinatorPage() {
                                     size="sm"
                                     variant="outline-danger"
                                     style={{ fontSize: 12 }}
+                                    disabled={isUploading || isRemoving}
                                     onClick={() => handleRemoveSingle(item.index)}
                                   >
                                     Remove
@@ -874,7 +923,9 @@ export default function FacultyCourseCoordinatorPage() {
                             const skData = parsedSubs[sk];
                             const config = SUB_KEY_CONFIG[sk] || { label: sk };
                             const isSubUploaded = Boolean(skData?.fileName);
-                            const isSubUploading = uploadingItem === item.index;
+                            const isSubUploading = uploadingItem === `${item.index}-${sk}`;
+                            const isSubRemoving = removingItem === `${item.index}-${sk}`;
+                            const isSubBusy = isSubUploading || isSubRemoving;
 
                             return (
                               <div key={sk} className="p-2 border rounded bg-white small">
@@ -895,8 +946,11 @@ export default function FacultyCourseCoordinatorPage() {
                                   </div>
                                 )}
                                 <div className="d-flex gap-2 flex-wrap">
-                                  {isSubUploading ? (
-                                    <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                                  {isSubBusy ? (
+                                    <div className="d-flex align-items-center gap-2 py-1">
+                                      <div className={`spinner-border spinner-border-sm ${isSubRemoving ? 'text-danger' : 'text-primary'}`} role="status" />
+                                      <span className="small text-muted">{isSubRemoving ? 'Removing...' : 'Uploading...'}</span>
+                                    </div>
                                   ) : (
                                     <>
                                       {skData?.fileUrl && (
@@ -919,6 +973,7 @@ export default function FacultyCourseCoordinatorPage() {
                                           type="file"
                                           hidden
                                           accept=".pdf,.doc,.docx"
+                                          disabled={isSubBusy}
                                           onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (file) handleUploadSubItem(item.index, sk, file);
@@ -930,6 +985,7 @@ export default function FacultyCourseCoordinatorPage() {
                                           size="sm"
                                           variant="outline-danger"
                                           style={{ minHeight: 38 }}
+                                          disabled={isSubBusy}
                                           onClick={() => handleRemoveSubItem(item.index, sk)}
                                         >
                                           Remove

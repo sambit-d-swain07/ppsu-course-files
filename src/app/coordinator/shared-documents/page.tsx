@@ -73,6 +73,7 @@ export default function CoordinatorSharedDocumentsPage() {
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
+  const [removingItem, setRemovingItem] = useState<number | null>(null);
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -195,7 +196,7 @@ export default function CoordinatorSharedDocumentsPage() {
 
   const handleClearDoc = async (itemIndex: number) => {
     if (!selectedSubjectId && !selectedSchool) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
+    setRemovingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
@@ -216,7 +217,7 @@ export default function CoordinatorSharedDocumentsPage() {
     } catch (err: any) {
       setActionError(err.message);
     } finally {
-      setUploadingItem(null);
+      setRemovingItem(null);
     }
   };
 
@@ -563,47 +564,59 @@ export default function CoordinatorSharedDocumentsPage() {
                                 </div>
 
                                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                                  {isUploaded && (
+                                  {uploadingItem === item.index ? (
+                                    <div className="d-flex align-items-center gap-2 text-primary py-1">
+                                      <span className="spinner-border spinner-border-sm" role="status" />
+                                      <span className="small">Uploading...</span>
+                                    </div>
+                                  ) : removingItem === item.index ? (
+                                    <div className="d-flex align-items-center gap-2 text-danger py-1">
+                                      <span className="spinner-border spinner-border-sm" role="status" />
+                                      <span className="small">Removing...</span>
+                                    </div>
+                                  ) : (
                                     <>
-                                      {doc?.fileUrl && (
-                                        <Button
-                                          variant="outline-primary"
-                                          size="sm"
-                                          style={{ minHeight: 38 }}
-                                          onClick={() => setViewingDoc({
-                                            title: item.name,
-                                            fileName: doc.fileName || 'document.pdf',
-                                            fileUrl: doc.fileUrl || SAMPLE_PDF_DATA_URL
-                                          })}
-                                        >
-                                          View Document
-                                        </Button>
+                                      {isUploaded && (
+                                        <>
+                                          {doc?.fileUrl && (
+                                            <Button
+                                              variant="outline-primary"
+                                              size="sm"
+                                              style={{ minHeight: 38 }}
+                                              onClick={() => setViewingDoc({
+                                                title: item.name,
+                                                fileName: doc.fileName || 'document.pdf',
+                                                fileUrl: doc.fileUrl || SAMPLE_PDF_DATA_URL
+                                              })}
+                                            >
+                                              View Document
+                                            </Button>
+                                          )}
+                                          <Button
+                                            variant="outline-danger"
+                                            size="sm"
+                                            style={{ minHeight: 38 }}
+                                            onClick={() => handleClearDoc(item.index)}
+                                          >
+                                            Remove
+                                          </Button>
+                                        </>
                                       )}
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        style={{ minHeight: 38 }}
-                                        disabled={uploadingItem === item.index}
-                                        onClick={() => handleClearDoc(item.index)}
-                                      >
-                                        Remove
-                                      </Button>
+
+                                      <Form.Group controlId={`file-upload-${item.index}`} className="mb-0">
+                                        <Form.Control
+                                          type="file"
+                                          size="sm"
+                                          style={{ width: '230px', minHeight: 38 }}
+                                          accept=".pdf,.doc,.docx"
+                                          onChange={(e: any) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleUploadSingle(item.index, file);
+                                          }}
+                                        />
+                                      </Form.Group>
                                     </>
                                   )}
-
-                                  <Form.Group controlId={`file-upload-${item.index}`} className="mb-0">
-                                    <Form.Control
-                                      type="file"
-                                      size="sm"
-                                      style={{ width: '230px', minHeight: 38 }}
-                                      accept=".pdf,.doc,.docx"
-                                      disabled={uploadingItem === item.index}
-                                      onChange={(e: any) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) handleUploadSingle(item.index, file);
-                                      }}
-                                    />
-                                  </Form.Group>
                                 </div>
                               </div>
                             )}
