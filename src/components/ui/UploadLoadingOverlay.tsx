@@ -9,50 +9,37 @@ interface UploadLoadingOverlayProps {
   subMessage?: string;
 }
 
-/**
- * Ensures body scroll is fully restored and any leftover modal artifacts
- * (modal-open class, inline overflow/padding styles, stray backdrop elements)
- * are thoroughly cleaned up when no visible modal remains.
- */
-function cleanBodyScroll() {
-  if (typeof document === 'undefined') return;
-  const hasVisibleModal = document.querySelector('.modal.show') !== null;
-  if (!hasVisibleModal) {
-    document.body.style.removeProperty('overflow');
-    document.body.style.removeProperty('padding-right');
-    document.body.classList.remove('modal-open');
-    document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-  }
-}
-
 export default function UploadLoadingOverlay({
   isUploading,
   message = 'Uploading...',
   subMessage = 'Please wait while your document is being uploaded and saved.',
 }: UploadLoadingOverlayProps) {
+  // Safe cleanup: When an upload concludes, after any modal transition has settled (400ms),
+  // verify whether any active modal is still displayed. If none is displayed, ensure
+  // any lingering overflow: hidden / modal-open on <body> is cleared.
+  // CRITICAL: NEVER remove or alter DOM nodes (like .modal-backdrop) directly —
+  // doing so breaks React's portal reconciliation and causes
+  // "Failed to execute 'removeChild' on 'Node'" crashes.
   useEffect(() => {
-    if (!isUploading) return;
+    if (isUploading) return;
 
-    // Only lock body if it wasn't ALREADY locked by an active parent modal.
-    // If a modal was already open, do NOT touch body styles so we never
-    // capture "hidden" as a restore value or conflict with Bootstrap's ModalManager.
-    const wasAlreadyLocked = document.body.style.overflow === 'hidden';
-    if (!wasAlreadyLocked) {
-      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-      document.body.style.overflow = 'hidden';
-      if (scrollbarWidth > 0) {
-        document.body.style.paddingRight = `${scrollbarWidth}px`;
+    const timer = setTimeout(() => {
+      if (typeof document === 'undefined') return;
+      const hasVisibleModal = document.querySelector('.modal.show') !== null;
+      if (!hasVisibleModal) {
+        if (document.body.style.overflow === 'hidden') {
+          document.body.style.removeProperty('overflow');
+        }
+        if (document.body.style.paddingRight) {
+          document.body.style.removeProperty('padding-right');
+        }
+        if (document.body.classList.contains('modal-open')) {
+          document.body.classList.remove('modal-open');
+        }
       }
-    }
+    }, 400);
 
-    return () => {
-      // Immediate cleanup when overlay closes
-      cleanBodyScroll();
-      // Delayed cleanup to ensure any concurrent Bootstrap modal exit transition (300ms)
-      // also has its body styles / backdrop cleaned up reliably
-      setTimeout(cleanBodyScroll, 150);
-      setTimeout(cleanBodyScroll, 350);
-    };
+    return () => clearTimeout(timer);
   }, [isUploading]);
 
   if (!isUploading) return null;
@@ -133,5 +120,6 @@ export default function UploadLoadingOverlay({
     </div>
   );
 }
+
 
 

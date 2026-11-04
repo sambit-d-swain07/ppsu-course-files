@@ -188,17 +188,6 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [item19DocName, setItem19DocName] = useState('');
   const [item19DocFile, setItem19DocFile] = useState<File | null>(null);
 
-  const cleanupModalBodyScroll = useCallback(() => {
-    if (typeof document === 'undefined') return;
-    const hasVisibleModal = document.querySelector('.modal.show') !== null;
-    if (!hasVisibleModal) {
-      document.body.style.removeProperty('overflow');
-      document.body.style.removeProperty('padding-right');
-      document.body.classList.remove('modal-open');
-      document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-    }
-  }, []);
-
   const hashString = (str: string): number => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -6220,7 +6209,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       )}
 
       {/* REAL DOCUMENT PREVIEW MODAL (Section 19 Real View Action) */}
-      <Modal show={viewingDoc !== null} onHide={() => setViewingDoc(null)} onExited={cleanupModalBodyScroll} size="xl" centered>
+      <Modal show={viewingDoc !== null} onHide={() => setViewingDoc(null)} size="xl" centered>
         <Modal.Header closeButton className="bg-navy-900 text-white py-2">
           <Modal.Title className="h6 fw-bold mb-0">Document Inspection Viewer — {viewingDoc?.title}</Modal.Title>
         </Modal.Header>
@@ -6392,7 +6381,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       </Modal>
 
       {/* SECTION 1: Add Additional Document Modal */}
-      <Modal show={activeIaItem !== null} onHide={() => setActiveIaItem(null)} onExited={cleanupModalBodyScroll} centered>
+      <Modal show={activeIaItem !== null} onHide={() => setActiveIaItem(null)} centered>
         <Modal.Header closeButton>
           <Modal.Title className="h6 fw-bold">Add Additional / Optional Document (IA {activeIaItem === 11 ? 1 : 2})</Modal.Title>
         </Modal.Header>
@@ -6421,7 +6410,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       </Modal>
 
       {/* Item 19 Lecture Notes Add Document Modal */}
-      <Modal show={item19ModalOpen} onHide={() => setItem19ModalOpen(false)} onExited={cleanupModalBodyScroll} centered>
+      <Modal show={item19ModalOpen} onHide={() => setItem19ModalOpen(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title className="h6 fw-bold">Add Document (Item 19 Lecture Notes)</Modal.Title>
         </Modal.Header>
@@ -6696,7 +6685,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       </Modal>
 
       {/* Excel Preview Modal — Grade Sheet (b) */}
-      <Modal show={gradeSheetExcelModal !== null} onHide={() => setGradeSheetExcelModal(null)} onExited={cleanupModalBodyScroll} size="xl" centered>
+      <Modal show={gradeSheetExcelModal !== null} onHide={() => setGradeSheetExcelModal(null)} size="xl" centered>
         <Modal.Header closeButton className="bg-success text-white py-2">
           <Modal.Title className="h6 fw-bold mb-0">📊 Excel Preview — {gradeSheetExcelModal?.fileName}</Modal.Title>
         </Modal.Header>
