@@ -959,8 +959,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     if (!file) {
       subs.file = null;
-      await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
-      setActionSuccess('Theory Rubrics file removed.');
+      setRemovingItem(9);
+      try {
+        await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
+        setActionSuccess('Theory Rubrics file removed.');
+      } catch (err: any) {
+        setActionError(err.message || 'Failed to remove file');
+      } finally {
+        setRemovingItem(null);
+      }
       return;
     }
 
@@ -1588,8 +1595,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const subs = getSubItems(itemIndex) || {};
     if (!file) {
       subs.file = null;
-      await saveStructuredItem(itemIndex, subs, subs.students?.length || subs.criteria?.length ? 'UPLOADED' : 'EMPTY');
-      setActionSuccess(`File removed from Item #${itemIndex}.`);
+      setRemovingItem(`ia-structured-${itemIndex}`);
+      try {
+        await saveStructuredItem(itemIndex, subs, subs.students?.length || subs.criteria?.length ? 'UPLOADED' : 'EMPTY');
+        setActionSuccess(`File removed from Item #${itemIndex}.`);
+      } catch (err: any) {
+        setActionError(err.message || 'Failed to remove file');
+      } finally {
+        setRemovingItem(null);
+      }
       return;
     }
     try {
@@ -1949,6 +1963,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     
     if (!file) {
       subs[subKey] = null;
+      setRemovingItem(`ia-${itemIndex}-${subKey}`);
     } else {
       try {
         validateFileSize(file);
@@ -1997,6 +2012,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     } catch (err: any) { setActionError(err.message); }
     finally {
       setIsUploadingOverlay(false);
+      setRemovingItem(null);
     }
   };
 
@@ -2010,6 +2026,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
     if (!file) {
       subs[subKey] = null;
+      setRemovingItem(`item6-${subKey}`);
     } else {
       try {
         validateFileSize(file);
@@ -2058,6 +2075,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     } catch (err: any) { setActionError(err.message); }
     finally {
       setIsUploadingOverlay(false);
+      setRemovingItem(null);
     }
   };
 
@@ -2395,7 +2413,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const handleRemoveItem19Doc = async (docId: string) => {
     if (isLocked) return;
     setActionError(''); setActionSuccess('');
-    setRemovingItem(19);
+    setRemovingItem(`item19-${docId}`);
 
     try {
       const subs = getSubItems(19) || {};
@@ -2522,6 +2540,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }
       setIsUploadingOverlay(true);
       setUploadOverlayMessage(`Uploading ${file.name}...`);
+    } else {
+      setRemovingItem(`univ-${subKey}`);
     }
 
     try {
@@ -2557,6 +2577,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(err.message || 'Save failed');
     } finally {
       if (file) setIsUploadingOverlay(false);
+      else setRemovingItem(null);
     }
   };
 
@@ -2734,6 +2755,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const subs: any = { ...(getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null }) };
     delete subs.gradeSheetExcel;
     const isAllThreeUploaded = !!(subs.questionPaper?.fileName && subs.gradeSheet?.fileName && subs.resultAnalysis?.fileName);
+    setRemovingItem('univ-gradeSheetExcel');
     try {
       const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
@@ -2743,6 +2765,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       fetchData();
     } catch (err: any) { setActionError(err.message); }
+    finally { setRemovingItem(null); }
   };
 
   const openExcelPreviewModal = (excelData: { fileName: string; fileUrl: string }) => {
@@ -2834,6 +2857,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }
       setIsUploadingOverlay(true);
       setUploadOverlayMessage(`Uploading ${file.name}...`);
+    } else {
+      setRemovingItem(`batch-${batchId}`);
     }
 
     try {
@@ -2868,6 +2893,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(err.message);
     } finally {
       if (file) setIsUploadingOverlay(false);
+      else setRemovingItem(null);
     }
   };
 
@@ -3501,8 +3527,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBatchFileUpload(batch.id, f); }} />
                                       </label>
                                       {batch.fileName && (
-                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleBatchFileUpload(batch.id, undefined)}>
-                                          Remove
+                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                          disabled={removingItem === `batch-${batch.id}`}
+                                          onClick={() => handleBatchFileUpload(batch.id, undefined)}>
+                                          {removingItem === `batch-${batch.id}` ? (
+                                            <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                          ) : 'Remove'}
                                         </Button>
                                       )}
                                     </>
@@ -4503,7 +4533,13 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     Replace
                                     <input type="file" className="d-none" accept=".csv,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleItem9FileUpload(file); e.currentTarget.value = ''; }} />
                                   </label>
-                                  <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => handleItem9FileUpload(undefined)}>Remove</Button>
+                                  <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '2px 8px' }}
+                                    disabled={removingItem === 9}
+                                    onClick={() => handleItem9FileUpload(undefined)}>
+                                    {removingItem === 9 ? (
+                                      <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                    ) : 'Remove'}
+                                  </Button>
                                 </>
                               )}
                             </div>
@@ -4571,8 +4607,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                             </Button>
                             {!isLocked && !isLabBatchView && (
                               <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                disabled={removingItem === 4}
                                 onClick={() => handleRemove(4)}>
-                                Remove
+                                {removingItem === 4 ? (
+                                  <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                ) : 'Remove'}
                               </Button>
                             )}
                           </div>
@@ -5018,8 +5057,11 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           </label>
                                           {subData?.fileName && (
                                             <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                              disabled={removingItem === `item6-${sub.key}`}
                                               onClick={() => handleItem6SubUpload(sub.key as any, undefined)}>
-                                              Remove
+                                              {removingItem === `item6-${sub.key}` ? (
+                                                <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                              ) : 'Remove'}
                                             </Button>
                                           )}
                                         </>
@@ -5085,8 +5127,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleIaFixedUpload(item.index, sub.key as any, f); }} />
                                     </label>
                                     {subData?.fileName && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleIaFixedUpload(item.index, sub.key as any, undefined)}>
-                                        Remove
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                        disabled={removingItem === `ia-${item.index}-${sub.key}`}
+                                        onClick={() => handleIaFixedUpload(item.index, sub.key as any, undefined)}>
+                                        {removingItem === `ia-${item.index}-${sub.key}` ? (
+                                          <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                        ) : 'Remove'}
                                       </Button>
                                     )}
                                   </>
@@ -5290,9 +5336,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                 size="sm"
                                 variant="outline-danger"
                                 style={{ fontSize: 11, padding: '2px 8px' }}
+                                disabled={removingItem === `ia-structured-${item.index}`}
                                 onClick={() => handleStructuredFileUpload(item.index)}
                               >
-                                Remove
+                                {removingItem === `ia-structured-${item.index}` ? (
+                                  <><Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} className="me-1" /><span>Removing...</span></>
+                                ) : 'Remove'}
                               </Button>
                             )}
                           </div>
@@ -5501,8 +5550,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       👁️ View
                                     </Button>
                                     {!isLocked && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
-                                        Remove
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }}
+                                        disabled={removingItem === 14}
+                                        onClick={() => handleRemove(14)}>
+                                        {removingItem === 14 ? (
+                                          <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                        ) : 'Remove'}
                                       </Button>
                                     )}
                                   </>
@@ -5559,8 +5612,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         👁️ View
                                       </Button>
                                       {!isLocked && !isBatchLocked && ((isLabTeacher && access?.batch === batchKey) || (!isLabTeacher && access?.mode === 'OWNER')) && (
-                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleRemove(14)}>
-                                          Remove
+                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 11, padding: '2px 8px' }}
+                                          disabled={removingItem === 14}
+                                          onClick={() => handleRemove(14)}>
+                                          {removingItem === 14 ? (
+                                            <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                          ) : 'Remove'}
                                         </Button>
                                       )}
                                     </>
@@ -5623,8 +5680,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                       <input type="file" className="d-none" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUnivSubUpload('questionPaper', f); }} />
                                     </label>
                                     {subData?.fileName && (
-                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload('questionPaper', undefined)}>
-                                        Remove
+                                      <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                        disabled={removingItem === 'univ-questionPaper'}
+                                        onClick={() => handleUnivSubUpload('questionPaper', undefined)}>
+                                        {removingItem === 'univ-questionPaper' ? (
+                                          <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                        ) : 'Remove'}
                                       </Button>
                                     )}
                                   </>
@@ -5675,8 +5736,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                     </label>
                                   )}
                                   {!isLocked && gradeSheetData?.fileName && (
-                                    <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleUnivSubUpload('gradeSheet', undefined)}>
-                                      Remove
+                                    <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                      disabled={removingItem === 'univ-gradeSheet'}
+                                      onClick={() => handleUnivSubUpload('gradeSheet', undefined)}>
+                                      {removingItem === 'univ-gradeSheet' ? (
+                                        <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                      ) : 'Remove'}
                                     </Button>
                                   )}
                                 </div>
@@ -5699,8 +5764,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                         ⬇ Download .xlsx
                                       </a>
                                       {!isLocked && (
-                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }} onClick={handleRemoveGradeSheetExcel}>
-                                          Remove
+                                        <Button size="sm" variant="outline-danger" style={{ fontSize: 10, padding: '1px 6px' }}
+                                          disabled={removingItem === 'univ-gradeSheetExcel'}
+                                          onClick={handleRemoveGradeSheetExcel}>
+                                          {removingItem === 'univ-gradeSheetExcel' ? (
+                                            <Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                                          ) : 'Remove'}
                                         </Button>
                                       )}
                                     </div>
@@ -6008,9 +6077,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                                           variant="outline-danger"
                                           size="sm"
                                           style={{ fontSize: 11, padding: '2px 8px' }}
+                                          disabled={removingItem === `item19-${doc.id}`}
                                           onClick={() => handleRemoveItem19Doc(doc.id)}
                                         >
-                                          Remove
+                                          {removingItem === `item19-${doc.id}` ? (
+                                            <><Spinner animation="border" size="sm" style={{ width: 10, height: 10, borderWidth: 2 }} className="me-1" /><span>Removing...</span></>
+                                          ) : 'Remove'}
                                         </Button>
                                       </>
                                     )}

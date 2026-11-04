@@ -598,9 +598,14 @@ export default function CoordinatorSharedDocumentsPage() {
                                             variant="outline-danger"
                                             size="sm"
                                             style={{ minHeight: 38 }}
+                                            disabled={removingItem === item.index}
                                             onClick={() => handleClearDoc(item.index)}
                                           >
-                                            Remove
+                                            {removingItem === item.index ? (
+                                              <><Spinner animation="border" size="sm" className="me-1" style={{ width: 10, height: 10, borderWidth: 2 }} />Removing...</>
+                                            ) : (
+                                              'Remove'
+                                            )}
                                           </Button>
                                         </>
                                       )}

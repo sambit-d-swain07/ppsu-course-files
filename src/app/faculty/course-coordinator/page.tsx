@@ -818,6 +818,7 @@ export default function FacultyCourseCoordinatorPage() {
                     ? (schoolSharedMap.get(item.index) || sharedMap.get(item.index))
                     : sharedMap.get(item.index);
                   const isUploading = uploadingItem === item.index;
+                  const isRemoving = removingItem === item.index;
 
                   let parsedSubs: any = {};
                   if (doc?.subItemsJson) {
@@ -955,7 +956,11 @@ export default function FacultyCourseCoordinatorPage() {
                                           disabled={isSubBusy}
                                           onClick={() => handleRemoveSubItem(item.index, sk)}
                                         >
-                                          Remove
+                                          {isSubRemoving ? (
+                                            <><Spinner animation="border" size="sm" className="me-1" style={{ width: 10, height: 10, borderWidth: 2 }} />Removing...</>
+                                          ) : (
+                                            'Remove'
+                                          )}
                                         </Button>
                                       )}
                                     </>
@@ -1005,9 +1010,14 @@ export default function FacultyCourseCoordinatorPage() {
                                   size="sm"
                                   variant="outline-danger"
                                   style={{ minHeight: 38 }}
+                                  disabled={isUploading || isRemoving}
                                   onClick={() => handleRemoveSingle(item.index)}
                                 >
-                                  Remove
+                                  {isRemoving ? (
+                                    <><Spinner animation="border" size="sm" className="me-1" style={{ width: 10, height: 10, borderWidth: 2 }} />Removing...</>
+                                  ) : (
+                                    'Remove'
+                                  )}
                                 </Button>
                               )}
                             </>
