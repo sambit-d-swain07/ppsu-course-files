@@ -14,15 +14,29 @@ export default function UploadLoadingOverlay({
   message = 'Uploading...',
   subMessage = 'Please wait while your document is being uploaded and saved.',
 }: UploadLoadingOverlayProps) {
-  // Prevent page scrolling while uploading
+  // Scroll-lock: applied when isUploading is true, ALWAYS removed on cleanup.
+  // Using a separate effect that only runs when isUploading becomes true ensures
+  // the restore value is captured at lock-time and the cleanup always fires —
+  // even if the component unmounts or React batches state updates unexpectedly.
   useEffect(() => {
-    if (isUploading) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
+    if (!isUploading) return;
+
+    // Save the current overflow before locking
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+
+    // Lock scroll. Add padding to compensate for scrollbar width so layout doesn't shift.
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
     }
+
+    // Cleanup: ALWAYS restores, runs when isUploading → false OR component unmounts
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
   }, [isUploading]);
 
   if (!isUploading) return null;
