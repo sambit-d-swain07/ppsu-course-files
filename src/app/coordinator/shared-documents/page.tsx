@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, ProgressBar, Table } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
-import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import { uploadToBlob, validateFileSize, getDisplayFileUrl } from '@/lib/blob-upload';
 import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 const SHARED_ITEMS = [
@@ -668,7 +668,7 @@ export default function CoordinatorSharedDocumentsPage() {
         <Modal.Body className="p-0" style={{ height: '70vh' }}>
           {viewingDoc?.fileUrl ? (
             <iframe
-              src={viewingDoc.fileUrl}
+              src={getDisplayFileUrl(viewingDoc.fileUrl, false, viewingDoc.title)}
               title={viewingDoc.title}
               width="100%"
               height="100%"

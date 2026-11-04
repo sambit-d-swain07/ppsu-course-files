@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx';
 import { parseItem4StudentList } from '@/lib/student-parser';
 import { LAB_VISIBLE_ITEMS, LAB_EDITABLE_ITEMS } from '@/lib/subject-access';
 import { isChecklistItemComplete, SHARED_COORDINATOR_ITEMS } from '@/lib/course-progress';
-import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import { uploadToBlob, validateFileSize, getDisplayFileUrl } from '@/lib/blob-upload';
 import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 const CHECKLIST_ITEMS = [
@@ -6220,7 +6220,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
               <span className="text-muted small ms-2">· Verified Document Inspection</span>
             </div>
             <a
-              href={(viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('pdf;base64,')) ? 'data:application/' + viewingDoc.fileUrl : (viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL)}
+              href={getDisplayFileUrl(viewingDoc?.fileUrl, true, viewingDoc?.fileName) || SAMPLE_PDF_DATA_URL}
               download={viewingDoc?.fileName || 'document.pdf'}
               className="btn btn-outline-primary btn-sm"
             >
@@ -6232,7 +6232,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
             let rawUrl = (viewingDoc?.fileUrl && viewingDoc.fileUrl.trim()) ? viewingDoc.fileUrl.trim() : SAMPLE_PDF_DATA_URL;
             if (rawUrl.startsWith('pdf;base64,')) rawUrl = 'data:application/' + rawUrl;
             else if (rawUrl.startsWith('base64,')) rawUrl = 'data:application/pdf;' + rawUrl;
-            const url = rawUrl;
+            const url = getDisplayFileUrl(rawUrl, false, viewingDoc?.fileName);
             const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || url.startsWith('data:image/');
             const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (url.includes('data:text/csv') || url.includes('data:text/plain') || url.includes('data:application/vnd.ms-excel'));
 
@@ -6352,7 +6352,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
                       <p className="fw-semibold mb-1">CSV file data is ready for inspection.</p>
                       <p className="small text-secondary mb-3 font-mono-ppsu">{viewingDoc?.fileName}</p>
                       {viewingDoc?.fileUrl && (
-                        <a href={viewingDoc.fileUrl} download={viewingDoc.fileName || 'data.csv'} className="btn btn-primary btn-sm px-3">
+                        <a href={getDisplayFileUrl(viewingDoc.fileUrl, true, viewingDoc.fileName)} download={viewingDoc.fileName || 'data.csv'} className="btn btn-primary btn-sm px-3">
                           ⬇ Download CSV File
                         </a>
                       )}

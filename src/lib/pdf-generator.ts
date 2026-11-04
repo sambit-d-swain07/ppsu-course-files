@@ -173,7 +173,7 @@ function extractFileId(url?: string | null): string | null {
   return match ? match[1] : null;
 }
 
-function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Buffer | null {
+async function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Promise<Buffer | null> {
   if (!url) return null;
 
   // Case 1: Data URL
@@ -199,6 +199,25 @@ function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Bu
     }
   }
 
+  // Case 3b: Vercel Blob URL — fetch through OIDC-authenticated server-side request
+  if (url.includes('.blob.vercel-storage.com')) {
+    try {
+      const response = await fetch(url, {
+        headers: process.env.BLOB_READ_WRITE_TOKEN
+          ? { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
+          : {},
+      });
+      if (response.ok) {
+        const arrayBuf = await response.arrayBuffer();
+        return Buffer.from(arrayBuf);
+      }
+      console.error(`Blob fetch failed for ${url}: ${response.status} ${response.statusText}`);
+    } catch (e) {
+      console.error(`Blob fetch error for ${url}:`, e);
+    }
+    return null;
+  }
+
   // Case 3: Public or disk path
   try {
     const cleanUrl = url.replace(/^\/+/, '');
@@ -215,7 +234,7 @@ function resolveBufferFromUrl(url?: string | null, fileName?: string | null): Bu
   return null;
 }
 
-function getUploadedBuffers(item: any, subsObj: any): Array<{ buffer: Buffer; fileName?: string }> {
+async function getUploadedBuffers(item: any, subsObj: any): Promise<Array<{ buffer: Buffer; fileName?: string }>> {
   const results: Array<{ buffer: Buffer; fileName?: string }> = [];
   const entries: Array<{ url?: string; fileName?: string }> = [];
 
@@ -281,16 +300,16 @@ function getUploadedBuffers(item: any, subsObj: any): Array<{ buffer: Buffer; fi
   }
 
   const seenUrls = new Set<string>();
-  entries.forEach((e) => {
+  for (const e of entries) {
     const key = `${e.url || ''}__${e.fileName || ''}`;
-    if (seenUrls.has(key)) return;
+    if (seenUrls.has(key)) continue;
     seenUrls.add(key);
 
-    const buf = resolveBufferFromUrl(e.url, e.fileName);
+    const buf = await resolveBufferFromUrl(e.url, e.fileName);
     if (buf) {
       results.push({ buffer: buf, fileName: e.fileName });
     }
-  });
+  }
 
   return results;
 }
@@ -513,7 +532,7 @@ export async function generatePdfBuffer(cf: any, checklist: any[], subject?: any
   for (const item of CHECKLIST_ITEMS) {
     const db = dbi(item.index);
     const sb = subs(item.index);
-    const uploadedBuffers = getUploadedBuffers(db, sb);
+    const uploadedBuffers = await getUploadedBuffers(db, sb);
     const isUploaded = Boolean(db?.status === 'UPLOADED' || db?.fileName || db?.fileUrl || db?.sharedFileUrl || uploadedBuffers.length > 0);
 
     const itemDividerContent: any[] = [

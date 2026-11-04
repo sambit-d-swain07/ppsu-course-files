@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Row, Col, Spinner, Alert, Form, ProgressBar, Table, Card, Button, Badge, Modal } from 'react-bootstrap';
 import Link from 'next/link';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
+import { getDisplayFileUrl } from '@/lib/blob-upload';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO', maxScore: 10 },
@@ -1010,7 +1011,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
               <span className="text-muted small ms-2">· Faculty Submission Document ({courseFile.courseCode})</span>
             </div>
             <a
-              href={(viewingDoc?.fileUrl && viewingDoc.fileUrl.startsWith('pdf;base64,')) ? 'data:application/' + viewingDoc.fileUrl : (viewingDoc?.fileUrl || SAMPLE_PDF_DATA_URL)}
+              href={getDisplayFileUrl(viewingDoc?.fileUrl, true, viewingDoc?.fileName) || SAMPLE_PDF_DATA_URL}
               download={viewingDoc?.fileName || 'document.pdf'}
               className="btn btn-outline-primary btn-sm"
             >
@@ -1022,7 +1023,7 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
             let rawUrl = (viewingDoc?.fileUrl && viewingDoc.fileUrl.trim()) ? viewingDoc.fileUrl.trim() : SAMPLE_PDF_DATA_URL;
             if (rawUrl.startsWith('pdf;base64,')) rawUrl = 'data:application/' + rawUrl;
             else if (rawUrl.startsWith('base64,')) rawUrl = 'data:application/pdf;' + rawUrl;
-            const url = rawUrl;
+            const url = getDisplayFileUrl(rawUrl, false, viewingDoc?.fileName);
             const isImage = viewingDoc?.fileName?.match(/\.(png|jpg|jpeg|gif|webp)$/i) || url.startsWith('data:image/');
             const isCsv = viewingDoc?.fileName?.match(/\.(csv|txt)$/i) || (url.includes('data:text/csv') || url.includes('data:text/plain') || url.includes('data:application/vnd.ms-excel'));
 

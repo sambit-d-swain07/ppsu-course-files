@@ -73,3 +73,26 @@ export async function uploadToBlob(file: File): Promise<string> {
     throw err;
   }
 }
+
+/**
+ * Resolves a file URL to a displayable / downloadable URL.
+ * If the URL points to private Vercel Blob storage, routes it through
+ * the authenticated /api/blob-proxy endpoint so the browser can display
+ * or download it without 403 Forbidden errors.
+ */
+export function getDisplayFileUrl(rawUrl?: string | null, download?: boolean, filename?: string): string {
+  if (!rawUrl) return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:')) return trimmed;
+
+  // Check if it's an external Vercel Blob URL
+  if (trimmed.includes('.blob.vercel-storage.com') || trimmed.includes('.vercel-storage.com')) {
+    const params = new URLSearchParams({ url: trimmed });
+    if (download) params.set('download', '1');
+    if (filename) params.set('filename', filename);
+    return `/api/blob-proxy?${params.toString()}`;
+  }
+
+  return trimmed;
+}

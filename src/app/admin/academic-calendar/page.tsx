@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Form, Button, Table, Badge, Alert, Spinner, Modal } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/mock-data';
-import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import { uploadToBlob, validateFileSize, getDisplayFileUrl } from '@/lib/blob-upload';
 import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 interface CommonFile {
@@ -679,7 +679,7 @@ export default function AdminAcademicCalendarPage() {
           </Modal.Header>
           <Modal.Body className="p-0" style={{ height: '75vh' }}>
             <iframe
-              src={viewingDoc.fileUrl || SAMPLE_PDF_DATA_URL}
+              src={getDisplayFileUrl(viewingDoc.fileUrl, false, viewingDoc.fileName) || SAMPLE_PDF_DATA_URL}
               title={viewingDoc.fileName}
               width="100%"
               height="100%"
