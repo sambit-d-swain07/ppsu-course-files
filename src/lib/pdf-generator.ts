@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
+import { get as blobGet } from '@vercel/blob';
 import { getFileFromStore } from './file-storage';
 import { SAMPLE_PDF_DATA_URL } from './sample-pdf';
 
@@ -199,21 +200,36 @@ async function resolveBufferFromUrl(url?: string | null, fileName?: string | nul
     }
   }
 
-  // Case 3b: Vercel Blob URL — fetch through OIDC-authenticated server-side request
-  if (url.includes('.blob.vercel-storage.com')) {
+  // Case 3b: Vercel Blob URL — use @vercel/blob get() with OIDC (same auth as /api/blob-proxy)
+  if (url.includes('.blob.vercel-storage.com') || url.includes('.vercel-storage.com')) {
     try {
-      const response = await fetch(url, {
-        headers: process.env.BLOB_READ_WRITE_TOKEN
-          ? { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
-          : {},
+      const oidcToken = process.env.VERCEL_OIDC_TOKEN;
+      const result = await blobGet(url, {
+        access: 'private',
+        ...(oidcToken ? { oidcToken } : {}),
+        ...(process.env.BLOB_STORE_ID ? { storeId: process.env.BLOB_STORE_ID } : {}),
       });
-      if (response.ok) {
-        const arrayBuf = await response.arrayBuffer();
-        return Buffer.from(arrayBuf);
+      if (result && result.stream) {
+        // Convert ReadableStream to Buffer
+        const reader = result.stream.getReader();
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+        const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+        const merged = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return Buffer.from(merged);
       }
-      console.error(`Blob fetch failed for ${url}: ${response.status} ${response.statusText}`);
+      console.error(`Blob get() returned no stream for ${url}`);
     } catch (e) {
-      console.error(`Blob fetch error for ${url}:`, e);
+      console.error(`Blob get() error for ${url}:`, e);
     }
     return null;
   }

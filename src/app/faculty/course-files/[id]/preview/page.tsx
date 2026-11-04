@@ -32,6 +32,24 @@ const TBLSTYLE: React.CSSProperties = { width: '100%', borderCollapse: 'collapse
 const PAGE: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '50px 60px', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', fontFamily: "'Times New Roman', Times, serif", color: '#000', background: '#fff' };
 const RAW_PAGE: React.CSSProperties = { width: '100%', minHeight: '1050px', pageBreakAfter: 'always', borderBottom: '1px solid #ddd', background: '#fff', lineHeight: 0, padding: 0, margin: 0, boxSizing: 'border-box' };
 
+/**
+ * Rewrites private Vercel Blob URLs to go through /api/blob-proxy
+ * so the browser never hits the blob store directly (which would 403).
+ * Data URLs and legacy /api/upload/* URLs are returned unchanged.
+ */
+function toProxiedUrl(rawUrl?: string | null, download?: boolean, filename?: string): string {
+  if (!rawUrl) return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+  if (trimmed.includes('.blob.vercel-storage.com') || trimmed.includes('.vercel-storage.com')) {
+    const params = new URLSearchParams({ url: trimmed });
+    if (download) params.set('download', '1');
+    if (filename) params.set('filename', filename);
+    return `/api/blob-proxy?${params.toString()}`;
+  }
+  return trimmed;
+}
+
 function hashString(str: string) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -218,6 +236,8 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
           if (fetchTarget.startsWith('file_')) {
             fetchTarget = `/api/upload/${fetchTarget}`;
           }
+          // Route private Vercel Blob URLs through the authenticated proxy
+          fetchTarget = toProxiedUrl(fetchTarget) || fetchTarget;
           if (fetchTarget.startsWith('data:')) {
             const base64Data = fetchTarget.split(',')[1] || '';
             const binaryString = atob(base64Data);
@@ -228,9 +248,9 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
             pdfParam = { data: bytes };
           } else if (!fetchTarget.startsWith('blob:')) {
             try {
-              const res = await fetch(fetchTarget);
+              const res = await fetch(fetchTarget, { credentials: 'include' });
               if (!res.ok) {
-                // File not found on server (e.g. after server restart)
+                // File not found or access denied
                 if (active) { setError('file-not-found'); setLoading(false); }
                 return;
               }
@@ -301,7 +321,7 @@ function PdfPagesViewer({ url, name }: { url: string; name?: string }) {
       <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#b91c1c' }}>File Not Available</div>
       <div style={{ fontSize: '13px', color: '#64748b', maxWidth: '380px', lineHeight: 1.6 }}>
         <strong>{name || 'This file'}</strong> was uploaded but could not be retrieved from the server.<br />
-        This usually happens after a server restart. Please re-upload the file from the Course File checklist.
+        This can happen if the file was removed from storage. Please re-upload the file from the Course File checklist.
       </div>
     </div>
   );
@@ -353,7 +373,7 @@ function FileEmbed({ url, name }: { url: string; name?: string }) {
   if (isImg) {
     return (
       <div className="preview-page raw-page" style={{ ...RAW_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '1050px' }}>
-        <img src={url} alt={name || 'Uploaded Image'} style={{ maxWidth: '100%', maxHeight: '1000px', objectFit: 'contain', display: 'block' }} />
+        <img src={toProxiedUrl(url) || url} alt={name || 'Uploaded Image'} style={{ maxWidth: '100%', maxHeight: '1000px', objectFit: 'contain', display: 'block' }} />
       </div>
     );
   }
