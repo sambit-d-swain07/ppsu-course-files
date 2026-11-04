@@ -673,7 +673,23 @@ export default function AdminAcademicCalendarPage() {
 
       {/* PDF DOCUMENT VIEWER MODAL */}
       {viewingDoc && (
-        <Modal show={true} onHide={() => setViewingDoc(null)} size="lg" centered>
+        <Modal
+          show={true}
+          onHide={() => setViewingDoc(null)}
+          onExited={() => {
+            if (typeof document !== 'undefined') {
+              const hasVisibleModal = document.querySelector('.modal.show') !== null;
+              if (!hasVisibleModal) {
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+                document.body.classList.remove('modal-open');
+                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+              }
+            }
+          }}
+          size="lg"
+          centered
+        >
           <Modal.Header closeButton>
             <Modal.Title className="h6 fw-bold">{viewingDoc.title}</Modal.Title>
           </Modal.Header>

@@ -1000,7 +1000,23 @@ export default function CoordinatorReviewClient({ courseFileId }: { courseFileId
       </Card>
 
       {/* REAL DOCUMENT PREVIEW MODAL (Section 21 Real Coordinator View Action) */}
-      <Modal show={viewingDoc !== null} onHide={() => setViewingDoc(null)} size="xl" centered>
+      <Modal
+        show={viewingDoc !== null}
+        onHide={() => setViewingDoc(null)}
+        onExited={() => {
+          if (typeof document !== 'undefined') {
+            const hasVisibleModal = document.querySelector('.modal.show') !== null;
+            if (!hasVisibleModal) {
+              document.body.style.removeProperty('overflow');
+              document.body.style.removeProperty('padding-right');
+              document.body.classList.remove('modal-open');
+              document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+            }
+          }
+        }}
+        size="xl"
+        centered
+      >
         <Modal.Header closeButton className="bg-navy-900 text-white py-2">
           <Modal.Title className="h6 fw-bold mb-0">Evaluator Document Inspection — {viewingDoc?.title}</Modal.Title>
         </Modal.Header>

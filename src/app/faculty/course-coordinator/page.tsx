@@ -1240,7 +1240,23 @@ export default function FacultyCourseCoordinatorPage() {
 
       {/* Document Viewing Modal */}
       {viewingDoc && (
-        <Modal show onHide={() => setViewingDoc(null)} size="lg" centered>
+        <Modal
+          show
+          onHide={() => setViewingDoc(null)}
+          onExited={() => {
+            if (typeof document !== 'undefined') {
+              const hasVisibleModal = document.querySelector('.modal.show') !== null;
+              if (!hasVisibleModal) {
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+                document.body.classList.remove('modal-open');
+                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+              }
+            }
+          }}
+          size="lg"
+          centered
+        >
           <Modal.Header closeButton className="bg-light">
             <Modal.Title className="h6 fw-bold mb-0">{viewingDoc.title}</Modal.Title>
           </Modal.Header>

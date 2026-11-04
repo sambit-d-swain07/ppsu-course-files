@@ -659,7 +659,23 @@ export default function CoordinatorSharedDocumentsPage() {
       )}
 
       {/* Document View Modal */}
-      <Modal show={!!viewingDoc} onHide={() => setViewingDoc(null)} size="lg" centered>
+      <Modal
+        show={!!viewingDoc}
+        onHide={() => setViewingDoc(null)}
+        onExited={() => {
+          if (typeof document !== 'undefined') {
+            const hasVisibleModal = document.querySelector('.modal.show') !== null;
+            if (!hasVisibleModal) {
+              document.body.style.removeProperty('overflow');
+              document.body.style.removeProperty('padding-right');
+              document.body.classList.remove('modal-open');
+              document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+            }
+          }
+        }}
+        size="lg"
+        centered
+      >
         <Modal.Header closeButton className="bg-light">
           <Modal.Title className="h6 fw-bold text-navy-900 mb-0">
             {viewingDoc?.title}

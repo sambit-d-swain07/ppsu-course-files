@@ -9,33 +9,49 @@ interface UploadLoadingOverlayProps {
   subMessage?: string;
 }
 
+/**
+ * Ensures body scroll is fully restored and any leftover modal artifacts
+ * (modal-open class, inline overflow/padding styles, stray backdrop elements)
+ * are thoroughly cleaned up when no visible modal remains.
+ */
+function cleanBodyScroll() {
+  if (typeof document === 'undefined') return;
+  const hasVisibleModal = document.querySelector('.modal.show') !== null;
+  if (!hasVisibleModal) {
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+  }
+}
+
 export default function UploadLoadingOverlay({
   isUploading,
   message = 'Uploading...',
   subMessage = 'Please wait while your document is being uploaded and saved.',
 }: UploadLoadingOverlayProps) {
-  // Scroll-lock: applied when isUploading is true, ALWAYS removed on cleanup.
-  // Using a separate effect that only runs when isUploading becomes true ensures
-  // the restore value is captured at lock-time and the cleanup always fires —
-  // even if the component unmounts or React batches state updates unexpectedly.
   useEffect(() => {
     if (!isUploading) return;
 
-    // Save the current overflow before locking
-    const previousOverflow = document.body.style.overflow;
-    const previousPaddingRight = document.body.style.paddingRight;
-
-    // Lock scroll. Add padding to compensate for scrollbar width so layout doesn't shift.
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = 'hidden';
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    // Only lock body if it wasn't ALREADY locked by an active parent modal.
+    // If a modal was already open, do NOT touch body styles so we never
+    // capture "hidden" as a restore value or conflict with Bootstrap's ModalManager.
+    const wasAlreadyLocked = document.body.style.overflow === 'hidden';
+    if (!wasAlreadyLocked) {
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      if (scrollbarWidth > 0) {
+        document.body.style.paddingRight = `${scrollbarWidth}px`;
+      }
     }
 
-    // Cleanup: ALWAYS restores, runs when isUploading → false OR component unmounts
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.paddingRight = previousPaddingRight;
+      // Immediate cleanup when overlay closes
+      cleanBodyScroll();
+      // Delayed cleanup to ensure any concurrent Bootstrap modal exit transition (300ms)
+      // also has its body styles / backdrop cleaned up reliably
+      setTimeout(cleanBodyScroll, 150);
+      setTimeout(cleanBodyScroll, 350);
     };
   }, [isUploading]);
 
@@ -61,7 +77,11 @@ export default function UploadLoadingOverlay({
         flexDirection: 'column',
         pointerEvents: 'all',
         userSelect: 'none',
+        touchAction: 'none',
+        overscrollBehavior: 'contain',
       }}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
     >
       <div
         style={{
@@ -113,4 +133,5 @@ export default function UploadLoadingOverlay({
     </div>
   );
 }
+
 
