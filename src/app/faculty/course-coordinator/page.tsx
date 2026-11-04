@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, Table, Nav, Tab } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
+import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 const SHARED_ITEMS = [
   { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional' },
@@ -24,66 +26,6 @@ const SUB_KEY_CONFIG: Record<string, { label: string; required?: boolean }> = {
   timetable: { label: 'Timetable', required: true },
   questionPaper: { label: 'Question Paper', required: true },
   sampleAnswerSheet: { label: 'Sample Answer Sheet', required: true },
-};
-
-const readFileAsDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 1600;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.82));
-            return;
-          }
-          resolve(e.target?.result as string);
-        };
-        img.onerror = () => resolve(e.target?.result as string);
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    }
-  });
-};
-
-const uploadFileToServer = async (file: File): Promise<string> => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.fileUrl) return data.fileUrl;
-    }
-  } catch (e) {}
-  return await readFileAsDataUrl(file);
 };
 
 function statusBadgeClass(status: string) {
@@ -118,6 +60,8 @@ export default function FacultyCourseCoordinatorPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
   const [removingItem, setRemovingItem] = useState<number | string | null>(null);
+  const [isUploadingOverlay, setIsUploadingOverlay] = useState(false);
+  const [uploadOverlayMessage, setUploadOverlayMessage] = useState('Uploading...');
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'shared' | 'faculty'>('shared');
   const [searchQuery, setSearchQuery] = useState('');
@@ -260,9 +204,19 @@ export default function FacultyCourseCoordinatorPage() {
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await uploadFileToServer(file);
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setUploadingItem(itemIndex);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const fileUrl = await uploadToBlob(file);
 
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
@@ -272,7 +226,7 @@ export default function FacultyCourseCoordinatorPage() {
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
-          fileUrl: dataUrl
+          fileUrl
         })
       });
       if (!res.ok) {
@@ -280,20 +234,32 @@ export default function FacultyCourseCoordinatorPage() {
         throw new Error(errData.error || 'Upload failed');
       }
       setActionSuccess(`Shared document for Item #${itemIndex} uploaded and locked for all faculty in this subject.`);
-      fetchData(false);
+      await fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
   const handleUploadSubItem = async (itemIndex: number, subKey: string, file: File) => {
     if (!selectedSubjectId || !file) return;
-    const uploadKey = `${itemIndex}-${subKey}`;
-    setUploadingItem(uploadKey); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await uploadFileToServer(file);
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    const uploadKey = `${itemIndex}-${subKey}`;
+    const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
+    setUploadingItem(uploadKey);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${label}...`);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const fileUrl = await uploadToBlob(file);
       const existingDoc = sharedMap.get(itemIndex);
 
       let existingSubJson: any = {};
@@ -301,7 +267,7 @@ export default function FacultyCourseCoordinatorPage() {
 
       existingSubJson[subKey] = {
         fileName: file.name,
-        fileUrl: dataUrl,
+        fileUrl,
         uploadedAt: new Date().toISOString()
       };
 
@@ -313,7 +279,7 @@ export default function FacultyCourseCoordinatorPage() {
           itemIndex,
           status: 'UPLOADED',
           fileName: existingDoc?.fileName || file.name,
-          fileUrl: existingDoc?.fileUrl || dataUrl,
+          fileUrl: existingDoc?.fileUrl || fileUrl,
           subItemsJson: JSON.stringify(existingSubJson)
         })
       });
@@ -321,13 +287,13 @@ export default function FacultyCourseCoordinatorPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
       setActionSuccess(`Shared document sub-item (${label}) uploaded successfully.`);
-      fetchData(false);
+      await fetchData(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -464,6 +430,7 @@ export default function FacultyCourseCoordinatorPage() {
 
   return (
     <div className="container-fluid px-4 py-4">
+      <UploadLoadingOverlay isUploading={isUploadingOverlay} message={uploadOverlayMessage} />
       {/* Header Banner */}
       <div className="card-custom mb-4 p-4" style={{ background: 'linear-gradient(135deg, var(--ppsu-navy-900, #1E293B) 0%, #0F172A 100%)', color: '#fff' }}>
         <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">

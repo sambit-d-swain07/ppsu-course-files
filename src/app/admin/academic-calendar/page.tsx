@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Form, Button, Table, Badge, Alert, Spinner, Modal } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/mock-data';
+import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 interface CommonFile {
   fileName: string;
@@ -32,6 +34,8 @@ export default function AdminAcademicCalendarPage() {
   const [saving, setSaving] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
   const [actionError, setActionError] = useState('');
+  const [isUploadingOverlay, setIsUploadingOverlay] = useState(false);
+  const [uploadOverlayMessage, setUploadOverlayMessage] = useState('Uploading...');
 
   // Wizard Form State
   const [selectedSchool, setSelectedSchool] = useState<string>('SOE');
@@ -86,30 +90,46 @@ export default function AdminAcademicCalendarPage() {
 
   const handleCommonFileUpload = async (file: File) => {
     try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const fileUrl = (reader.result as string) || SAMPLE_PDF_DATA_URL;
-        setCommonFile({ fileName: file.name, fileUrl });
-      };
-      reader.readAsDataURL(file);
+      validateFileSize(file);
     } catch (err: any) {
-      setActionError('File read failed: ' + err.message);
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    setActionError('');
+    try {
+      const fileUrl = await uploadToBlob(file);
+      setCommonFile({ fileName: file.name, fileUrl });
+      setActionSuccess(`Uploaded ${file.name} successfully.`);
+    } catch (err: any) {
+      setActionError('Upload failed: ' + err.message);
+    } finally {
+      setIsUploadingOverlay(false);
     }
   };
 
   const handleSemesterOverrideUpload = async (sem: string, file: File) => {
     try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const fileUrl = (reader.result as string) || SAMPLE_PDF_DATA_URL;
-        setSemesterOverrides((prev) => ({
-          ...prev,
-          [sem]: { fileName: file.name, fileUrl }
-        }));
-      };
-      reader.readAsDataURL(file);
+      validateFileSize(file);
     } catch (err: any) {
-      setActionError('File read failed: ' + err.message);
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name} for ${sem}...`);
+    setActionError('');
+    try {
+      const fileUrl = await uploadToBlob(file);
+      setSemesterOverrides((prev) => ({
+        ...prev,
+        [sem]: { fileName: file.name, fileUrl }
+      }));
+      setActionSuccess(`Uploaded override for ${sem} successfully.`);
+    } catch (err: any) {
+      setActionError('Upload failed: ' + err.message);
+    } finally {
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -248,6 +268,7 @@ export default function AdminAcademicCalendarPage() {
 
   return (
     <div className="container-fluid py-3">
+      <UploadLoadingOverlay isUploading={isUploadingOverlay} message={uploadOverlayMessage} />
       {/* Header Banner */}
       <div
         className="p-4 mb-4 rounded-3 text-white shadow-sm"

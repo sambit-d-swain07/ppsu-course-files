@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
       return noStoreJson({ error: 'No file uploaded' }, { status: 400 });
     }
 
+    if (file.size > 50 * 1024 * 1024) {
+      return noStoreJson({ error: 'File too large — maximum size is 50MB' }, { status: 413 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;

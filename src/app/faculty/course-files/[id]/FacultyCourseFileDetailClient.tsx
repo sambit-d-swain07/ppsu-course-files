@@ -9,6 +9,8 @@ import * as XLSX from 'xlsx';
 import { parseItem4StudentList } from '@/lib/student-parser';
 import { LAB_VISIBLE_ITEMS, LAB_EDITABLE_ITEMS } from '@/lib/subject-access';
 import { isChecklistItemComplete, SHARED_COORDINATOR_ITEMS } from '@/lib/course-progress';
+import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 const CHECKLIST_ITEMS = [
   { index: 1,  name: 'Institute Vision, Mission & PEO, PSO & PO',                           maxScore: 10, required: true  },
@@ -76,69 +78,13 @@ function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
-const readFileAsDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 1600;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.82));
-            return;
-          }
-          resolve(e.target?.result as string);
-        };
-        img.onerror = () => resolve(e.target?.result as string);
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    }
-  });
-};
 
 const uploadFileToServer = async (file: File): Promise<string> => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.fileUrl) {
-        return data.fileUrl;
-      }
-    }
-  } catch (e) {
-    console.warn('File upload to /api/upload failed, falling back to data URL:', e);
-  }
-  return await readFileAsDataUrl(file);
+  validateFileSize(file);
+  return await uploadToBlob(file);
 };
+
+
 
 const normalizeCriteria = (value: unknown) => (Array.isArray(value) ? value : [])
   .filter((criterion: any) => criterion && typeof criterion === 'object' && String(criterion.id || '').trim())
@@ -232,6 +178,8 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const [labTeacherDeclared, setLabTeacherDeclared] = useState(false);
   const [uploadingItem, setUploadingItem] = useState<number | string | null>(null);
   const [removingItem, setRemovingItem] = useState<number | string | null>(null);
+  const [isUploadingOverlay, setIsUploadingOverlay] = useState(false);
+  const [uploadOverlayMessage, setUploadOverlayMessage] = useState('Uploading...');
   const [gradeSheetConvertLoading, setGradeSheetConvertLoading] = useState(false);
   const [gradeSheetExcelModal, setGradeSheetExcelModal] = useState<{ fileName: string; rows: string[][] } | null>(null);
 
@@ -871,89 +819,104 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return;
     }
 
-    const dataUrl = await readFileAsDataUrl(file);
-    sectionFiles[sectionKey] = {
-      fileName: file.name,
-      fileUrl: dataUrl,
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-    if (sectionKey === 'main') {
-      subs.file = { fileName: file.name, fileUrl: dataUrl };
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
     }
 
-    // Auto-parse if CSV
-    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
-      try {
-        const text = await file.text();
-        const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (rawLines.length > 1) {
-          const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
-          const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
-          const nameIdx = header.findIndex(h => h.includes('name'));
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
+      const fileUrl = await uploadToBlob(file);
+      sectionFiles[sectionKey] = {
+        fileName: file.name,
+        fileUrl,
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+      if (sectionKey === 'main') {
+        subs.file = { fileName: file.name, fileUrl };
+      }
 
-          if (enrolIdx !== -1 || nameIdx !== -1) {
-            let updated = false;
-            const newRows = item8Rows.map(row => {
-              if (!isRowEditableByCurrentFaculty(row.batch)) return row;
+      // Auto-parse if CSV
+      if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
+        try {
+          const text = await file.text();
+          const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (rawLines.length > 1) {
+            const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
+            const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
+            const nameIdx = header.findIndex(h => h.includes('name'));
 
-              const matchLine = rawLines.slice(1).find(l => {
-                const cols = parseCsvLine(l);
-                if (enrolIdx !== -1 && cols[enrolIdx]) {
-                  const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
-                  const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
-                  if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
-                }
-                if (nameIdx !== -1 && cols[nameIdx]) {
-                  const csvName = cols[nameIdx].toLowerCase().trim();
-                  const rowName = String(row.name || '').toLowerCase().trim();
-                  if (csvName && rowName && csvName === rowName) return true;
-                }
-                return false;
+            if (enrolIdx !== -1 || nameIdx !== -1) {
+              let updated = false;
+              const newRows = item8Rows.map(row => {
+                if (!isRowEditableByCurrentFaculty(row.batch)) return row;
+
+                const matchLine = rawLines.slice(1).find(l => {
+                  const cols = parseCsvLine(l);
+                  if (enrolIdx !== -1 && cols[enrolIdx]) {
+                    const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                    const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                    if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
+                  }
+                  if (nameIdx !== -1 && cols[nameIdx]) {
+                    const csvName = cols[nameIdx].toLowerCase().trim();
+                    const rowName = String(row.name || '').toLowerCase().trim();
+                    if (csvName && rowName && csvName === rowName) return true;
+                  }
+                  return false;
+                });
+
+                if (!matchLine) return row;
+                const cols = parseCsvLine(matchLine);
+                const updatedRow = { ...row };
+
+                header.forEach((h, idx) => {
+                  const rawVal = cols[idx];
+                  if (rawVal === undefined || rawVal === '') return;
+                  const val = Number(rawVal);
+                  if (isNaN(val)) return;
+
+                  if (/^p\d+$/i.test(h)) {
+                    const pNum = h.toUpperCase();
+                    updatedRow.practicals = { ...(updatedRow.practicals || {}), [pNum]: Math.min(10, Math.max(0, val)) };
+                    updated = true;
+                  } else if ((h.includes('viva') && (h.includes('int') || sectionKey === 'sec23')) || sectionKey === 'sec23') {
+                    updatedRow.internalViva = Math.min(20, Math.max(0, val));
+                    updated = true;
+                  } else if (((h.includes('perf') || h.includes('quiz')) && (h.includes('ese') || sectionKey === 'sec31')) || sectionKey === 'sec31') {
+                    updatedRow.esePerformance = Math.min(30, Math.max(0, val));
+                    updated = true;
+                  } else if ((h.includes('ext') && (h.includes('viva') || sectionKey === 'sec32')) || sectionKey === 'sec32') {
+                    updatedRow.eseExternalViva = Math.min(30, Math.max(0, val));
+                    updated = true;
+                  }
+                });
+
+                return updatedRow;
               });
 
-              if (!matchLine) return row;
-              const cols = parseCsvLine(matchLine);
-              const updatedRow = { ...row };
-
-              header.forEach((h, idx) => {
-                const rawVal = cols[idx];
-                if (rawVal === undefined || rawVal === '') return;
-                const val = Number(rawVal);
-                if (isNaN(val)) return;
-
-                if (/^p\d+$/i.test(h)) {
-                  const pNum = h.toUpperCase();
-                  updatedRow.practicals = { ...(updatedRow.practicals || {}), [pNum]: Math.min(10, Math.max(0, val)) };
-                  updated = true;
-                } else if ((h.includes('viva') && (h.includes('int') || sectionKey === 'sec23')) || sectionKey === 'sec23') {
-                  updatedRow.internalViva = Math.min(20, Math.max(0, val));
-                  updated = true;
-                } else if (((h.includes('perf') || h.includes('quiz')) && (h.includes('ese') || sectionKey === 'sec31')) || sectionKey === 'sec31') {
-                  updatedRow.esePerformance = Math.min(30, Math.max(0, val));
-                  updated = true;
-                } else if ((h.includes('ext') && (h.includes('viva') || sectionKey === 'sec32')) || sectionKey === 'sec32') {
-                  updatedRow.eseExternalViva = Math.min(30, Math.max(0, val));
-                  updated = true;
-                }
-              });
-
-              return updatedRow;
-            });
-
-            if (updated) {
-              setItem8Rows(newRows);
-              item8RowsRef.current = newRows;
-              subs.students = newRows;
-              setActionSuccess(`CSV parsed successfully! Rubric marks populated into table.`);
+              if (updated) {
+                setItem8Rows(newRows);
+                item8RowsRef.current = newRows;
+                subs.students = newRows;
+                setActionSuccess(`CSV parsed successfully! Rubric marks populated into table.`);
+              }
             }
           }
+        } catch (err: any) {
+          console.error('CSV Parse Error:', err);
         }
-      } catch (err: any) {
-        console.error('CSV Parse Error:', err);
       }
-    }
 
-    await saveStructuredItem(8, { ...subs, sectionFiles, numPracticals, students: item8RowsRef.current }, 'UPLOADED');
+      await saveStructuredItem(8, { ...subs, sectionFiles, numPracticals, students: item8RowsRef.current }, 'UPLOADED');
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleDownloadTheoryCsvTemplate = () => {
@@ -1001,88 +964,103 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       return;
     }
 
-    const dataUrl = await readFileAsDataUrl(file);
-    subs.file = {
-      fileName: file.name,
-      fileUrl: dataUrl,
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-
-    // Auto-parse if CSV
-    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
-      try {
-        const text = await file.text();
-        const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (rawLines.length > 1) {
-          const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
-          const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
-          const nameIdx = header.findIndex(h => h.includes('name'));
-
-          if (enrolIdx !== -1 || nameIdx !== -1) {
-            let updated = false;
-            const selectedCriteria = item9Criteria.filter((c: any) => !c.fixed);
-
-            const newRows = item9Rows.map(row => {
-              const matchLine = rawLines.slice(1).find(l => {
-                const cols = parseCsvLine(l);
-                if (enrolIdx !== -1 && cols[enrolIdx]) {
-                  const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
-                  const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
-                  if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
-                }
-                if (nameIdx !== -1 && cols[nameIdx]) {
-                  const csvName = cols[nameIdx].toLowerCase().trim();
-                  const rowName = String(row.name || '').toLowerCase().trim();
-                  if (csvName && rowName && csvName === rowName) return true;
-                }
-                return false;
-              });
-
-              if (!matchLine) return row;
-              const cols = parseCsvLine(matchLine);
-              const updatedRow = { ...row, marks: { ...(row.marks || {}) } };
-
-              header.forEach((h, idx) => {
-                const rawVal = cols[idx];
-                if (rawVal === undefined || rawVal === '') return;
-                const val = Number(rawVal);
-                if (isNaN(val)) return;
-
-                if (h.includes('internal 1') || h.includes('internal1') || h.includes('int 1')) {
-                  updatedRow.marks['internal-1'] = Math.min(30, Math.max(0, val));
-                  updated = true;
-                } else if (h.includes('internal 2') || h.includes('internal2') || h.includes('int 2')) {
-                  updatedRow.marks['internal-2'] = Math.min(30, Math.max(0, val));
-                  updated = true;
-                } else {
-                  selectedCriteria.forEach((c: any) => {
-                    const labelNorm = String(c.label || '').toLowerCase().trim();
-                    const idNorm = String(c.id || '').toLowerCase().trim();
-                    if (labelNorm && (h.includes(labelNorm) || h === idNorm)) {
-                      updatedRow.marks[c.id] = Math.min(c.max, Math.max(0, val));
-                      updated = true;
-                    }
-                  });
-                }
-              });
-
-              return updatedRow;
-            });
-
-            if (updated) {
-              setItem9Rows(newRows);
-              item9RowsRef.current = newRows;
-              subs.students = newRows;
-              setActionSuccess(`CSV parsed successfully! Theory Rubrics marks populated into table.`);
-            }
-          }
-        }
-      } catch (err: any) {
-        console.error('Error parsing Item 9 CSV:', err);
-      }
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
     }
 
-    await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
+      const fileUrl = await uploadToBlob(file);
+      subs.file = {
+        fileName: file.name,
+        fileUrl,
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+
+      // Auto-parse if CSV
+      if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv') || file.type.includes('text/plain')) {
+        try {
+          const text = await file.text();
+          const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (rawLines.length > 1) {
+            const header = parseCsvLine(rawLines[0]).map(c => c.toLowerCase());
+            const enrolIdx = header.findIndex(h => h.includes('enrol') || h.includes('roll') || h.includes('id'));
+            const nameIdx = header.findIndex(h => h.includes('name'));
+
+            if (enrolIdx !== -1 || nameIdx !== -1) {
+              let updated = false;
+              const selectedCriteria = item9Criteria.filter((c: any) => !c.fixed);
+
+              const newRows = item9Rows.map(row => {
+                const matchLine = rawLines.slice(1).find(l => {
+                  const cols = parseCsvLine(l);
+                  if (enrolIdx !== -1 && cols[enrolIdx]) {
+                    const csvEnrol = cols[enrolIdx].toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                    const rowEnrol = String(row.enrolmentNumber || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+                    if (csvEnrol && rowEnrol && csvEnrol === rowEnrol) return true;
+                  }
+                  if (nameIdx !== -1 && cols[nameIdx]) {
+                    const csvName = cols[nameIdx].toLowerCase().trim();
+                    const rowName = String(row.name || '').toLowerCase().trim();
+                    if (csvName && rowName && csvName === rowName) return true;
+                  }
+                  return false;
+                });
+
+                if (!matchLine) return row;
+                const cols = parseCsvLine(matchLine);
+                const updatedRow = { ...row, marks: { ...(row.marks || {}) } };
+
+                header.forEach((h, idx) => {
+                  const rawVal = cols[idx];
+                  if (rawVal === undefined || rawVal === '') return;
+                  const val = Number(rawVal);
+                  if (isNaN(val)) return;
+
+                  if (h.includes('internal 1') || h.includes('internal1') || h.includes('int 1')) {
+                    updatedRow.marks['internal-1'] = Math.min(30, Math.max(0, val));
+                    updated = true;
+                  } else if (h.includes('internal 2') || h.includes('internal2') || h.includes('int 2')) {
+                    updatedRow.marks['internal-2'] = Math.min(30, Math.max(0, val));
+                    updated = true;
+                  } else {
+                    selectedCriteria.forEach((c: any) => {
+                      const labelNorm = String(c.label || '').toLowerCase().trim();
+                      const idNorm = String(c.id || '').toLowerCase().trim();
+                      if (labelNorm && (h.includes(labelNorm) || h === idNorm)) {
+                        updatedRow.marks[c.id] = Math.min(c.max, Math.max(0, val));
+                        updated = true;
+                      }
+                    });
+                  }
+                });
+
+                return updatedRow;
+              });
+
+              if (updated) {
+                setItem9Rows(newRows);
+                item9RowsRef.current = newRows;
+                subs.students = newRows;
+                setActionSuccess(`CSV parsed successfully! Theory Rubrics marks populated into table.`);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error('Error parsing Item 9 CSV:', err);
+        }
+      }
+
+      await saveStructuredItem(9, { ...subs, criteria: item9Criteria, students: item9RowsRef.current }, 'UPLOADED');
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleDownloadCsvTemplate = () => {
@@ -1205,14 +1183,30 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const currentGuidelines = subs.ceGuidelines || {};
     let updatedGuidelines = { ...currentGuidelines };
 
-    if (file) {
-      const fileUrl = await readFileAsDataUrl(file);
-      updatedGuidelines[criterionId] = { fileName: file.name, fileUrl };
-    } else {
+    if (!file) {
       delete updatedGuidelines[criterionId];
+      await saveStructuredItem(13, { ...subs, ceGuidelines: updatedGuidelines }, 'UPLOADED');
+      return;
     }
 
-    await saveStructuredItem(13, { ...subs, ceGuidelines: updatedGuidelines }, 'UPLOADED');
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
+      const fileUrl = await uploadToBlob(file);
+      updatedGuidelines[criterionId] = { fileName: file.name, fileUrl };
+      await saveStructuredItem(13, { ...subs, ceGuidelines: updatedGuidelines }, 'UPLOADED');
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleGradeChange = (studentId: string, field: 'theoryGrade' | 'practicalGrade', value: string) => {
@@ -1592,16 +1586,57 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   const handleStructuredFileUpload = async (itemIndex: number, file?: File) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
-    subs.file = file ? { fileName: file.name, fileUrl: await uploadFileToServer(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
-    await saveStructuredItem(itemIndex, subs, file || subs.students?.length || subs.criteria?.length ? 'UPLOADED' : 'EMPTY');
-    setActionSuccess(file ? `File uploaded for Item #${itemIndex}.` : `File removed from Item #${itemIndex}.`);
+    if (!file) {
+      subs.file = null;
+      await saveStructuredItem(itemIndex, subs, subs.students?.length || subs.criteria?.length ? 'UPLOADED' : 'EMPTY');
+      setActionSuccess(`File removed from Item #${itemIndex}.`);
+      return;
+    }
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
+      const fileUrl = await uploadFileToServer(file);
+      subs.file = { fileName: file.name, fileUrl, uploadDate: new Date().toISOString().split('T')[0] };
+      await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+      setActionSuccess(`File uploaded for Item #${itemIndex}.`);
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleSubFileUpload = async (itemIndex: number, key: string, file?: File) => {
     if (isLocked) return;
     const subs = getSubItems(itemIndex) || {};
-    subs[key] = file ? { fileName: file.name, fileUrl: await uploadFileToServer(file), uploadDate: new Date().toISOString().split('T')[0] } : null;
-    await saveStructuredItem(itemIndex, subs, file || subs.students?.length || subs.assignmentTopics?.length ? 'UPLOADED' : 'EMPTY');
+    if (!file) {
+      subs[key] = null;
+      await saveStructuredItem(itemIndex, subs, subs.students?.length || subs.assignmentTopics?.length ? 'UPLOADED' : 'EMPTY');
+      return;
+    }
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
+      const fileUrl = await uploadFileToServer(file);
+      subs[key] = { fileName: file.name, fileUrl, uploadDate: new Date().toISOString().split('T')[0] };
+      await saveStructuredItem(itemIndex, subs, 'UPLOADED');
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleAssignmentMarkChange = async (studentId: string, value: number) => {
@@ -1723,7 +1758,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setActionError(''); setActionSuccess('');
     if (!selectedFile) return;
 
+    try {
+      validateFileSize(selectedFile);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+
     setUploadingItem(itemIndex);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading Item #${itemIndex} (${selectedFile.name})...`);
     try {
       const dataUrl = await uploadFileToServer(selectedFile);
       let studentListJson: string | undefined;
@@ -1790,6 +1834,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(err.message);
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -1905,12 +1950,26 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await uploadFileToServer(file);
-      subs[subKey] = {
-        fileName: file.name,
-        fileUrl: dataUrl,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
+      try {
+        validateFileSize(file);
+      } catch (err: any) {
+        setActionError(err.message || 'File too large — maximum size is 50MB');
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${file.name}...`);
+      try {
+        const dataUrl = await uploadFileToServer(file);
+        subs[subKey] = {
+          fileName: file.name,
+          fileUrl: dataUrl,
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+      } catch (err: any) {
+        setActionError(err.message || 'Upload failed');
+        setIsUploadingOverlay(false);
+        return;
+      }
     }
 
     const isCompComplete = !!(subs.timetable?.fileName && subs.questionPaper?.fileName && subs.sampleAnswerSheet?.fileName && subs.markStatement?.fileName);
@@ -1920,7 +1979,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setChecklist((prev) => prev.map((item) => item.itemIndex === itemIndex ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
 
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1930,8 +1989,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save sub-item');
+      }
       setActionSuccess(`Sub-item updated for Item #${itemIndex}.`);
     } catch (err: any) { setActionError(err.message); }
+    finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   // Item 6 Sub-upload Handler (coordinator-only; 6 sub-items: lecture/lab/tutorial plans + outcomes)
@@ -1945,12 +2011,26 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await uploadFileToServer(file);
-      subs[subKey] = {
-        fileName: file.name,
-        fileUrl: dataUrl,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
+      try {
+        validateFileSize(file);
+      } catch (err: any) {
+        setActionError(err.message || 'File too large — maximum size is 50MB');
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${file.name}...`);
+      try {
+        const dataUrl = await uploadFileToServer(file);
+        subs[subKey] = {
+          fileName: file.name,
+          fileUrl: dataUrl,
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+      } catch (err: any) {
+        setActionError(err.message || 'Upload failed');
+        setIsUploadingOverlay(false);
+        return;
+      }
     }
 
     // Required: lessonPlanLecture + outcomeLecture; optional: lab + tutorial slots
@@ -1960,7 +2040,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     setChecklist((prev) => prev.map((item) => item.itemIndex === 6 ? { ...item, status: newStatus, subItemsJson: JSON.stringify(subs) } : item));
 
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1970,8 +2050,15 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save Item 6');
+      }
       setActionSuccess('Item 6 (Course Delivery Details) updated.');
     } catch (err: any) { setActionError(err.message); }
+    finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   // Item 13 Fixed Sub-upload Handler
@@ -1982,18 +2069,32 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!file) {
       subs[subKey] = null;
     } else {
-      const dataUrl = await uploadFileToServer(file);
-      subs[subKey] = {
-        fileName: file.name,
-        fileUrl: dataUrl,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
+      try {
+        validateFileSize(file);
+      } catch (err: any) {
+        setActionError(err.message || 'File too large — maximum size is 50MB');
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${file.name}...`);
+      try {
+        const dataUrl = await uploadFileToServer(file);
+        subs[subKey] = {
+          fileName: file.name,
+          fileUrl: dataUrl,
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+      } catch (err: any) {
+        setActionError(err.message || 'Upload failed');
+        setIsUploadingOverlay(false);
+        return;
+      }
     }
 
     const isComplete = !!(subs.assignmentTopics?.fileName && subs.sampleAssignment?.fileName);
 
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2003,9 +2104,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save Item 13');
+      }
       setActionSuccess('Item 13 sub-document updated.');
       fetchData();
     } catch (err: any) { setActionError(err.message); }
+    finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   // Item 13 Dynamic Assignment Handlers (+ Add Assignment)
@@ -2061,30 +2169,46 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   };
 
   const handleUploadAssignmentFile = async (id: string, file: File) => {
-    if (isLocked) return;
+    if (isLocked || !file) return;
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
     const subs = getSubItems(13) || { assignmentTopics: null, sampleAssignment: null, assignments: [], additionalDocuments: [] };
     const list = subs.assignments || [];
     const target = list.find((a: any) => a.id === id);
-    if (target && file) {
+    if (!target) return;
+
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    try {
       const dataUrl = await uploadFileToServer(file);
       target.fileName = file.name;
       target.fileUrl = dataUrl;
       subs.assignments = list;
       const isComplete = !!(subs.assignmentTopics?.fileName && subs.sampleAssignment?.fileName);
 
-      try {
-        await fetch(`/api/checklist/${courseFileId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            itemIndex: 13,
-            status: isComplete ? 'UPLOADED' : 'EMPTY',
-            subItemsJson: JSON.stringify(subs)
-          })
-        });
-        setActionSuccess(`File uploaded for ${target.name}.`);
-        fetchData();
-      } catch (err: any) { setActionError(err.message); }
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIndex: 13,
+          status: isComplete ? 'UPLOADED' : 'EMPTY',
+          subItemsJson: JSON.stringify(subs)
+        })
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save assignment');
+      }
+      setActionSuccess(`File uploaded for ${target.name}.`);
+      fetchData();
+    } catch (err: any) {
+      setActionError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -2114,29 +2238,40 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (!activeIaItem || isLocked) return;
     if (!addDocName.trim()) { setActionError('Document name is required'); return; }
     
-    const subs = getSubItems(activeIaItem) || { timetable: null, questionPaper: null, sampleAnswerSheet: null, additionalDocuments: [] };
-    const docs = subs.additionalDocuments || [];
-    let dataUrl = SAMPLE_PDF_DATA_URL;
-
     if (addDocFile) {
-      dataUrl = await uploadFileToServer(addDocFile);
+      try {
+        validateFileSize(addDocFile);
+      } catch (err: any) {
+        setActionError(err.message || 'File too large — maximum size is 50MB');
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${addDocFile.name}...`);
     }
 
-    const newDoc = {
-      id: `doc-${Date.now()}`,
-      name: addDocName.trim(),
-      fileName: addDocFile ? addDocFile.name : `${addDocName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pdf`,
-      fileUrl: dataUrl,
-      fileType: addDocFile ? (addDocFile.name.split('.').pop()?.toUpperCase() || 'PDF') : 'PDF',
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-
-    docs.push(newDoc);
-    subs.additionalDocuments = docs;
-    const isCompComplete = !!(subs.timetable?.fileName && subs.questionPaper?.fileName && subs.sampleAnswerSheet?.fileName);
-
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const subs = getSubItems(activeIaItem) || { timetable: null, questionPaper: null, sampleAnswerSheet: null, additionalDocuments: [] };
+      const docs = subs.additionalDocuments || [];
+      let dataUrl = SAMPLE_PDF_DATA_URL;
+
+      if (addDocFile) {
+        dataUrl = await uploadFileToServer(addDocFile);
+      }
+
+      const newDoc = {
+        id: `doc-${Date.now()}`,
+        name: addDocName.trim(),
+        fileName: addDocFile ? addDocFile.name : `${addDocName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pdf`,
+        fileUrl: dataUrl,
+        fileType: addDocFile ? (addDocFile.name.split('.').pop()?.toUpperCase() || 'PDF') : 'PDF',
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+
+      docs.push(newDoc);
+      subs.additionalDocuments = docs;
+      const isCompComplete = !!(subs.timetable?.fileName && subs.questionPaper?.fileName && subs.sampleAnswerSheet?.fileName);
+
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2146,12 +2281,20 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to add document');
+      }
       setActionSuccess(`Additional document added to Item #${activeIaItem}.`);
       setActiveIaItem(null);
       setAddDocName('Mark Statement & Result Analysis');
       setAddDocFile(null);
       fetchData();
-    } catch (err: any) { setActionError(err.message); }
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to add document');
+    } finally {
+      setIsUploadingOverlay(false);
+    }
   };
 
   const handleRemoveIaCustomDoc = async (itemIndex: number, docId: string) => {
@@ -2181,8 +2324,16 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     if (isLocked) return;
     if (!item19DocName.trim()) { setActionError('Document name is required'); return; }
     if (!item19DocFile) { setActionError('Please select a file to upload'); return; }
+    try {
+      validateFileSize(item19DocFile);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
     setActionError(''); setActionSuccess('');
     setUploadingItem(19);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${item19DocFile.name}...`);
 
     try {
       const subs = getSubItems(19) || {};
@@ -2237,6 +2388,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(err.message || 'Failed to add document');
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -2290,6 +2442,12 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   const handleReplaceItem19Doc = async (docId: string, file: File) => {
     if (isLocked || !file) return;
+    try {
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
     const subs = getSubItems(19) || {};
     let docs = Array.isArray(subs.documents) ? [...subs.documents] : [];
     
@@ -2305,24 +2463,27 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       }];
     }
 
-    const dataUrl = await uploadFileToServer(file);
-    const updatedDocs = docs.map((d: any) => {
-      if (d.id === docId) {
-        return {
-          ...d,
-          fileName: file.name,
-          fileUrl: dataUrl,
-          fileType: file.name.split('.').pop()?.toUpperCase() || 'PDF',
-          uploadDate: new Date().toISOString().split('T')[0]
-        };
-      }
-      return d;
-    });
-
-    subs.documents = updatedDocs;
-
+    setUploadingItem(19);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      const dataUrl = await uploadFileToServer(file);
+      const updatedDocs = docs.map((d: any) => {
+        if (d.id === docId) {
+          return {
+            ...d,
+            fileName: file.name,
+            fileUrl: dataUrl,
+            fileType: file.name.split('.').pop()?.toUpperCase() || 'PDF',
+            uploadDate: new Date().toISOString().split('T')[0]
+          };
+        }
+        return d;
+      });
+
+      subs.documents = updatedDocs;
+
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2333,31 +2494,50 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to replace document');
+      }
       setActionSuccess('Document replaced successfully.');
       fetchData();
-    } catch (err: any) { setActionError(err.message); }
+    } catch (err: any) {
+      setActionError(err.message || 'Replace failed');
+    } finally {
+      setUploadingItem(null);
+      setIsUploadingOverlay(false);
+    }
   };
 
-  // University Exam Sub-upload handler with real Data URL
+  // University Exam Sub-upload handler with Blob upload
   const handleUnivSubUpload = async (subKey: 'questionPaper' | 'gradeSheet' | 'resultAnalysis', file?: File) => {
     if (isLocked) return;
-    const subs = getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null };
-    
-    if (!file) {
-      subs[subKey] = null;
-    } else {
-      const dataUrl = await readFileAsDataUrl(file);
-      subs[subKey] = {
-        fileName: file.name,
-        fileUrl: dataUrl,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
+    const subs: any = { ...(getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null }) };
+
+    if (file) {
+      try {
+        validateFileSize(file);
+      } catch (sizeErr: any) {
+        setActionError(sizeErr.message);
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${file.name}...`);
     }
 
-    const isAllThreeUploaded = !!(subs.questionPaper?.fileName && subs.gradeSheet?.fileName && subs.resultAnalysis?.fileName);
-
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      if (!file) {
+        subs[subKey] = null;
+      } else {
+        const fileUrl = await uploadToBlob(file);
+        subs[subKey] = {
+          fileName: file.name,
+          fileUrl,
+          uploadDate: new Date().toISOString().split('T')[0]
+        };
+      }
+
+      const isAllThreeUploaded = !!(subs.questionPaper?.fileName && subs.gradeSheet?.fileName && subs.resultAnalysis?.fileName);
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2367,9 +2547,17 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to save Item 15');
+      }
       setActionSuccess('University Exam sub-document updated.');
       fetchData();
-    } catch (err: any) { setActionError(err.message); }
+    } catch (err: any) {
+      setActionError(err.message || 'Save failed');
+    } finally {
+      if (file) setIsUploadingOverlay(false);
+    }
   };
 
   const handleDownloadUnivGradeSheetTemplate = () => {
@@ -2405,13 +2593,21 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
   // ─── Grade Sheet: Upload & Convert to Excel (Item 15b) ─────────────────────
   const handleGradeSheetConvertToExcel = async (file: File) => {
     if (isLocked) return;
+    try {
+      validateFileSize(file);
+    } catch (sizeErr: any) {
+      setActionError(sizeErr.message);
+      return;
+    }
     setGradeSheetConvertLoading(true);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading and processing ${file.name}...`);
     try {
       const subs: any = { ...(getSubItems(15) || { questionPaper: null, gradeSheet: null, resultAnalysis: null }) };
 
       // 1. Store the original file as gradeSheet (existing upload slot)
-      const originalDataUrl = await readFileAsDataUrl(file);
-      subs.gradeSheet = { fileName: file.name, fileUrl: originalDataUrl, uploadDate: new Date().toISOString().split('T')[0] };
+      const originalFileUrl = await uploadToBlob(file);
+      subs.gradeSheet = { fileName: file.name, fileUrl: originalFileUrl, uploadDate: new Date().toISOString().split('T')[0] };
 
       // 2. Convert to Excel using SheetJS
       let workbook: XLSX.WorkBook;
@@ -2529,6 +2725,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
       setActionError(err.message || 'Conversion failed');
     } finally {
       setGradeSheetConvertLoading(false);
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -2628,22 +2825,33 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
     const batch = list.find((b: any) => b.id === batchId);
     if (!batch) return;
 
-    if (!file) {
-      batch.fileName = null;
-      batch.fileUrl = null;
-    } else {
-      const dataUrl = await readFileAsDataUrl(file);
-      batch.fileName = file.name;
-      batch.fileUrl = dataUrl;
+    if (file) {
+      try {
+        validateFileSize(file);
+      } catch (sizeErr: any) {
+        setActionError(sizeErr.message);
+        return;
+      }
+      setIsUploadingOverlay(true);
+      setUploadOverlayMessage(`Uploading ${file.name}...`);
     }
 
-    subs.batches = list;
-    const batchA = list.find((b: any) => b.id === 'batch-a');
-    const batchB = list.find((b: any) => b.id === 'batch-b');
-    const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
-
     try {
-      await fetch(`/api/checklist/${courseFileId}`, {
+      if (!file) {
+        batch.fileName = null;
+        batch.fileUrl = null;
+      } else {
+        const fileUrl = await uploadToBlob(file);
+        batch.fileName = file.name;
+        batch.fileUrl = fileUrl;
+      }
+
+      subs.batches = list;
+      const batchA = list.find((b: any) => b.id === 'batch-a');
+      const batchB = list.find((b: any) => b.id === 'batch-b');
+      const hasAnyBatchData = !!(batchA?.fileName || batchA?.fileUrl || (batchA?.students?.length && batchA?.practicalCols?.length) || batchB?.fileName || batchB?.fileUrl || (batchB?.students?.length && batchB?.practicalCols?.length));
+
+      const res = await fetch(`/api/checklist/${courseFileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2653,9 +2861,14 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
           subItemsJson: JSON.stringify(subs)
         })
       });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       setActionSuccess(`File updated for ${batch.name}.`);
       fetchData();
-    } catch (err: any) { setActionError(err.message); }
+    } catch (err: any) {
+      setActionError(err.message);
+    } finally {
+      if (file) setIsUploadingOverlay(false);
+    }
   };
 
   const handleAddBatch = async () => {
@@ -2853,6 +3066,7 @@ export default function FacultyCourseFileDetailClient({ courseFileId }: { course
 
   return (
     <div>
+      <UploadLoadingOverlay isUploading={isUploadingOverlay} message={uploadOverlayMessage} />
       {/* Top Header Bar */}
       <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
         <button

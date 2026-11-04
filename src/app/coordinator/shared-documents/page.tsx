@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Row, Col, Card, Button, Badge, Spinner, Alert, Form, Modal, ProgressBar, Table } from 'react-bootstrap';
 import { SAMPLE_PDF_DATA_URL } from '@/lib/sample-pdf';
+import { uploadToBlob, validateFileSize } from '@/lib/blob-upload';
+import UploadLoadingOverlay from '@/components/ui/UploadLoadingOverlay';
 
 const SHARED_ITEMS = [
   { index: 1,  name: 'Item 1 — Institute & Dept Vision, Mission & PEO, PSO & PO', category: 'Institutional' },
@@ -38,31 +40,6 @@ const SCHOOL_LABELS: Record<string, string> = {
   ICA: 'ICA'
 };
 
-const uploadFileToServer = async (file: File): Promise<string> => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.fileUrl) return data.fileUrl;
-    }
-  } catch (e) {}
-  return await readFileAsDataUrl(file);
-};
-
-const readFileAsDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
-
 export default function CoordinatorSharedDocumentsPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [schools, setSchools] = useState<any[]>([]);
@@ -74,6 +51,8 @@ export default function CoordinatorSharedDocumentsPage() {
   const [actionSuccess, setActionSuccess] = useState('');
   const [uploadingItem, setUploadingItem] = useState<number | null>(null);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
+  const [isUploadingOverlay, setIsUploadingOverlay] = useState(false);
+  const [uploadOverlayMessage, setUploadOverlayMessage] = useState('Uploading...');
   const [viewingDoc, setViewingDoc] = useState<{ title: string; fileName: string; fileUrl?: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -121,9 +100,19 @@ export default function CoordinatorSharedDocumentsPage() {
 
   const handleUploadSingle = async (itemIndex: number, file: File) => {
     if (!selectedSubjectId || !file) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await uploadFileToServer(file);
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    setUploadingItem(itemIndex);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${file.name}...`);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const fileUrl = await uploadToBlob(file);
       const res = await fetch('/api/coordinator/shared-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +122,7 @@ export default function CoordinatorSharedDocumentsPage() {
           itemIndex,
           status: 'UPLOADED',
           fileName: file.name,
-          fileUrl: dataUrl
+          fileUrl
         })
       });
       if (!res.ok) {
@@ -145,26 +134,38 @@ export default function CoordinatorSharedDocumentsPage() {
         : itemIndex === 18
         ? `Shared Action Plan document for School ${selectedSchool} (Item #18) uploaded and locked for all faculty.`
         : `Shared document for Item #${itemIndex} uploaded and locked for all faculty.`);
-      fetchSubjects(false);
+      await fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
   const handleUploadSubItem = async (itemIndex: number, subKey: string, file: File) => {
     if ((itemIndex === 1 ? !selectedSchool : !selectedSubjectId) || !file) return;
-    setUploadingItem(itemIndex); setActionError(''); setActionSuccess('');
     try {
-      const dataUrl = await uploadFileToServer(file);
+      validateFileSize(file);
+    } catch (err: any) {
+      setActionError(err.message || 'File too large — maximum size is 50MB');
+      return;
+    }
+    const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
+    setUploadingItem(itemIndex);
+    setIsUploadingOverlay(true);
+    setUploadOverlayMessage(`Uploading ${label}...`);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const fileUrl = await uploadToBlob(file);
       const existingDoc = itemIndex === 1 ? schoolSharedMap.get(itemIndex) : sharedMap.get(itemIndex);
       let existingSubJson: any = {};
       try { if (existingDoc?.subItemsJson) existingSubJson = JSON.parse(existingDoc.subItemsJson); } catch (e) {}
 
       existingSubJson[subKey] = {
         fileName: file.name,
-        fileUrl: dataUrl,
+        fileUrl,
         uploadDate: new Date().toISOString().split('T')[0]
       };
 
@@ -182,15 +183,15 @@ export default function CoordinatorSharedDocumentsPage() {
         const errData = await res.json();
         throw new Error(errData.error || 'Upload failed');
       }
-      const label = SUB_KEY_CONFIG[subKey]?.label || subKey;
       setActionSuccess(itemIndex === 1
         ? `School ${selectedSchool} Item 1 ${label} document updated.`
         : `Sub-document '${label}' for Item #${itemIndex} updated.`);
-      fetchSubjects(false);
+      await fetchSubjects(false);
     } catch (err: any) {
       setActionError(err.message);
     } finally {
       setUploadingItem(null);
+      setIsUploadingOverlay(false);
     }
   };
 
@@ -319,6 +320,7 @@ export default function CoordinatorSharedDocumentsPage() {
 
   return (
     <div className="container-fluid py-3">
+      <UploadLoadingOverlay isUploading={isUploadingOverlay} message={uploadOverlayMessage} />
       {/* Welcome & Instruction Banner */}
       <div
         className="p-4 mb-4 rounded-3 text-white shadow-sm"
